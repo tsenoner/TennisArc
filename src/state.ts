@@ -3,7 +3,7 @@ import type { Match, Player, Snapshot } from "./model";
 export interface SunNode {
   id: string;                 // unique path id, e.g. "r", "r.0", "r.0.1" (for focus/zoom)
   matchId: string;            // the match this node represents (leaf → its round-0 match)
-  occupant: string | null;    // playerId (decided winner or projected); null if unknown
+  occupant: string | null;    // playerId (decided winner or projected); null = unknown (both feeders TBD)
   projected: boolean;         // occupant is a projection, not a decided result
   depth: number;              // 0 = champion (centre)
   children: SunNode[];
@@ -32,6 +32,8 @@ export function betterSeed(players: Record<string, Player>, a: string | null, b:
   if (!a) return b;
   if (!b) return a;
   const pa = players[a], pb = players[b];
+  if (!pa) return pb ? b : null;
+  if (!pb) return a;
   const sa = pa.seed ?? Infinity, sb = pb.seed ?? Infinity;
   if (sa !== sb) return sa < sb ? a : b;
   const ra = pa.ranking ?? Infinity, rb = pb.ranking ?? Infinity;
@@ -45,8 +47,8 @@ export function projectedWinner(s: Snapshot, matchId: string): string | null {
   const decided = winnerId(m);
   if (decided) return decided;
   const feeders = feedersOf(s, matchId);
-  const a = feeders.length ? projectedWinner(s, feeders[0].id) : m.p1;
-  const b = feeders.length ? projectedWinner(s, feeders[1].id) : m.p2;
+  const a = feeders[0] ? projectedWinner(s, feeders[0].id) : m.p1;
+  const b = feeders[1] ? projectedWinner(s, feeders[1].id) : m.p2;
   return betterSeed(s.players, a, b);
 }
 

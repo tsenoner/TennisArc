@@ -27,4 +27,14 @@ describe("buildSunburst", () => {
     expect(ids.size).toBe(7);
     expect(root.matchId).toBe(Object.values(s.matches).find((m) => m.nextMatchId === null)!.id);
   });
+
+  it("projects the top seed to the title when no results are in yet", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 5, completedRounds: 0 });
+    const root = buildSunburst(s);
+    expect(root.projected).toBe(true);
+    expect(root.occupant).toBe("p0"); // seed 1 / ranking 1 wins every projected match
+    // leaves (entrants) are known, not projected
+    const leaf = (n: typeof root): typeof root => (n.children.length ? leaf(n.children[0]) : n);
+    expect(leaf(root).projected).toBe(false);
+  });
 });
