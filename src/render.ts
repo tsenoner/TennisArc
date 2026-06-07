@@ -81,7 +81,7 @@ export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
         `<li class="lb-row">` +
         `<span class="lb-rank">${i + 1}</span>` +
         `<span class="lb-name">${escapeHtml(r.name)} <span class="lb-ctry">${escapeHtml(r.country)}</span></span>` +
-        `<span class="lb-bar"><span style="width:${w}%;background:${color(r.playerId)}"></span></span>` +
+        `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%;background:${color(r.playerId)}"></span></span>` +
         `<span class="lb-time">${formatDuration(r.sec)}${r.provisional ? "*" : ""}</span>` +
         `</li>`
       );

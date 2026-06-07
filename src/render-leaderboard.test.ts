@@ -16,6 +16,7 @@ describe("renderLeaderboard", () => {
     expect(html).not.toContain("Jannik <Sinner>");
     expect(html).toContain("3h20"); // 12000s = 200m = 3h20
     expect(html).toContain("*"); // provisional marker on the live leader
+    expect(html).toContain("width:100%");
   });
 
   it("renders an empty list without throwing", () => {
