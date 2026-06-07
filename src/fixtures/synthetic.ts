@@ -12,6 +12,7 @@ function rng(seed: number): () => number {
 }
 
 const COUNTRIES = ["ITA", "ESP", "USA", "FRA", "SRB", "GER", "GBR", "AUS", "RUS", "ARG"];
+// keyed by entrants-in-round: 128→"Round of 128" … 2→"Final"
 const ROUND_NAMES: Record<number, string> = {
   128: "Round of 128", 64: "Round of 64", 32: "Round of 32", 16: "Round of 16",
   8: "Quarterfinal", 4: "Semifinal", 2: "Final",
@@ -54,23 +55,39 @@ export function makeSyntheticSnapshot(opts: SyntheticOpts): Snapshot {
       const nextMatchId = r === rounds - 1 ? null : `${r + 1}-${Math.floor(slot / 2)}`;
       const played = r < completedRounds && p1 != null && p2 != null;
       const winSide: "p1" | "p2" = rand() < 0.5 ? "p1" : "p2";
-      const winnerId = winSide === "p1" ? p1 : p2;
       const sets = 2 + Math.floor(rand() * 2);                  // 2–3 sets
       const durationSec = 60 * (75 + Math.floor(rand() * 110)); // 75–185 min
-      matches[id] = {
-        id, roundIndex: r, slot, nextMatchId, p1, p2,
-        status: played ? "finished" : "scheduled",
-        winner: played ? winSide : null,
-        score: played ? Array.from({ length: sets }, () => ({ p1: 6, p2: 4 })) : null,
-        live: null,
-        durationSec: played ? durationSec : null,
-        durationProvisional: false,
-        sofaEventId: 1000 + r * 100 + slot,
-        sofaCustomId: `cid${r}_${slot}`,
-        stats: null,
-      };
-      matchIds.push(id);
-      winners.push(played ? winnerId : null);
+      const loserGames = 2 + Math.floor(rand() * 3);           // 2–4 games
+      if (played) {
+        const winner = winSide === "p1" ? (p1 as string) : (p2 as string);
+        matches[id] = {
+          id, roundIndex: r, slot, nextMatchId, p1, p2,
+          status: "finished",
+          winner: winSide,
+          score: Array.from({ length: sets }, () => ({ p1: 6, p2: loserGames })),
+          live: null,
+          durationSec,
+          durationProvisional: false,
+          sofaEventId: 1000 + r * 100 + slot,
+          sofaCustomId: `cid${r}_${slot}`,
+          stats: null,
+        };
+        winners.push(winner);
+      } else {
+        matches[id] = {
+          id, roundIndex: r, slot, nextMatchId, p1, p2,
+          status: "scheduled",
+          winner: null,
+          score: null,
+          live: null,
+          durationSec: null,
+          durationProvisional: false,
+          sofaEventId: 1000 + r * 100 + slot,
+          sofaCustomId: `cid${r}_${slot}`,
+          stats: null,
+        };
+        winners.push(null);
+      }
     }
     roundsArr.push({ index: r, name: ROUND_NAMES[size] ?? `Round of ${size}`, size, matchIds });
     entrants = winners;

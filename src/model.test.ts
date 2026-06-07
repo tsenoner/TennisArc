@@ -20,3 +20,30 @@ describe("synthetic fixture", () => {
     }
   });
 });
+
+describe("synthetic fixture — behaviour", () => {
+  it("is deterministic for a given seed", () => {
+    const a = makeSyntheticSnapshot({ tour: "ATP", drawSize: 16, seed: 42 });
+    const b = makeSyntheticSnapshot({ tour: "ATP", drawSize: 16, seed: 42 });
+    expect(a).toEqual(b);
+  });
+
+  it("throws when drawSize is not a power of 2", () => {
+    expect(() => makeSyntheticSnapshot({ tour: "ATP", drawSize: 6 })).toThrow();
+  });
+
+  it("respects completedRounds: only early rounds are finished", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 1 });
+    const byRound = (r: number) =>
+      Object.values(s.matches).filter((m) => m.roundIndex === r);
+    expect(byRound(0).every((m) => m.status === "finished")).toBe(true);
+    expect(byRound(1).every((m) => m.status === "scheduled")).toBe(true);
+    expect(byRound(2).every((m) => m.status === "scheduled")).toBe(true);
+  });
+
+  it("uses WTA tournament ids for the WTA tour", () => {
+    const s = makeSyntheticSnapshot({ tour: "WTA", drawSize: 8, seed: 1 });
+    expect(s.tournament.sofaUniqueTournamentId).toBe(2577);
+    expect(s.tournament.sofaSeasonId).toBe(85953);
+  });
+});
