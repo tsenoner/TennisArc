@@ -68,3 +68,43 @@ export function buildSunburst(s: Snapshot): SunNode {
   };
   return build(finalMatch(s), 0, "r");
 }
+
+export interface PlayerTime {
+  sec: number;
+  provisional: boolean;
+  matches: number;            // counted matches that contributed time
+  roundReached: number;       // deepest roundIndex reached (winner → roundIndex+1)
+}
+
+/** Whether a match's on-court time should be counted, and whether it's provisional. */
+function countsTime(m: Match): { count: boolean; provisional: boolean } {
+  if (m.status === "finished" || m.status === "retired") return { count: true, provisional: false };
+  if (m.status === "live") return { count: true, provisional: true };
+  return { count: false, provisional: false }; // walkover / scheduled / notstarted
+}
+
+/** Cumulative time-on-court per player across the tournament. */
+export function timeOnCourt(s: Snapshot): Map<string, PlayerTime> {
+  const out = new Map<string, PlayerTime>();
+  const ensure = (id: string): PlayerTime => {
+    let v = out.get(id);
+    if (!v) { v = { sec: 0, provisional: false, matches: 0, roundReached: 0 }; out.set(id, v); }
+    return v;
+  };
+  for (const m of Object.values(s.matches)) {
+    const { count, provisional } = countsTime(m);
+    for (const side of ["p1", "p2"] as const) {
+      const pid = m[side];
+      if (!pid) continue;
+      const v = ensure(pid);
+      const reached = m.winner === side ? m.roundIndex + 1 : m.roundIndex;
+      if (reached > v.roundReached) v.roundReached = reached;
+      if (count && m.durationSec != null) {
+        v.sec += m.durationSec;
+        v.matches += 1;
+        if (provisional) v.provisional = true;
+      }
+    }
+  }
+  return out;
+}
