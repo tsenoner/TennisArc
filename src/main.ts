@@ -1,2 +1,5 @@
-const app = document.querySelector<HTMLDivElement>("#app");
-if (app) app.textContent = "TennisArc";
+import { createApp } from "./app";
+import "./app.css";
+
+const root = document.querySelector<HTMLDivElement>("#app");
+if (root) createApp(root);
