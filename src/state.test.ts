@@ -99,4 +99,16 @@ describe("timeLeaderboard", () => {
     const liveRow = rows.find((r) => r.playerId === m.p1);
     expect(liveRow?.provisional).toBe(true);
   });
+
+  it("excludes players with zero court time (e.g. a walkover loser)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    const wo = s.matches["0-0"];
+    // walkover with no duration: the loser played only this match → 0 counted time
+    s.matches["0-0"] = { ...wo, status: "walkover", durationSec: null, winner: "p1" };
+    const time = timeOnCourt(s);
+    const loser = wo.p2!;
+    expect(time.get(loser)!.sec).toBe(0);
+    const rows = timeLeaderboard(s, time, 50);
+    expect(rows.some((r) => r.playerId === loser)).toBe(false);
+  });
 });
