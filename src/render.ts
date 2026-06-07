@@ -4,6 +4,7 @@ import type { ColorFn } from "./color";
 import { COLOR_DIMS, type ColorDim } from "./color";
 import type { Tour } from "./model";
 import type { Theme } from "./theme";
+import type { LeaderRow } from "./state";
 
 const PAD_ANGLE = 0.004;   // radians of gap between adjacent arcs
 const PAD_RADIUS = 60;     // d3 reference radius for converting padAngle → linear gap
@@ -69,4 +70,22 @@ export function renderLegend(dim: ColorDim): string {
   if (dim === "country") return `<div class="legend">Colour: nationality</div>`;
   const label = dim === "time" ? "fresh → most court time" : "lower seed → top seed";
   return `<div class="legend"><span class="legend-grad" aria-hidden="true"></span><span>${label}</span></div>`;
+}
+
+export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
+  const max = Math.max(1, ...rows.map((r) => r.sec));
+  const items = rows
+    .map((r, i) => {
+      const w = Math.round((r.sec / max) * 100);
+      return (
+        `<li class="lb-row">` +
+        `<span class="lb-rank">${i + 1}</span>` +
+        `<span class="lb-name">${escapeHtml(r.name)} <span class="lb-ctry">${escapeHtml(r.country)}</span></span>` +
+        `<span class="lb-bar"><span style="width:${w}%;background:${color(r.playerId)}"></span></span>` +
+        `<span class="lb-time">${formatDuration(r.sec)}${r.provisional ? "*" : ""}</span>` +
+        `</li>`
+      );
+    })
+    .join("");
+  return `<aside class="leaderboard"><h2>Most time on court</h2><ol class="lb-list">${items}</ol></aside>`;
 }
