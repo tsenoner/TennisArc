@@ -98,10 +98,14 @@ const STATUS_LABEL: Record<Match["status"], string> = {
 function renderScore(m: Match): string {
   if (m.score && m.score.length) {
     return m.score
-      .map((s) => `${s.p1}${s.tb != null ? `<sup>${s.tb}</sup>` : ""}-${s.p2}`)
+      .map((s) => {
+        const sup = s.tb != null ? `<sup>${s.tb}</sup>` : "";
+        // the tiebreak points belong to the set winner (higher game count)
+        return s.p1 >= s.p2 ? `${s.p1}${sup}-${s.p2}` : `${s.p1}-${s.p2}${sup}`;
+      })
       .join(" ");
   }
-  return STATUS_LABEL[m.status] || "";
+  return STATUS_LABEL[m.status] || "—";
 }
 
 function renderStats(stats: MatchStats | null): string {

@@ -37,4 +37,12 @@ describe("renderMatchDetail", () => {
     expect(html).not.toContain("Open in SofaScore");
     expect(html).toContain("TBD");
   });
+
+  it("places the tiebreak superscript on the set winner's side", () => {
+    const p1 = player("a", "A", 1), p2 = player("b", "B", 2);
+    const won = renderMatchDetail(match({ score: [{ p1: 7, p2: 6, tb: 4 }] }), p1, p2, null, "F");
+    expect(won).toContain("7<sup>4</sup>-6");
+    const lost = renderMatchDetail(match({ score: [{ p1: 6, p2: 7, tb: 3 }], winner: "p2" }), p1, p2, null, "F");
+    expect(lost).toContain("6-7<sup>3</sup>");
+  });
 });
