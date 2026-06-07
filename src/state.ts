@@ -72,7 +72,7 @@ export function buildSunburst(s: Snapshot): SunNode {
 export interface PlayerTime {
   sec: number;
   provisional: boolean;
-  matches: number;            // counted matches that contributed time
+  matches: number;            // matches with a recorded duration that contributed time
   roundReached: number;       // deepest roundIndex reached (winner → roundIndex+1)
 }
 

@@ -40,26 +40,41 @@ describe("buildSunburst", () => {
 });
 
 describe("timeOnCourt", () => {
-  it("sums duration for finished matches and counts retirements", () => {
+  it("sums duration for finished matches and counts matches per player", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 4, seed: 1 });
     const t = timeOnCourt(s);
-    // every entrant played at least their R1 match → positive time
     expect(t.get("p0")!.sec).toBeGreaterThan(0);
-    // champion played 2 matches
     const champ = buildSunburst(s).occupant!;
-    expect(t.get(champ)!.matches).toBe(2);
+    expect(t.get(champ)!.matches).toBe(2); // champion played R1 + final
   });
 
-  it("adds 0 for walkovers and flags live matches provisional", () => {
-    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 4, seed: 1 });
-    const m = s.matches["0-0"];
-    // turn match 0-0 into a walkover with no duration
-    s.matches["0-0"] = { ...m, status: "walkover", durationSec: null, winner: "p1" };
-    // turn match 0-1 into a live match with provisional duration
-    const m2 = s.matches["0-1"];
-    s.matches["0-1"] = { ...m2, status: "live", winner: null, durationSec: 1800, durationProvisional: true };
+  it("counts each counted match's duration for both players; gating excludes walkover/null", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
+    // walkover: excluded by status even though it still has a duration
+    s.matches["0-0"] = { ...s.matches["0-0"], status: "walkover" };
+    // retired: counted, keeps its duration
+    s.matches["0-1"] = { ...s.matches["0-1"], status: "retired" };
+    // finished but null duration: excluded (unknown, not zero)
+    s.matches["0-2"] = { ...s.matches["0-2"], durationSec: null };
     const t = timeOnCourt(s);
-    expect(t.get(m.p1!)!.sec).toBe(t.get(m.p1!)!.sec); // no throw; walkover contributes 0 here
-    expect(t.get(m2.p1!)!.provisional).toBe(true);
+    const totalSec = [...t.values()].reduce((a, v) => a + v.sec, 0);
+    // independent re-derivation of the rule: counted statuses with a known duration, ×2 players
+    const expected = Object.values(s.matches).reduce((a, m) => {
+      const counted = m.status === "finished" || m.status === "retired" || m.status === "live";
+      return a + (counted && m.durationSec != null ? m.durationSec * 2 : 0);
+    }, 0);
+    expect(totalSec).toBe(expected);
+  });
+
+  it("flags live totals provisional and tracks deepest round reached", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 4, seed: 1 });
+    const live = s.matches["0-1"];
+    s.matches["0-1"] = { ...live, status: "live", winner: null, durationSec: 1800, durationProvisional: true };
+    const t = timeOnCourt(s);
+    expect(t.get(live.p1!)!.provisional).toBe(true);
+    // a first-round loser's deepest round is 0 (they never advance)
+    const r1 = s.matches["0-0"];
+    const r1Loser = r1.winner === "p1" ? r1.p2! : r1.p1!;
+    expect(t.get(r1Loser)!.roundReached).toBe(0);
   });
 });
