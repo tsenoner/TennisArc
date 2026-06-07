@@ -46,4 +46,16 @@ describe("synthetic fixture — behaviour", () => {
     expect(s.tournament.sofaUniqueTournamentId).toBe(2577);
     expect(s.tournament.sofaSeasonId).toBe(85953);
   });
+
+  it("populates each round's matchIds with its real matches", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    // sizes 8,4,2 → 4,2,1 matches per round
+    expect(s.rounds.map((r) => r.matchIds.length)).toEqual([4, 2, 1]);
+    for (const round of s.rounds) {
+      for (const id of round.matchIds) {
+        expect(s.matches[id]).toBeDefined();
+        expect(s.matches[id].roundIndex).toBe(round.index);
+      }
+    }
+  });
 });

@@ -52,6 +52,7 @@ export function makeSyntheticSnapshot(opts: SyntheticOpts): Snapshot {
       const p1 = entrants[slot * 2];
       const p2 = entrants[slot * 2 + 1];
       const id = `${r}-${slot}`;
+      matchIds.push(id);
       const nextMatchId = r === rounds - 1 ? null : `${r + 1}-${Math.floor(slot / 2)}`;
       const played = r < completedRounds && p1 != null && p2 != null;
       const winSide: "p1" | "p2" = rand() < 0.5 ? "p1" : "p2";
