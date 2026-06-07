@@ -15,6 +15,7 @@ describe("renderSunburst", () => {
     expect((svg.match(/<path/g) ?? []).length).toBe(arcs.length);
     // each arc carries its node id for click-to-zoom
     expect(svg).toContain('data-action="zoom"');
+    expect(svg).toMatch(/fill="(#|rgb)/);
   });
 
   it("marks projected arcs with the projected class", () => {

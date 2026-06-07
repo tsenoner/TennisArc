@@ -27,11 +27,13 @@ export function createApp(root: HTMLElement): void {
   root.addEventListener("click", (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-action]");
     if (!el) return;
-    if (el.dataset.action === "zoom" && el.dataset.id) {
-      state.focusId = state.focusId === el.dataset.id ? undefined : el.dataset.id;
-      draw();
-    } else if (el.dataset.action === "reset") {
+    const id = el.dataset.id;
+    // champion centre (root "r") or the background → zoom out
+    if (el.dataset.action === "reset" || id === "r") {
       if (state.focusId) { state.focusId = undefined; draw(); }
+    } else if (el.dataset.action === "zoom" && id) {
+      state.focusId = state.focusId === id ? undefined : id;
+      draw();
     }
   });
 
