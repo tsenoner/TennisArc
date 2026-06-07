@@ -108,3 +108,31 @@ export function timeOnCourt(s: Snapshot): Map<string, PlayerTime> {
   }
   return out;
 }
+
+export interface LeaderRow {
+  playerId: string;
+  name: string;
+  country: string;
+  sec: number;
+  provisional: boolean;
+  roundReached: number;
+}
+
+/** Players ranked by cumulative time on court (descending), zero-time excluded. */
+export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limit = 10): LeaderRow[] {
+  return [...time.entries()]
+    .filter(([, v]) => v.sec > 0)
+    .map(([id, v]) => {
+      const p = s.players[id];
+      return {
+        playerId: id,
+        name: p?.name ?? id,
+        country: p?.country ?? "",
+        sec: v.sec,
+        provisional: v.provisional,
+        roundReached: v.roundReached,
+      };
+    })
+    .sort((a, b) => b.sec - a.sec)
+    .slice(0, limit);
+}

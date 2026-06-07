@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
-import { buildSunburst, winnerId, timeOnCourt } from "./state";
+import { buildSunburst, winnerId, timeOnCourt, timeLeaderboard } from "./state";
 
 describe("buildSunburst", () => {
   it("roots at the champion and has the draw size as leaves", () => {
@@ -76,5 +76,27 @@ describe("timeOnCourt", () => {
     const r1 = s.matches["0-0"];
     const r1Loser = r1.winner === "p1" ? r1.p2! : r1.p1!;
     expect(t.get(r1Loser)!.roundReached).toBe(0);
+  });
+});
+
+describe("timeLeaderboard", () => {
+  it("ranks players by descending time, caps at the limit, excludes zero-time", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 4 });
+    const rows = timeLeaderboard(s, timeOnCourt(s), 5);
+    expect(rows).toHaveLength(5);
+    for (let i = 1; i < rows.length; i++) expect(rows[i].sec).toBeLessThanOrEqual(rows[i - 1].sec);
+    for (const r of rows) {
+      expect(r.sec).toBeGreaterThan(0);
+      expect(r.name).toBe(s.players[r.playerId].name);
+    }
+  });
+
+  it("carries the provisional flag through from live matches", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    const m = s.matches["0-0"];
+    s.matches["0-0"] = { ...m, status: "live", winner: null, durationSec: 9999, durationProvisional: true };
+    const rows = timeLeaderboard(s, timeOnCourt(s), 20);
+    const liveRow = rows.find((r) => r.playerId === m.p1);
+    expect(liveRow?.provisional).toBe(true);
   });
 });
