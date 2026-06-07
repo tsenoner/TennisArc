@@ -26,4 +26,9 @@ describe("deeplink", () => {
     expect(slugify("Stéfanos Tsitsipás")).toBe("stefanos-tsitsipas");
     expect(slugify("")).toBe("match");
   });
+
+  it("uses the 'match' slug when a player is missing but a customId exists", () => {
+    const url = sofascoreMatchUrl(baseMatch(), player("a", "Jannik Sinner"), null);
+    expect(url).toBe("https://www.sofascore.com/tennis/match/match/HXfsvGHb");
+  });
 });

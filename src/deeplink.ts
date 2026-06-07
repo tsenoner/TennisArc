@@ -5,7 +5,7 @@ export function slugify(name: string): string {
   const s = name
     .toLowerCase()
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "") // combining diacritics
+    .replace(/[\u0300-\u036f]/g, "") // strip combining diacritics (U+0300–U+036F) after NFKD
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
   return s || "match";
