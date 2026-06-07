@@ -26,11 +26,12 @@ export function colorScale(dim: ColorDim, s: Snapshot, time: Map<string, PlayerT
     const t = scaleLinear<number>().domain([1, 32]).range([1, 0]).clamp(true);
     return (id) => {
       const seed = id ? s.players[id]?.seed : null;
-      return seed ? HEAT(t(seed)) : NEUTRAL;
+      return seed != null ? HEAT(t(seed)) : NEUTRAL;   // null/undefined seed → neutral (seed 0 never occurs but is treated as valid)
     };
   }
-  // country
-  const ord = scaleOrdinal<string, string>().range(CATEGORICAL);
+  // country — explicit sorted domain so a country's colour is stable across renders
+  const countries = [...new Set(Object.values(s.players).map((p) => p.country))].sort();
+  const ord = scaleOrdinal<string, string>().domain(countries).range(CATEGORICAL);
   return (id) => {
     const c = id ? s.players[id]?.country : null;
     return c ? ord(c) : NEUTRAL;
