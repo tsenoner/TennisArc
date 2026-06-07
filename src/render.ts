@@ -2,7 +2,7 @@ import { arc as d3arc } from "d3-shape";
 import type { LayoutArc } from "./layout";
 import type { ColorFn } from "./color";
 import { COLOR_DIMS, type ColorDim } from "./color";
-import type { Tour } from "./model";
+import type { Match, MatchStats, Player, Tour } from "./model";
 import type { Theme } from "./theme";
 import type { LeaderRow } from "./state";
 
@@ -88,4 +88,64 @@ export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
     })
     .join("");
   return `<aside class="leaderboard"><h2>Most time on court</h2><ol class="lb-list">${items}</ol></aside>`;
+}
+
+const STATUS_LABEL: Record<Match["status"], string> = {
+  notstarted: "Not started", scheduled: "Scheduled", live: "Live",
+  finished: "", retired: "Retired", walkover: "Walkover",
+};
+
+function renderScore(m: Match): string {
+  if (m.score && m.score.length) {
+    return m.score
+      .map((s) => `${s.p1}${s.tb != null ? `<sup>${s.tb}</sup>` : ""}-${s.p2}`)
+      .join(" ");
+  }
+  return STATUS_LABEL[m.status] || "";
+}
+
+function renderStats(stats: MatchStats | null): string {
+  if (!stats) return "";
+  const row = (label: string, v?: [number | string, number | string]) =>
+    v ? `<tr><td>${v[0]}</td><th>${label}</th><td>${v[1]}</td></tr>` : "";
+  const body =
+    row("Aces", stats.aces) +
+    row("Double faults", stats.doubleFaults) +
+    row("1st serve %", stats.firstServePct) +
+    row("Service pts won %", stats.servicePointsWonPct) +
+    row("Break pts won", stats.breakPointsConverted);
+  return body ? `<table class="md-stats">${body}</table>` : "";
+}
+
+function renderPlayerLine(m: Match, p: Player | null, side: "p1" | "p2"): string {
+  if (!p) return `<div class="md-player"><span class="md-tbd">TBD</span></div>`;
+  const tag = p.seed != null ? `(${p.seed})` : p.entry ? `(${p.entry})` : "";
+  const win = m.winner === side ? " md-win" : "";
+  return (
+    `<div class="md-player${win}">` +
+    `<span class="md-name">${escapeHtml(p.name)}</span> ` +
+    `<span class="md-ctry">${escapeHtml(p.country)}</span>` +
+    (tag ? ` <span class="md-seed">${tag}</span>` : "") +
+    `</div>`
+  );
+}
+
+export function renderMatchDetail(
+  m: Match, p1: Player | null, p2: Player | null, url: string | null, roundName: string,
+): string {
+  const dur =
+    m.durationSec != null
+      ? `<div class="md-dur">⏱ ${formatDuration(m.durationSec)}${m.durationProvisional ? " (live)" : ""}</div>`
+      : "";
+  const link = url
+    ? `<a class="md-link" href="${url}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>`
+    : "";
+  return (
+    `<div class="detail" role="dialog" aria-label="Match detail">` +
+    `<button class="detail-close" data-action="close-detail" aria-label="Close">✕</button>` +
+    `<div class="md-round">${escapeHtml(roundName)}</div>` +
+    `<div class="md-matchup">${renderPlayerLine(m, p1, "p1")}<div class="md-score">${renderScore(m)}</div>${renderPlayerLine(m, p2, "p2")}</div>` +
+    dur + renderStats(m.stats) + link +
+    `</div>`
+  );
 }

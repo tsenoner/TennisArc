@@ -71,7 +71,11 @@ export function makeSyntheticSnapshot(opts: SyntheticOpts): Snapshot {
           durationProvisional: false,
           sofaEventId: 1000 + r * 100 + slot,
           sofaCustomId: `cid${r}_${slot}`,
-          stats: null,
+          stats: {
+            aces: [3 + ((r * 7 + slot) % 18), 2 + ((r * 5 + slot + 3) % 15)],
+            doubleFaults: [1 + ((slot + r) % 5), 1 + ((slot + r + 2) % 6)],
+            firstServePct: [58 + ((r * 3 + slot) % 22), 55 + ((r * 4 + slot + 1) % 22)],
+          },
         };
         winners.push(winner);
       } else {
