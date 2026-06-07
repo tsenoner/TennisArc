@@ -41,7 +41,7 @@ export function createApp(root: HTMLElement): void {
     const time = timeOnCourt(snap);
     const arcs = layout(buildSunburst(snap), SIZE / 2 - 8, state.focusId);
     const color = colorScale(state.colorDim, snap, time);
-    const lb = timeLeaderboard(snap, time, 10);
+    const lb = timeLeaderboard(snap, time);
 
     let detail = "";
     const m = state.selectedMatchId ? snap.matches[state.selectedMatchId] : undefined;

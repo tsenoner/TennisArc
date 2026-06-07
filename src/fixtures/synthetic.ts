@@ -75,6 +75,8 @@ export function makeSyntheticSnapshot(opts: SyntheticOpts): Snapshot {
             aces: [3 + ((r * 7 + slot) % 18), 2 + ((r * 5 + slot + 3) % 15)],
             doubleFaults: [1 + ((slot + r) % 5), 1 + ((slot + r + 2) % 6)],
             firstServePct: [58 + ((r * 3 + slot) % 22), 55 + ((r * 4 + slot + 1) % 22)],
+            servicePointsWonPct: [60 + ((r * 2 + slot) % 18), 57 + ((r * 6 + slot + 2) % 18)],
+            breakPointsConverted: [`${1 + ((r + slot) % 5)}/${3 + ((r + slot) % 6)}`, `${1 + ((r + slot + 1) % 5)}/${3 + ((r + slot + 2) % 6)}`],
           },
         };
         winners.push(winner);
