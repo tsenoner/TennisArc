@@ -19,23 +19,24 @@ const TAU = 2 * Math.PI;
  */
 export function layout(root: SunNode, radius: number, focusId?: string): LayoutArc[] {
   const h = hierarchy<SunNode>(root, (d) => d.children).count();
-  partition<SunNode>().size([TAU, radius])(h);
-  const nodes = h.descendants();
+  const rootNode = partition<SunNode>().size([TAU, radius])(h);
+  const nodes = rootNode.descendants();
 
   let fx0 = 0, fx1 = TAU, fy0 = 0;
   if (focusId) {
     const f = nodes.find((n) => n.data.id === focusId);
-    if (f) { fx0 = (f as any).x0; fx1 = (f as any).x1; fy0 = (f as any).y0; }
+    if (f) { fx0 = f.x0; fx1 = f.x1; fy0 = f.y0; }
   }
-  const kx = TAU / (fx1 - fx0);
+  const dx = fx1 - fx0;
+  const kx = dx > 1e-9 ? TAU / dx : 1; // guard degenerate (zero-width) focus
 
   return nodes
     .map((n) => {
-      const a = n as unknown as { x0: number; x1: number; y0: number; y1: number };
-      const x0 = Math.max(0, Math.min(TAU, (a.x0 - fx0) * kx));
-      const x1 = Math.max(0, Math.min(TAU, (a.x1 - fx0) * kx));
-      const y0 = Math.max(0, a.y0 - fy0);
-      const y1 = Math.max(0, a.y1 - fy0);
+      const x0 = Math.max(0, Math.min(TAU, (n.x0 - fx0) * kx));
+      const x1 = Math.max(0, Math.min(TAU, (n.x1 - fx0) * kx));
+      // shift radii so the focused node's inner edge → 0; ancestors clamp to 0 and are dropped by the filter
+      const y0 = Math.max(0, n.y0 - fy0);
+      const y1 = Math.max(0, n.y1 - fy0);
       return {
         id: n.data.id, matchId: n.data.matchId, occupant: n.data.occupant,
         projected: n.data.projected, depth: n.depth, x0, x1, y0, y1,

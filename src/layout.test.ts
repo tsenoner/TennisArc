@@ -30,9 +30,26 @@ describe("layout", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     const root = buildSunburst(s);
     const focusNode = root.children[0]; // a finalist subtree
+    expect(focusNode).toBeDefined();
     const arcs = layout(root, 100, focusNode.id);
     const focused = arcs.find((a) => a.id === focusNode.id)!;
     expect(focused.x0).toBeCloseTo(0, 5);
     expect(focused.x1).toBeCloseTo(2 * Math.PI, 5);
+  });
+
+  it("falls back to the full view when focusId matches no node", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    const arcs = layout(buildSunburst(s), 100, "does-not-exist");
+    expect(arcs).toHaveLength(15);
+  });
+
+  it("focusing a subtree shows fewer arcs than the full view", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    const root = buildSunburst(s);
+    const focusNode = root.children[0];
+    expect(focusNode).toBeDefined();
+    const full = layout(root, 100);
+    const focused = layout(root, 100, focusNode.id);
+    expect(focused.length).toBeLessThan(full.length);
   });
 });
