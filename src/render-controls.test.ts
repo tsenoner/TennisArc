@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDuration, renderControls, renderLegend } from "./render";
+import { escapeHtml, formatDuration, renderControls, renderLegend } from "./render";
 
 describe("formatDuration", () => {
   it("formats minutes under an hour and hours+minutes above", () => {
@@ -28,5 +28,13 @@ describe("renderLegend", () => {
     for (const dim of ["time", "seed", "country"] as const) {
       expect(renderLegend(dim)).toContain("legend");
     }
+  });
+});
+
+describe("escapeHtml", () => {
+  it("escapes all five HTML-significant characters without double-encoding", () => {
+    expect(escapeHtml(`& < > " '`)).toBe("&amp; &lt; &gt; &quot; &#39;");
+    expect(escapeHtml("Renée O'Brien")).toBe("Renée O&#39;Brien");
+    expect(escapeHtml("<script>")).toBe("&lt;script&gt;");
   });
 });
