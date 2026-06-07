@@ -1,10 +1,72 @@
-:root { --bg:#0d1014; --text:#d7dee6; --dim:#8b95a3; --line:#2a323d; --accent:#e0683c; }
+:root {
+  --bg: #0d1014; --panel: #161b23; --text: #d7dee6; --dim: #8b95a3;
+  --line: #2a323d; --accent: #e0683c; --teal: #36b3a8;
+}
+:root[data-theme="light"] {
+  --bg: #f6f4ef; --panel: #ffffff; --text: #21262d; --dim: #5b6470;
+  --line: #d8dce2; --accent: #c9542b; --teal: #2a8f86;
+}
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   touch-action: manipulation; }
 #app { height: 100%; display: flex; flex-direction: column; }
-.sunburst { flex: 1; width: 100%; }
+
+.controls { display: flex; gap: 10px; align-items: center; padding: 10px 14px;
+  border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.ctrl { background: transparent; color: var(--dim); border: 0; padding: 7px 12px;
+  font: inherit; font-size: 13px; cursor: pointer; }
+.seg .ctrl + .ctrl { border-left: 1px solid var(--line); }
+.ctrl.active { background: var(--accent); color: #fff; }
+.ctrl.theme { margin-left: auto; border: 1px solid var(--line); border-radius: 9px; }
+
+.stage { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 10px 14px; }
+.sunburst { flex: 1; min-width: 0; }
 .sunburst svg { width: 100%; height: 100%; display: block; }
 .arc { cursor: pointer; stroke: var(--bg); stroke-width: 0.5; }
 .arc.projected { opacity: 0.45; }
+
+.leaderboard { width: 280px; max-width: 38vw; overflow-y: auto; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.leaderboard h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--dim); margin: 0 0 10px; }
+.lb-list { list-style: none; margin: 0; padding: 0; }
+.lb-row { display: grid; grid-template-columns: 18px 1fr 60px auto; gap: 8px;
+  align-items: center; padding: 4px 0; font-size: 13px; }
+.lb-rank { color: var(--dim); text-align: right; }
+.lb-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-ctry { color: var(--dim); font-size: 11px; }
+.lb-bar { background: var(--line); border-radius: 4px; height: 8px; overflow: hidden; }
+.lb-bar > span { display: block; height: 100%; }
+.lb-time { color: var(--dim); font-variant-numeric: tabular-nums; text-align: right; }
+
+.legend { display: flex; align-items: center; gap: 8px; padding: 6px 14px 12px;
+  color: var(--dim); font-size: 12px; }
+.legend-grad { width: 120px; height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, #2f6f8f, #d9a441, #e0683c); }
+
+.detail { position: fixed; right: 14px; bottom: 14px; width: min(360px, calc(100vw - 28px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+.detail-close { position: absolute; top: 10px; right: 10px; background: transparent;
+  border: 0; color: var(--dim); font-size: 15px; cursor: pointer; }
+.md-round { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); }
+.md-matchup { margin: 8px 0; }
+.md-player { font-size: 15px; }
+.md-player.md-win { font-weight: 700; }
+.md-player.md-win .md-name::after { content: " ✓"; color: var(--teal); }
+.md-ctry { color: var(--dim); font-size: 12px; }
+.md-seed { color: var(--dim); }
+.md-tbd { color: var(--dim); font-style: italic; }
+.md-score { color: var(--accent); font-variant-numeric: tabular-nums; margin: 4px 0; }
+.md-dur { color: var(--dim); font-size: 13px; margin-top: 4px; }
+.md-stats { width: 100%; margin: 10px 0 4px; border-collapse: collapse; font-size: 13px; }
+.md-stats th { color: var(--dim); font-weight: 400; text-align: center; padding: 2px 6px; }
+.md-stats td { text-align: center; font-variant-numeric: tabular-nums; width: 32%; }
+.md-link { display: inline-block; margin-top: 10px; color: var(--accent); text-decoration: none; font-size: 14px; }
+
+@media (max-width: 720px) {
+  .stage { flex-direction: column; }
+  .leaderboard { width: 100%; max-width: none; max-height: 32vh; }
+}
