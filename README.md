@@ -25,9 +25,17 @@ pnpm ingest       # headless Chromium → SofaScore → public/data/{atp,wta}.js
 
 `ingest/` resolves the target Slam from `ingest/config.ts` (`CURRENT_SLAM`), pulls the SofaScore `cuptrees` bracket + per-match detail/stats from a Cloudflare-cleared browser context, normalizes to the `Snapshot` model (`src/model.ts`), and writes static JSON. Switch the tracked tournament by changing `CURRENT_SLAM` (season ids auto-resolve).
 
-### Auto-refresh
+### Refreshing data
 
-`.github/workflows/refresh.yml` runs `pnpm ingest` on a cron (every 30 min) and force-pushes the JSON to a dedicated **`data` branch** (clean, files at root). The app fetches fresh data from that branch when `VITE_DATA_BASE_URL` is set, falling back to the committed same-origin seed otherwise.
+SofaScore's API blocks datacenter IPs (Cloudflare 403), so **GitHub-hosted Actions cannot ingest** — the `.github/workflows/refresh.yml` workflow is manual-only and intended for a self-hosted runner with a residential/proxy IP.
+
+To refresh from a residential connection (your machine), run:
+
+```bash
+scripts/publish-data.sh   # pnpm ingest → force-push the `data` branch (files at root)
+```
+
+Schedule it via `launchd`/`cron` while your machine is online. The deployed app reads the `data` branch when `VITE_DATA_BASE_URL` is set, and always falls back to the committed same-origin seed in `public/data/`.
 
 ## Deploy (Vercel)
 

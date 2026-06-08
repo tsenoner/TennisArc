@@ -1,7 +1,9 @@
 name: Refresh tennis data
+# NOTE: GitHub-hosted runners use datacenter IPs that SofaScore's Cloudflare blocks (HTTP 403),
+# so scheduled CI ingestion does not work. Run `scripts/publish-data.sh` from a residential IP
+# (your machine, e.g. via launchd/cron) to refresh the `data` branch. This manual trigger is kept
+# for use on a self-hosted runner with a residential/proxy IP.
 on:
-  schedule:
-    - cron: "*/30 * * * *"   # every 30 min (GitHub's practical floor)
   workflow_dispatch: {}
 permissions:
   contents: write
