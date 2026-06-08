@@ -13,5 +13,5 @@ export const SLAMS: Record<string, SlamConfig> = {
   "australian-open": { slam: "australian-open", name: "Australian Open", surface: "Hard", year: 2026, unitournament: { ATP: 2363, WTA: 2521 } },
 };
 
-export const CURRENT_SLAM = "roland-garros";
+export const CURRENT_SLAM: keyof typeof SLAMS = "roland-garros";
 export const DRAW_SIZE = 128;

@@ -8,7 +8,7 @@ export interface RawTournament {
 const SOFA = "https://api.sofascore.com/api/v1";
 
 /** Open a Cloudflare-cleared SofaScore page context for issuing API fetches. */
-async function openContext(): Promise<{ browser: Browser; page: Page }> {
+export async function openContext(): Promise<{ browser: Browser; page: Page }> {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({
     userAgent:
@@ -34,26 +34,21 @@ export async function resolveSeasonId(page: Page, utId: number): Promise<number>
   return id;
 }
 
-/** Fetch the full cuptrees + per-event detail/stats for the played matches of a tournament season. */
-export async function fetchTournament(utId: number, seasonId: number): Promise<RawTournament> {
-  const { browser, page } = await openContext();
-  try {
-    const cuptrees = await apiGet(page, `/unique-tournament/${utId}/season/${seasonId}/cuptrees`);
-    const eventIds = collectEventIds(cuptrees);
-    const events = new Map<number, { detail: unknown; stats: unknown }>();
-    for (const id of eventIds) {
-      try {
-        const detail = await apiGet(page, `/event/${id}`).then((d: any) => d.event ?? d);
-        let stats: unknown = null;
-        try { stats = await apiGet(page, `/event/${id}/statistics`); } catch { /* no stats (e.g. scheduled) */ }
-        events.set(id, { detail, stats });
-      } catch { /* skip an unreachable event, keep going */ }
-      await page.waitForTimeout(60); // polite pacing
-    }
-    return { cuptrees, events };
-  } finally {
-    await browser.close();
+/** Fetch the full cuptrees + per-event detail/stats for a tournament season (caller owns the page/browser). */
+export async function fetchTournament(page: Page, utId: number, seasonId: number): Promise<RawTournament> {
+  const cuptrees = await apiGet(page, `/unique-tournament/${utId}/season/${seasonId}/cuptrees`);
+  const eventIds = collectEventIds(cuptrees);
+  const events = new Map<number, { detail: unknown; stats: unknown }>();
+  for (const id of eventIds) {
+    try {
+      const detail = await apiGet(page, `/event/${id}`).then((d: any) => d.event ?? d);
+      let stats: unknown = null;
+      try { stats = await apiGet(page, `/event/${id}/statistics`); } catch { /* no stats (e.g. scheduled) */ }
+      events.set(id, { detail, stats });
+    } catch { /* skip an unreachable event, keep going */ }
+    await page.waitForTimeout(60);
   }
+  return { cuptrees, events };
 }
 
 function collectEventIds(cuptrees: any): number[] {
