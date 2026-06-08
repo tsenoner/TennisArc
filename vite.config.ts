@@ -23,7 +23,16 @@ export default defineConfig({
           { src: "maskable-icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
-      workbox: { globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest}"] },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest}"],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith("/data/"),
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "tennisarc-data", expiration: { maxEntries: 8, maxAgeSeconds: 86400 } },
+          },
+        ],
+      },
     }),
   ],
   test: { globals: true, environment: "node" },
