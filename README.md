@@ -2,7 +2,7 @@
 
 A live, offline-first **radial bracket** PWA for tennis Grand Slams (ATP + WTA singles) — a zoomable sunburst of the draw, coloured by cumulative time on court, with seed projections, a time-on-court leaderboard, and tap-to-open match detail that deep-links to SofaScore.
 
-Built with **Vite + TypeScript (vanilla DOM) + vite-plugin-pwa**; data ingested from SofaScore via headless Chromium and refreshed by a free GitHub Actions cron.
+Built with **Vite + TypeScript (vanilla DOM) + vite-plugin-pwa**; data ingested from SofaScore via headless Chromium. **Live: https://tennisarc.vercel.app**
 
 ## Develop
 
@@ -39,10 +39,12 @@ Schedule it via `launchd`/`cron` while your machine is online. The deployed app 
 
 ## Deploy (Vercel)
 
-1. Push the repo to GitHub (`gh repo create TennisArc --public --source=. --push`).
-2. Import the repo in Vercel (auto-detects Vite).
-3. Set the env var `VITE_DATA_BASE_URL` = `https://raw.githubusercontent.com/<user>/TennisArc/data` so the app reads the cron-refreshed `data` branch.
-4. The GitHub Actions cron (or a manual "Run workflow") publishes the `data` branch; the app then shows live data and "updated N min ago".
+**Live:** https://tennisarc.vercel.app — Vercel (Vite preset, output `dist/`), serving the committed real Roland Garros 2026 data, installable + offline-capable. Redeploy after changes with `vercel deploy --prod`.
+
+Optional follow-ups:
+
+- **Auto-deploy on push:** install the Vercel GitHub App on `tsenoner/TennisArc` (Vercel → project → Settings → Git) so pushes to `main` deploy automatically. Until then deploys are manual (`vercel deploy --prod`).
+- **Live data:** the site ships with the committed real RG 2026 seed in `public/data/`. To serve refreshed data, run `scripts/publish-data.sh` from a residential IP (see "Refreshing data") to populate the `data` branch, then set the Vercel env var `VITE_DATA_BASE_URL=https://raw.githubusercontent.com/tsenoner/TennisArc/data`. The app prefers that branch and falls back to the seed if it's missing.
 
 ## Architecture
 
