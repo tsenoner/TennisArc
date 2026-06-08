@@ -1,19 +1,18 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Snapshot, Tour } from "../src/model";
-import { CURRENT_SLAM, DRAW_SIZE, SLAMS } from "./config";
+import { DRAW_SIZE, SLAMS, currentSlam, type SlamConfig } from "./config";
 import { openContext, fetchTournament, resolveSeasonId } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
 import { enrichMatch } from "./enrich";
 
 const OUT_DIR = resolve(process.cwd(), "public/data");
 
-async function ingestTour(tour: Tour, isoNow: string, nowSec: number): Promise<Snapshot> {
-  const cfg = SLAMS[CURRENT_SLAM];
+async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: number): Promise<Snapshot> {
   const utId = cfg.unitournament[tour];
   const { browser, page } = await openContext();
   try {
-    const seasonId = await resolveSeasonId(page, utId);
+    const seasonId = await resolveSeasonId(page, utId, cfg.year);
     const raw = await fetchTournament(page, utId, seasonId);
     const snap = normalizeCuptrees(raw.cuptrees as any, {
       tour, slam: cfg.slam, name: cfg.name, year: cfg.year, surface: cfg.surface,
@@ -25,6 +24,12 @@ async function ingestTour(tour: Tour, isoNow: string, nowSec: number): Promise<S
       if (!e?.detail) continue;
       snap.matches[match.id] = enrichMatch(match, e.detail as any, (e.stats as any) ?? null, snap.players, nowSec);
     }
+    // Guard against an unreleased/partial draw (e.g. right after a slam switch, before the new
+    // bracket is published): keep last-good rather than publishing a broken bracket.
+    const matchCount = Object.keys(snap.matches).length;
+    if (matchCount < DRAW_SIZE - 1) {
+      throw new Error(`${cfg.slam} ${tour}: draw not fully available yet (${matchCount}/${DRAW_SIZE - 1} matches) — keeping last-good`);
+    }
     snap.generatedAt = isoNow;
     return snap;
   } finally {
@@ -35,11 +40,13 @@ async function ingestTour(tour: Tour, isoNow: string, nowSec: number): Promise<S
 async function main(): Promise<void> {
   const isoNow = new Date().toISOString();
   const nowSec = Math.floor(Date.now() / 1000);
+  const cfg = SLAMS[currentSlam()];
+  console.log(`tracking slam: ${cfg.slam} (${cfg.year})`);
   await mkdir(OUT_DIR, { recursive: true });
   let ok = 0;
   for (const tour of ["ATP", "WTA"] as Tour[]) {
     try {
-      const snap = await ingestTour(tour, isoNow, nowSec);
+      const snap = await ingestTour(cfg, tour, isoNow, nowSec);
       const file = resolve(OUT_DIR, `${tour.toLowerCase()}.json`);
       await writeFile(file, JSON.stringify(snap));
       const played = Object.values(snap.matches).filter((m) => m.status !== "scheduled" && m.status !== "notstarted").length;
