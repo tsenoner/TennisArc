@@ -1,4 +1,3 @@
-import { makeSyntheticSnapshot } from "./fixtures/synthetic";
 import { buildSunburst, timeOnCourt, timeLeaderboard } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
@@ -7,37 +6,47 @@ import {
 } from "./render";
 import { sofascoreMatchUrl } from "./deeplink";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
+import { createStore, type Store } from "./store";
+import { fetchSnapshot } from "./api";
 import type { Snapshot, Tour } from "./model";
 
-const SIZE = 700; // SVG viewBox units; CSS scales to container
+const SIZE = 700;
 
 interface AppState {
   tour: Tour;
-  snapshots: Record<Tour, Snapshot>;
+  snapshots: Partial<Record<Tour, Snapshot>>;
   colorDim: ColorDim;
   focusId: string | undefined;
   selectedMatchId: string | undefined;
   theme: Theme;
 }
 
+function staleLabel(generatedAt: string | undefined, nowMs: number): string {
+  if (!generatedAt) return "";
+  const ageMin = Math.round((nowMs - Date.parse(generatedAt)) / 60000);
+  if (!Number.isFinite(ageMin) || ageMin < 0) return "";
+  if (ageMin < 1) return "updated just now";
+  if (ageMin < 60) return `updated ${ageMin} min ago`;
+  return `updated ${Math.round(ageMin / 60)}h ago`;
+}
+
 export function createApp(root: HTMLElement): void {
   const theme = loadTheme();
   applyTheme(theme);
   const state: AppState = {
-    tour: "ATP",
-    // Plan 3 swaps these synthetic snapshots for live data via api.ts.
-    snapshots: {
-      ATP: makeSyntheticSnapshot({ tour: "ATP", drawSize: 128, seed: 7, completedRounds: 4 }),
-      WTA: makeSyntheticSnapshot({ tour: "WTA", drawSize: 128, seed: 11, completedRounds: 4 }),
-    },
-    colorDim: "time",
-    focusId: undefined,
-    selectedMatchId: undefined,
-    theme,
+    tour: "ATP", snapshots: {}, colorDim: "time",
+    focusId: undefined, selectedMatchId: undefined, theme,
   };
+  let store: Store | undefined;
 
   const draw = () => {
     const snap = state.snapshots[state.tour];
+    if (!snap) {
+      root.innerHTML =
+        renderControls({ tour: state.tour, colorDim: state.colorDim, theme: state.theme }) +
+        `<div class="stage"><div class="loading">Loading ${state.tour} draw…</div></div>`;
+      return;
+    }
     const time = timeOnCourt(snap);
     const arcs = layout(buildSunburst(snap), SIZE / 2 - 8, state.focusId);
     const color = colorScale(state.colorDim, snap, time);
@@ -59,40 +68,49 @@ export function createApp(root: HTMLElement): void {
         renderLeaderboard(lb, color) +
       `</div>` +
       renderLegend(state.colorDim) +
+      `<div class="status">${snap.tournament.name} · ${staleLabel(snap.generatedAt, Date.now())}</div>` +
       detail;
+  };
+
+  const load = async (tour: Tour) => {
+    if (store && !state.snapshots[tour]) {
+      const cached = await store.getSnapshot(tour);
+      if (cached) { state.snapshots[tour] = cached; if (state.tour === tour) draw(); }
+    }
+    const fresh = await fetchSnapshot(tour);
+    if (fresh) {
+      state.snapshots[tour] = fresh;
+      void store?.setSnapshot(tour, fresh);
+      if (state.tour === tour) draw();
+    }
   };
 
   root.addEventListener("click", (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-action]");
-    if (!el) return; // e.g. the SofaScore <a> link → let the browser handle it
+    if (!el) return;
     const a = el.dataset.action;
     const id = el.dataset.id;
     if (a === "tour" && el.dataset.tour) {
       state.tour = el.dataset.tour as Tour;
-      state.focusId = undefined;
-      state.selectedMatchId = undefined;
-      draw();
+      state.focusId = undefined; state.selectedMatchId = undefined;
+      draw(); void load(state.tour);
     } else if (a === "colordim" && el.dataset.dim) {
-      state.colorDim = el.dataset.dim as ColorDim;
-      draw();
+      state.colorDim = el.dataset.dim as ColorDim; draw();
     } else if (a === "theme") {
-      state.theme = nextTheme(state.theme);
-      applyTheme(state.theme);
-      saveTheme(state.theme);
-      draw();
+      state.theme = nextTheme(state.theme); applyTheme(state.theme); saveTheme(state.theme); draw();
     } else if (a === "close-detail") {
-      state.selectedMatchId = undefined;
-      draw();
+      state.selectedMatchId = undefined; draw();
     } else if (a === "reset" || id === "r" || (id && id === state.focusId)) {
-      state.focusId = undefined;
-      state.selectedMatchId = undefined;
-      draw();
+      state.focusId = undefined; state.selectedMatchId = undefined; draw();
     } else if (a === "zoom" && id) {
-      state.focusId = id;
-      state.selectedMatchId = el.dataset.match;
-      draw();
+      state.focusId = id; state.selectedMatchId = el.dataset.match; draw();
     }
   });
 
-  draw();
+  draw(); // initial loading state
+  void (async () => {
+    store = await createStore();
+    await load("ATP");
+    void load("WTA"); // warm the other tour in the background
+  })();
 }
