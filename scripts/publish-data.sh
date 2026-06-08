@@ -56,6 +56,8 @@ git worktree add "$WORKTREE_DIR" data-pub
   cd "$WORKTREE_DIR"
   git rm -rf . >/dev/null 2>&1 || true
   cp "$STAGING"/*.json .
+  # Tell Vercel never to build the data branch (it has no app) — prevents failing preview deploys.
+  printf '%s\n' '{"git":{"deploymentEnabled":false}}' > vercel.json
   git add -A
   if git diff --cached --quiet; then
     echo "no changes vs last data branch commit; nothing to publish"
