@@ -1,20 +1,26 @@
 import { describe, it, expect } from "vitest";
-import { currentSlam } from "./config";
+import { activeSlam } from "./config";
 
-describe("currentSlam", () => {
-  it("picks the slam whose draw window is current (latest `from` already past)", () => {
-    // RG just finished, Wimbledon draw not out yet → still RG
-    expect(currentSlam(new Date("2026-06-08"), undefined)).toBe("roland-garros");
-    // Wimbledon draw day → auto-switch
-    expect(currentSlam(new Date("2026-06-26"), undefined)).toBe("wimbledon");
-    // between Wimbledon and US Open → keep showing Wimbledon (most recent)
-    expect(currentSlam(new Date("2026-07-20"), undefined)).toBe("wimbledon");
-    expect(currentSlam(new Date("2026-02-10"), undefined)).toBe("australian-open");
-    expect(currentSlam(new Date("2026-09-01"), undefined)).toBe("us-open");
+describe("activeSlam", () => {
+  it("returns the Slam in progress within its [from, to) window", () => {
+    // RG window 2026-05-21 … 2026-06-09
+    expect(activeSlam(new Date("2026-05-21"))).toBe("roland-garros"); // draw day → window opens
+    expect(activeSlam(new Date("2026-06-08"))).toBe("roland-garros"); // day after the final, still in window
+    expect(activeSlam(new Date("2026-06-30"))).toBe("wimbledon");
+    expect(activeSlam(new Date("2026-01-20"))).toBe("australian-open");
+    expect(activeSlam(new Date("2026-09-01"))).toBe("us-open");
   });
 
-  it("honours a valid SLAM override and ignores an invalid one", () => {
-    expect(currentSlam(new Date("2026-06-08"), "wimbledon")).toBe("wimbledon");
-    expect(currentSlam(new Date("2026-06-08"), "nonsense")).toBe("roland-garros");
+  it("returns null between Slams — nothing to refresh, data won't change", () => {
+    expect(activeSlam(new Date("2026-06-15"))).toBeNull(); // after RG closes, before the Wimbledon draw
+    expect(activeSlam(new Date("2026-07-20"))).toBeNull(); // after Wimbledon closes
+    expect(activeSlam(new Date("2026-03-01"))).toBeNull(); // deep off-season
+    expect(activeSlam(new Date("2026-12-25"))).toBeNull(); // year-end, before next AO
+  });
+
+  it("honours a valid SLAM override even out of window, ignores an invalid one", () => {
+    expect(activeSlam(new Date("2026-03-01"), "wimbledon")).toBe("wimbledon"); // forced out of season
+    expect(activeSlam(new Date("2026-06-08"), "nonsense")).toBe("roland-garros"); // invalid → fall back to window
+    expect(activeSlam(new Date("2026-03-01"), "nonsense")).toBeNull(); // invalid + off-season → null
   });
 });

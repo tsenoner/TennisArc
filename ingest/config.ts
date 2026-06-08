@@ -2,37 +2,40 @@ import type { Tour } from "../src/model";
 
 export interface SlamConfig {
   slam: string; name: string; surface: string; year: number;
-  from: string; // ISO date (UTC) from which to track this slam (≈ when the main draw is released)
+  from: string; // ISO date (UTC) the active window opens (≈ when the main draw is released)
+  to: string;   // ISO date (UTC, exclusive) the active window closes (≈ final + ~2 days of buffer)
   unitournament: Record<Tour, number>; // SofaScore uniqueTournament ids
 }
 
-// SofaScore uniqueTournament ids per tour. `from` ≈ the day the main draw is released (a day or
-// two before play). The ingest tracks the slam with the latest `from` already past, so it keeps
-// showing the most recent Slam between tournaments and auto-switches to the next once its draw
-// window opens — no manual edit needed.
-// NOTE: dates/ids are for the 2026 season — bump them when rolling to a new year.
+// SofaScore uniqueTournament ids per tour. Each Slam has an *active window* `[from, to)`:
+//   from ≈ the day the main draw is released (a day or two before play);
+//   to   ≈ a couple of days after the final, so late stat corrections are still captured.
+// The ingest only does work while `now` is inside a window — between Slams the bracket is frozen,
+// so refreshing would just relaunch a browser and push nothing. The data branch keeps holding the
+// most recent Slam's final state until the next Slam's window opens.
+// NOTE: dates/ids are for the 2026 season — bump them when rolling to a new year (windows are
+// generous on the late side on purpose: a few wasted cycles beats truncating a live tournament).
 export const SLAMS: Record<string, SlamConfig> = {
-  "australian-open": { slam: "australian-open", name: "Australian Open", surface: "Hard",  year: 2026, from: "2026-01-15", unitournament: { ATP: 2363, WTA: 2521 } },
-  "roland-garros":   { slam: "roland-garros",   name: "Roland Garros",   surface: "Clay",  year: 2026, from: "2026-05-21", unitournament: { ATP: 2480, WTA: 2577 } },
-  wimbledon:         { slam: "wimbledon",       name: "Wimbledon",       surface: "Grass", year: 2026, from: "2026-06-26", unitournament: { ATP: 2361, WTA: 2600 } },
-  "us-open":         { slam: "us-open",         name: "US Open",         surface: "Hard",  year: 2026, from: "2026-08-25", unitournament: { ATP: 2449, WTA: 2547 } },
+  "australian-open": { slam: "australian-open", name: "Australian Open", surface: "Hard",  year: 2026, from: "2026-01-15", to: "2026-02-03", unitournament: { ATP: 2363, WTA: 2521 } },
+  "roland-garros":   { slam: "roland-garros",   name: "Roland Garros",   surface: "Clay",  year: 2026, from: "2026-05-21", to: "2026-06-09", unitournament: { ATP: 2480, WTA: 2577 } },
+  wimbledon:         { slam: "wimbledon",       name: "Wimbledon",       surface: "Grass", year: 2026, from: "2026-06-26", to: "2026-07-14", unitournament: { ATP: 2361, WTA: 2600 } },
+  "us-open":         { slam: "us-open",         name: "US Open",         surface: "Hard",  year: 2026, from: "2026-08-25", to: "2026-09-15", unitournament: { ATP: 2449, WTA: 2547 } },
 };
 
 export const DRAW_SIZE = 128;
 
 /**
- * The Slam to ingest right now: the one with the latest `from` date already in the past. Keeps
- * showing the most recent Slam between tournaments and auto-switches to the next once its draw
- * window opens. Force a specific Slam with the `SLAM` env var (e.g. `SLAM=wimbledon pnpm ingest`).
+ * The Slam to ingest right now, or `null` if none is in progress. Returns the Slam whose active
+ * window `[from, to)` contains `now`; between tournaments returns `null` so the caller can skip the
+ * (expensive) fetch entirely — the published data won't change until the next window opens. Windows
+ * don't overlap, so at most one matches. Force a specific Slam regardless of the window with the
+ * `SLAM` env var (e.g. `SLAM=wimbledon pnpm ingest`) — handy for testing out of season.
  */
-export function currentSlam(now: Date = new Date(), override = process.env.SLAM): keyof typeof SLAMS {
+export function activeSlam(now: Date = new Date(), override = process.env.SLAM): keyof typeof SLAMS | null {
   if (override && override in SLAMS) return override;
   const ts = now.getTime();
-  let pick: keyof typeof SLAMS = "australian-open";
-  let best = -Infinity;
   for (const [key, cfg] of Object.entries(SLAMS)) {
-    const from = Date.parse(cfg.from);
-    if (from <= ts && from > best) { best = from; pick = key; }
+    if (Date.parse(cfg.from) <= ts && ts < Date.parse(cfg.to)) return key;
   }
-  return pick;
+  return null;
 }

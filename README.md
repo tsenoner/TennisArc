@@ -23,7 +23,7 @@ The app reads `public/data/{atp,wta}.json` (committed real Roland Garros 2026 se
 pnpm ingest       # headless Chromium → SofaScore → public/data/{atp,wta}.json
 ```
 
-`ingest/` auto-selects the current Slam by date (`currentSlam()` in `ingest/config.ts` — the slam whose draw window is open, falling back to the most recent), pulls the SofaScore `cuptrees` bracket + per-match detail/stats from a Cloudflare-cleared browser context, normalizes to the `Snapshot` model (`src/model.ts`), and writes static JSON. It auto-switches to the next Slam when that slam's draw is released (no edit needed), and keeps the previous one until the new full draw is available. Force a specific slam with `SLAM=wimbledon pnpm ingest`. Update the per-slam `from` dates + ids in `config.ts` when rolling to a new year.
+`ingest/` only fetches while a Slam is actually in progress (`activeSlam()` in `ingest/config.ts` — the slam whose active window `[from, to)` contains now). Between tournaments the bracket is frozen, so the ingest exits immediately *before* launching a browser and pushes nothing; the `data` branch keeps the last Slam's final state. When a window is open it pulls the SofaScore `cuptrees` bracket + per-match detail/stats from a Cloudflare-cleared browser context, normalizes to the `Snapshot` model (`src/model.ts`), and writes static JSON. It auto-switches to the next Slam when that slam's draw is released (no edit needed), and keeps the previous one until the new full draw is available. Force a specific slam regardless of the window with `SLAM=wimbledon pnpm ingest`. Update the per-slam `from`/`to` dates + ids in `config.ts` when rolling to a new year.
 
 ### Refreshing data
 

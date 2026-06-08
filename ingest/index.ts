@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Snapshot, Tour } from "../src/model";
-import { DRAW_SIZE, SLAMS, currentSlam, type SlamConfig } from "./config";
+import { DRAW_SIZE, SLAMS, activeSlam, type SlamConfig } from "./config";
 import { openContext, fetchTournament, resolveSeasonId } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
 import { enrichMatch } from "./enrich";
@@ -38,9 +38,16 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
 }
 
 async function main(): Promise<void> {
+  // Only fetch while a Slam is actually in progress. Between tournaments the bracket is frozen, so
+  // skip before launching any browser — the published data branch keeps the last Slam's final state.
+  const slamKey = activeSlam();
+  if (!slamKey) {
+    console.log("no Slam in progress — skipping refresh (between tournaments, data unchanged)");
+    return;
+  }
   const isoNow = new Date().toISOString();
   const nowSec = Math.floor(Date.now() / 1000);
-  const cfg = SLAMS[currentSlam()];
+  const cfg = SLAMS[slamKey];
   console.log(`tracking slam: ${cfg.slam} (${cfg.year})`);
   await mkdir(OUT_DIR, { recursive: true });
   let ok = 0;
