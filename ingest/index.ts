@@ -36,6 +36,7 @@ async function main(): Promise<void> {
   const isoNow = new Date().toISOString();
   const nowSec = Math.floor(Date.now() / 1000);
   await mkdir(OUT_DIR, { recursive: true });
+  let ok = 0;
   for (const tour of ["ATP", "WTA"] as Tour[]) {
     try {
       const snap = await ingestTour(tour, isoNow, nowSec);
@@ -43,10 +44,11 @@ async function main(): Promise<void> {
       await writeFile(file, JSON.stringify(snap));
       const played = Object.values(snap.matches).filter((m) => m.status !== "scheduled" && m.status !== "notstarted").length;
       console.log(`wrote ${file}: ${Object.keys(snap.matches).length} matches (${played} played), ${Object.keys(snap.players).length} players`);
+      ok++;
     } catch (err) {
       console.error(`ingest ${tour} failed (keeping last-good ${tour}.json):`, err);
-      process.exitCode = 1;
     }
   }
+  if (ok === 0) { console.error("ingest failed for all tours"); process.exitCode = 1; }
 }
 main().catch((err) => { console.error("ingest failed:", err); process.exitCode = 1; });

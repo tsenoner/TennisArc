@@ -14,7 +14,8 @@ export async function fetchSnapshot(
   try {
     const res = await fetch(url, { cache: "no-cache" });
     if (!res.ok) return null;
-    return (await res.json()) as Snapshot;
+    const snap = (await res.json()) as Snapshot;
+    return snap?.schemaVersion === 1 ? snap : null;
   } catch {
     return null;
   }

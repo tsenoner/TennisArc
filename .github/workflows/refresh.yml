@@ -23,15 +23,19 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm ingest
-      - name: Publish to data branch
+      - name: Publish data to the data branch
+        if: always()   # publish whatever ingested, even if one tour failed
         run: |
           set -e
-          mkdir -p /tmp/data && cp public/data/*.json /tmp/data/
+          # Only publish if the ingest actually refreshed a seed file. A failed/total-fail run
+          # leaves public/data unchanged → keep the data branch's last-good (no wipe).
+          if [ -z "$(git diff --name-only -- public/data)" ]; then echo "no fresh data; keeping last-good"; exit 0; fi
+          rm -rf /tmp/tapub && mkdir -p /tmp/tapub && cp public/data/*.json /tmp/tapub/
           git config user.name "tennisarc-bot"
           git config user.email "bot@users.noreply.github.com"
-          git fetch origin data || true
-          git checkout -B data
-          rm -rf data && mkdir -p data && cp /tmp/data/*.json data/
-          git add data
+          git checkout --orphan data-pub
+          git rm -rf . >/dev/null 2>&1 || true
+          cp /tmp/tapub/*.json .
+          git add -A
           git commit -m "data: refresh $(date -u +%FT%TZ)" || { echo "no changes"; exit 0; }
-          git push -f origin data
+          git push -f origin data-pub:data
