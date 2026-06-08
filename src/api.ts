@@ -10,7 +10,7 @@ export async function fetchSnapshot(
   baseUrl: string | undefined = (import.meta as any).env?.VITE_DATA_BASE_URL,
 ): Promise<Snapshot | null> {
   const file = `${tour.toLowerCase()}.json`;
-  const url = baseUrl ? `${baseUrl.replace(/\/$/, "")}/${file}` : `/data/${file}`;
+  const url = baseUrl ? `${baseUrl.replace(/\/+$/, "")}/${file}` : `/data/${file}`;
   try {
     const res = await fetch(url, { cache: "no-cache" });
     if (!res.ok) return null;
