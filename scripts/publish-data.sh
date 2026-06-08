@@ -8,6 +8,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 REPO_ROOT="$(pwd)"
+# HTTPS remote so the gh credential helper authenticates the push even under launchd,
+# which has no SSH agent. Run `gh auth setup-git` once so git uses the gh token for HTTPS.
+REMOTE="https://github.com/tsenoner/TennisArc.git"
 WORKTREE_DIR="$(mktemp -d /tmp/tapub-XXXXXX)"
 trap 'git worktree remove --force "$WORKTREE_DIR" 2>/dev/null || rm -rf "$WORKTREE_DIR"' EXIT
 
@@ -32,8 +35,8 @@ git config --get user.email >/dev/null 2>&1 || git config user.email "bot@users.
 # 5. Create or reset a local data-pub ref we can check out into the worktree.
 #    We try to base it on origin/data so the push is incremental; if that doesn't
 #    exist yet we start an orphan commit instead.
-if git fetch origin data 2>/dev/null; then
-  git branch -f data-pub origin/data
+if git fetch "$REMOTE" data 2>/dev/null; then
+  git branch -f data-pub FETCH_HEAD
 else
   # No remote data branch yet — create an empty orphan ref via a temp worktree trick:
   # write a stub commit that we'll immediately overwrite below.
@@ -59,6 +62,6 @@ git worktree add "$WORKTREE_DIR" data-pub
     exit 0
   fi
   git commit -q -m "data: refresh $(date -u +%FT%TZ)"
-  git push -f origin data-pub:data
+  git push -f "$REMOTE" data-pub:data
   echo "published data branch"
 )
