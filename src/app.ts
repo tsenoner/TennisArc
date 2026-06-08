@@ -68,7 +68,7 @@ export function createApp(root: HTMLElement): void {
         renderLeaderboard(lb, color) +
       `</div>` +
       renderLegend(state.colorDim) +
-      `<div class="status">${snap.tournament.name} · ${staleLabel(snap.generatedAt, Date.now())}</div>` +
+      `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}</div>` +
       detail;
   };
 
