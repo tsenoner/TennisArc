@@ -65,3 +65,7 @@ git worktree add "$WORKTREE_DIR" data-pub
   git push -f "$REMOTE" data-pub:data
   echo "published data branch"
 )
+
+# Keep the main working tree clean: the fresh ingest in public/data was only needed to
+# build the data branch (which now carries it), so restore the committed seed.
+git checkout -- public/data 2>/dev/null || true
