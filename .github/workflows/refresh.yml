@@ -1,0 +1,37 @@
+name: Refresh tennis data
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 min (GitHub's practical floor)
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency:
+  group: refresh-data
+  cancel-in-progress: true
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm ingest
+      - name: Publish to data branch
+        run: |
+          set -e
+          mkdir -p /tmp/data && cp public/data/*.json /tmp/data/
+          git config user.name "tennisarc-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git fetch origin data || true
+          git checkout -B data
+          rm -rf data && mkdir -p data && cp /tmp/data/*.json data/
+          git add data
+          git commit -m "data: refresh $(date -u +%FT%TZ)" || { echo "no changes"; exit 0; }
+          git push -f origin data
