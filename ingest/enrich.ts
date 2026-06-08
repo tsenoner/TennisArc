@@ -16,7 +16,7 @@ interface StatItem { key: string; name: string; home: string; away: string; home
 
 function mapStatus(t?: string, desc?: string): MatchStatus | null {
   if (desc && /retir/i.test(desc)) return "retired";
-  if (desc && /walkover/i.test(desc)) return "walkover";
+  if (desc && /walk.?over|w\/o/i.test(desc)) return "walkover";
   if (t === "inprogress") return "live";
   if (t === "finished") return "finished";
   if (t === "notstarted") return "scheduled";
@@ -36,7 +36,8 @@ function buildScore(home?: SofaScoreSide, away?: SofaScoreSide): SetScore[] | nu
 }
 
 function allItems(stats: SofaStats): Map<string, StatItem> {
-  const all = stats.statistics?.find((s) => s.period === "ALL") ?? stats.statistics?.[0];
+  const list = stats.statistics ?? [];
+  const all = list.find((s) => s.period === "ALL") ?? (list.length === 1 ? list[0] : undefined);
   const m = new Map<string, StatItem>();
   for (const g of all?.groups ?? []) for (const it of g.statisticsItems ?? []) m.set(it.key, it);
   return m;

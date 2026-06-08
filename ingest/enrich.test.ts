@@ -34,4 +34,15 @@ describe("enrichMatch", () => {
     expect(m.durationProvisional).toBe(true);
     expect(m.stats).toBeNull();
   });
+
+  it("maps a retired match (status description) and still counts played time", () => {
+    const retEvent = {
+      ...eventSample,
+      status: { code: 100, description: "Retired", type: "finished" },
+      time: { period1: 1822, period2: 600 },
+    };
+    const m = enrichMatch(baseMatch(), retEvent, statsSample, players(), 0);
+    expect(m.status).toBe("retired");
+    expect(m.durationSec).toBe(1822 + 600); // partial time still counts
+  });
 });
