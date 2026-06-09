@@ -158,3 +158,31 @@ describe("winProbability", () => {
     expect(winProbability(2000, 2200)).toBeCloseTo(0.2403, 3);
   });
 });
+
+import { labelAnchors, buildSunburst as buildSun2 } from "./state";
+
+describe("labelAnchors", () => {
+  it("labels the champion once at the root and never repeats a player", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
+    const root = buildSun2(s);
+    const anchors = labelAnchors(root);
+    expect(anchors.has(root.id)).toBe(true); // champion labelled at centre
+    // a player advancing into the next decided round is NOT anchored on the outer arc
+    const advancing = root.children.find((c) => c.occupant === root.occupant)!;
+    expect(anchors.has(advancing.id)).toBe(false);
+    // every decided occupant appears exactly once across the anchor set
+    const seen = new Map<string, number>();
+    const walk = (n: typeof root) => {
+      if (anchors.has(n.id) && n.occupant) seen.set(n.occupant, (seen.get(n.occupant) ?? 0) + 1);
+      n.children.forEach(walk);
+    };
+    walk(root);
+    for (const count of seen.values()) expect(count).toBe(1);
+  });
+
+  it("does not anchor projected (undecided) arcs", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 5, completedRounds: 0 });
+    const root = buildSun2(s);
+    expect(labelAnchors(root).has(root.id)).toBe(false); // champion is projected → no anchor
+  });
+});

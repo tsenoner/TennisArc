@@ -94,6 +94,24 @@ export function buildSunburst(s: Snapshot): SunNode {
   return build(finalMatch(s), 0, "r");
 }
 
+/**
+ * The set of node ids that should carry their occupant's single label: a node is an
+ * anchor when its occupant is decided here and did not also win the next round —
+ * i.e. the parent is the root, is projected, or is won by someone else. This labels
+ * each player exactly once, on the furthest ring they actually reached.
+ */
+export function labelAnchors(root: SunNode): Set<string> {
+  const out = new Set<string>();
+  const walk = (n: SunNode, parent: SunNode | null) => {
+    if (!n.projected && n.occupant && (!parent || parent.projected || parent.occupant !== n.occupant)) {
+      out.add(n.id);
+    }
+    for (const c of n.children) walk(c, n);
+  };
+  walk(root, null);
+  return out;
+}
+
 export interface PlayerTime {
   sec: number;
   provisional: boolean;
