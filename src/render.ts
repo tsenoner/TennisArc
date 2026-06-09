@@ -59,6 +59,9 @@ export function renderControls(opts: { tour: Tour; colorDim: ColorDim; theme: Th
     `<button class="ctrl${opts.colorDim === d ? " active" : ""}" data-action="colordim" data-dim="${d}">${DIM_LABELS[d]}</button>`;
   return (
     `<header class="controls">` +
+    `<a class="brand" href="/" aria-label="TennisArc home">` +
+    `<img class="brand-mark" src="/logo.svg" width="28" height="28" alt="" />` +
+    `<span class="brand-name">Tennis<span>Arc</span></span></a>` +
     `<div class="seg" role="group" aria-label="Tour">${tours.map(tourBtn).join("")}</div>` +
     `<div class="seg" role="group" aria-label="Colour by">${COLOR_DIMS.map(dimBtn).join("")}</div>` +
     `<button class="ctrl theme" data-action="theme" aria-label="Toggle theme">${opts.theme === "dark" ? "☀" : "☾"}</button>` +

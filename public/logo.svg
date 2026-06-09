@@ -1,12 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="96" fill="#0d1014"/>
-  <g transform="translate(256,256)" stroke="#0d1014" stroke-width="6">
-    <circle r="190" fill="#2f6f8f"/>
-    <circle r="150" fill="#3f86a0"/>
-    <circle r="110" fill="#d9a441"/>
-    <circle r="70" fill="#e0683c"/>
-    <circle r="30" fill="#f0c14b"/>
-    <line x1="0" y1="-200" x2="0" y2="200" stroke="#0d1014" stroke-width="10"/>
-    <line x1="-200" y1="0" x2="200" y2="0" stroke="#0d1014" stroke-width="10"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="TennisArc">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12161c"/>
+      <stop offset="1" stop-color="#0a0d11"/>
+    </linearGradient>
+    <radialGradient id="core" cx="42%" cy="38%" r="68%">
+      <stop offset="0" stop-color="#ffd970"/>
+      <stop offset="0.6" stop-color="#f0bd45"/>
+      <stop offset="1" stop-color="#e09c2f"/>
+    </radialGradient>
+    <radialGradient id="sheen" cx="32%" cy="26%" r="75%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#tile)"/>
+
+  <!-- outer ring · 8 wedges · early rounds · cool -->
+  <path fill="#2f6f8f" d="M260.03 58.04A198 198 0 0 1 393.13 113.17L357.12 150.68A146 146 0 0 0 258.97 110.03Z"/>
+  <path fill="#2f6f8f" d="M398.83 118.87A198 198 0 0 1 453.96 251.97L401.97 253.03A146 146 0 0 0 361.32 154.88Z"/>
+  <path fill="#2f6f8f" d="M453.96 260.03A198 198 0 0 1 398.83 393.13L361.32 357.12A146 146 0 0 0 401.97 258.97Z"/>
+  <path fill="#2f6f8f" d="M393.13 398.83A198 198 0 0 1 260.03 453.96L258.97 401.97A146 146 0 0 0 357.12 361.32Z"/>
+  <path fill="#2f6f8f" d="M251.97 453.96A198 198 0 0 1 118.87 398.83L154.88 361.32A146 146 0 0 0 253.03 401.97Z"/>
+  <path fill="#2f6f8f" d="M113.17 393.13A198 198 0 0 1 58.04 260.03L110.03 258.97A146 146 0 0 0 150.68 357.12Z"/>
+  <path fill="#2f6f8f" d="M58.04 251.97A198 198 0 0 1 113.17 118.87L150.68 154.88A146 146 0 0 0 110.03 253.03Z"/>
+  <path fill="#2f6f8f" d="M118.87 113.17A198 198 0 0 1 251.97 58.04L253.03 110.03A146 146 0 0 0 154.88 150.68Z"/>
+
+  <!-- middle ring · 4 wedges · quarters · gold -->
+  <path fill="#d9a441" d="M260.16 118.06A138 138 0 0 1 393.94 251.84L349.96 253.16A94 94 0 0 0 258.84 162.04Z"/>
+  <path fill="#d9a441" d="M393.94 260.16A138 138 0 0 1 260.16 393.94L258.84 349.96A94 94 0 0 0 349.96 258.84Z"/>
+  <path fill="#d9a441" d="M251.84 393.94A138 138 0 0 1 118.06 260.16L162.04 258.84A94 94 0 0 0 253.16 349.96Z"/>
+  <path fill="#d9a441" d="M118.06 251.84A138 138 0 0 1 251.84 118.06L253.16 162.04A94 94 0 0 0 162.04 253.16Z"/>
+
+  <!-- inner ring · 2 wedges · semifinals · clay -->
+  <path fill="#e0683c" d="M260.70 170.13A86 86 0 0 1 260.70 341.87L258.30 297.94A42 42 0 0 0 258.30 214.06Z"/>
+  <path fill="#e0683c" d="M251.30 341.87A86 86 0 0 1 251.30 170.13L253.70 214.06A42 42 0 0 0 253.70 297.94Z"/>
+
+  <!-- champion core · a tennis ball -->
+  <circle cx="256" cy="256" r="34" fill="url(#core)"/>
+  <g fill="none" stroke="#a9701b" stroke-opacity="0.55" stroke-width="3.4" stroke-linecap="round">
+    <path d="M236 226 Q256 256 236 286"/>
+    <path d="M276 226 Q256 256 276 286"/>
   </g>
+
+  <!-- light -->
+  <rect width="512" height="512" rx="112" fill="url(#sheen)"/>
 </svg>

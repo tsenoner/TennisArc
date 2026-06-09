@@ -14,6 +14,11 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 
 .controls { display: flex; gap: 10px; align-items: center; padding: 10px 14px;
   border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.brand { display: inline-flex; align-items: center; gap: 8px; margin-right: 4px;
+  text-decoration: none; color: var(--text); }
+.brand-mark { display: block; border-radius: 7px; }
+.brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+.brand-name span { color: var(--accent); }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .ctrl { background: transparent; color: var(--dim); border: 0; padding: 7px 12px;
   font: inherit; font-size: 13px; cursor: pointer; }
