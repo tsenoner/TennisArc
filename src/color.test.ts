@@ -34,3 +34,17 @@ describe("colorScale", () => {
     }
   });
 });
+
+describe("colorScale country lens", () => {
+  it("highlights the selected country and mutes the rest", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    const ids = Object.keys(s.players);
+    s.players[ids[0]] = { ...s.players[ids[0]], country: "ESP" };
+    s.players[ids[1]] = { ...s.players[ids[1]], country: "FRA" };
+    const time = timeOnCourt(s);
+    const sel = colorScale("country", s, time, "ESP");
+    const none = colorScale("country", s, time);
+    expect(sel(ids[0])).not.toBe(sel(ids[1])); // ESP highlighted, FRA muted
+    expect(none(ids[0])).toBe(none(ids[1]));   // no selection → both muted (same colour)
+  });
+});
