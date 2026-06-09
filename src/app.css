@@ -80,3 +80,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 
 .loading { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); }
 .status { padding: 4px 14px 12px; color: var(--dim); font-size: 12px; }
+
+.slam-switch { gap: 2px; }
+.slam-switch .yr { padding: 0 6px; font-variant-numeric: tabular-nums; font-size: 13px; align-self: center; }
+.slam-switch .ctrl.slam { min-width: 30px; }
+.slam-switch .ctrl.slam[disabled] { opacity: .35; cursor: default; }
+.slam-switch .ctrl.slam.live::after { content: "●"; color: var(--teal); font-size: 8px; vertical-align: super; margin-left: 1px; }

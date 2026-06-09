@@ -3,8 +3,10 @@ import type { LayoutArc } from "./layout";
 import type { ColorFn } from "./color";
 import { COLOR_DIMS, type ColorDim } from "./color";
 import type { Match, MatchStats, Player, Tour } from "./model";
+import type { SlamIndex } from "./model";
 import type { Theme } from "./theme";
 import type { LeaderRow } from "./state";
+import { availableYears, slamsForYear } from "./slams";
 
 const PAD_ANGLE = 0.004;   // radians of gap between adjacent arcs
 const PAD_RADIUS = 60;     // d3 reference radius for converting padAngle → linear gap
@@ -51,18 +53,45 @@ export function formatDuration(sec: number): string {
 
 const DIM_LABELS: Record<ColorDim, string> = { time: "Time", seed: "Seed", country: "Country" };
 
-export function renderControls(opts: { tour: Tour; colorDim: ColorDim; theme: Theme }): string {
+export function renderControls(opts: {
+  tour: Tour; colorDim: ColorDim; theme: Theme;
+  index?: SlamIndex; year?: number; slam?: string;
+}): string {
   const tours: Tour[] = ["ATP", "WTA"];
   const tourBtn = (t: Tour) =>
     `<button class="ctrl${opts.tour === t ? " active" : ""}" data-action="tour" data-tour="${t}">${t}</button>`;
   const dimBtn = (d: ColorDim) =>
     `<button class="ctrl${opts.colorDim === d ? " active" : ""}" data-action="colordim" data-dim="${d}">${DIM_LABELS[d]}</button>`;
+
+  let switcher = "";
+  if (opts.index && opts.year != null) {
+    const years = availableYears(opts.index, opts.tour);
+    const i = years.indexOf(opts.year);
+    const prevY = i >= 0 && i + 1 < years.length ? years[i + 1] : "";
+    const nextY = i > 0 ? years[i - 1] : "";
+    const yearStep = (delta: number, target: number | "") =>
+      `<button class="ctrl yr-step" data-action="year" data-year="${target}"${target === "" ? " disabled" : ""} aria-label="${delta < 0 ? "Previous" : "Next"} year">${delta < 0 ? "◀" : "▶"}</button>`;
+    const slots = slamsForYear(opts.index, opts.year, opts.tour)
+      .map((s) => {
+        const on = opts.slam === s.slam ? " active" : "";
+        const off = s.entry ? "" : " disabled";
+        const live = s.entry?.status === "live" ? " live" : "";
+        return `<button data-action="slam" data-slam="${s.slam}" class="ctrl slam${on}${live}"${off ? " disabled" : ""} data-surface="${s.surface}" title="${s.entry ? escapeHtml(s.entry.name) : s.slam + " — not available"}">${s.abbr}</button>`;
+      })
+      .join("");
+    switcher =
+      `<div class="seg slam-switch" role="group" aria-label="Grand Slam">` +
+      yearStep(-1, prevY) + `<span class="yr">${opts.year}</span>` + yearStep(1, nextY) +
+      slots + `</div>`;
+  }
+
   return (
     `<header class="controls">` +
     `<a class="brand" href="/" aria-label="TennisArc home">` +
     `<img class="brand-mark" src="/logo.svg" width="28" height="28" alt="" />` +
     `<span class="brand-name">Tennis<span>Arc</span></span></a>` +
     `<div class="seg" role="group" aria-label="Tour">${tours.map(tourBtn).join("")}</div>` +
+    switcher +
     `<div class="seg" role="group" aria-label="Colour by">${COLOR_DIMS.map(dimBtn).join("")}</div>` +
     `<button class="ctrl theme" data-action="theme" aria-label="Toggle theme">${opts.theme === "dark" ? "☀" : "☾"}</button>` +
     `</header>`
