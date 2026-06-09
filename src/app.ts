@@ -7,14 +7,19 @@ import {
 import { sofascoreMatchUrl } from "./deeplink";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { createStore, type Store } from "./store";
-import { fetchSnapshot } from "./api";
-import type { Snapshot, Tour } from "./model";
+import { fetchSnapshot, fetchIndex } from "./api";
+import { pickDefaultSlam, availableYears, slamsForYear } from "./slams";
+import type { SlamIndex, Snapshot, Tour } from "./model";
 
 const SIZE = 700;
+const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
 
 interface AppState {
   tour: Tour;
-  snapshots: Partial<Record<Tour, Snapshot>>;
+  year: number;
+  slam: string;
+  index: SlamIndex | undefined;
+  snapshots: Record<string, Snapshot>;
   colorDim: ColorDim;
   focusId: string | undefined;
   selectedMatchId: string | undefined;
@@ -34,16 +39,21 @@ export function createApp(root: HTMLElement): void {
   const theme = loadTheme();
   applyTheme(theme);
   const state: AppState = {
-    tour: "ATP", snapshots: {}, colorDim: "time",
-    focusId: undefined, selectedMatchId: undefined, theme,
+    tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
+    colorDim: "time", focusId: undefined, selectedMatchId: undefined, theme,
   };
   let store: Store | undefined;
 
+  const controlsOpts = () => ({
+    tour: state.tour, colorDim: state.colorDim, theme: state.theme,
+    index: state.index, year: state.year || undefined, slam: state.slam || undefined,
+  });
+
   const draw = () => {
-    const snap = state.snapshots[state.tour];
+    const snap = state.year ? state.snapshots[snapKey(state.tour, state.year, state.slam)] : undefined;
     if (!snap) {
       root.innerHTML =
-        renderControls({ tour: state.tour, colorDim: state.colorDim, theme: state.theme }) +
+        renderControls(controlsOpts()) +
         `<div class="stage"><div class="loading">Loading ${state.tour} draw…</div></div>`;
       return;
     }
@@ -62,7 +72,7 @@ export function createApp(root: HTMLElement): void {
     }
 
     root.innerHTML =
-      renderControls({ tour: state.tour, colorDim: state.colorDim, theme: state.theme }) +
+      renderControls(controlsOpts()) +
       `<div class="stage">` +
         `<div class="sunburst">${renderSunburst(arcs, color, SIZE)}</div>` +
         renderLeaderboard(lb, color) +
@@ -72,29 +82,55 @@ export function createApp(root: HTMLElement): void {
       detail;
   };
 
-  const load = async (tour: Tour) => {
-    if (store && !state.snapshots[tour]) {
-      const cached = await store.getSnapshot(tour, 2026, "roland-garros");
-      if (cached) { state.snapshots[tour] = cached; if (state.tour === tour) draw(); }
+  const load = async (tour: Tour, year: number, slam: string) => {
+    const k = snapKey(tour, year, slam);
+    if (store && !state.snapshots[k]) {
+      const cached = await store.getSnapshot(tour, year, slam);
+      if (cached) { state.snapshots[k] = cached; if (snapKey(state.tour, state.year, state.slam) === k) draw(); }
     }
-    // TODO(Task 5): replace hardcoded year/slam with dynamic state values
-    const fresh = await fetchSnapshot(tour, 2026, "roland-garros");
+    const fresh = await fetchSnapshot(tour, year, slam);
     if (fresh) {
-      state.snapshots[tour] = fresh;
-      void store?.setSnapshot(tour, 2026, "roland-garros", fresh);
-      if (state.tour === tour) draw();
+      state.snapshots[k] = fresh;
+      void store?.setSnapshot(tour, year, slam, fresh);
+      if (snapKey(state.tour, state.year, state.slam) === k) draw();
     }
+  };
+
+  // Switch to the best available slam for a tour, keeping the current year if that tour has it.
+  const selectForTour = (tour: Tour) => {
+    if (!state.index) return;
+    const slots = state.year ? slamsForYear(state.index, state.year, tour) : [];
+    const keepYear = slots.some((s) => s.entry && s.slam === state.slam);
+    if (!keepYear) {
+      const def = pickDefaultSlam(state.index, tour);
+      if (def) { state.year = def.year; state.slam = def.slam; }
+    }
+    state.tour = tour;
+    state.focusId = undefined; state.selectedMatchId = undefined;
+    draw(); void load(state.tour, state.year, state.slam);
   };
 
   root.addEventListener("click", (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-action]");
-    if (!el) return;
+    if (!el || el.hasAttribute("disabled")) return;
     const a = el.dataset.action;
     const id = el.dataset.id;
     if (a === "tour" && el.dataset.tour) {
-      state.tour = el.dataset.tour as Tour;
+      selectForTour(el.dataset.tour as Tour);
+    } else if (a === "slam" && el.dataset.slam) {
+      state.slam = el.dataset.slam;
       state.focusId = undefined; state.selectedMatchId = undefined;
-      draw(); void load(state.tour);
+      draw(); void load(state.tour, state.year, state.slam);
+    } else if (a === "year" && el.dataset.year) {
+      const y = Number(el.dataset.year);
+      if (Number.isFinite(y) && state.index) {
+        const slots = slamsForYear(state.index, y, state.tour);
+        const keep = slots.find((s) => s.entry && s.slam === state.slam);
+        state.year = y;
+        state.slam = (keep ?? slots.find((s) => s.entry))?.slam ?? state.slam;
+        state.focusId = undefined; state.selectedMatchId = undefined;
+        draw(); void load(state.tour, state.year, state.slam);
+      }
     } else if (a === "colordim" && el.dataset.dim) {
       state.colorDim = el.dataset.dim as ColorDim; draw();
     } else if (a === "theme") {
@@ -111,7 +147,22 @@ export function createApp(root: HTMLElement): void {
   draw(); // initial loading state
   void (async () => {
     store = await createStore();
-    await load("ATP");
-    void load("WTA"); // warm the other tour in the background
+    state.index = (await fetchIndex()) ?? (await store.getIndex()) ?? undefined;
+    if (state.index) void store.setIndex(state.index);
+    if (state.index) {
+      const def = pickDefaultSlam(state.index, state.tour);
+      if (def) { state.year = def.year; state.slam = def.slam; }
+    }
+    if (!state.year) return; // no manifest yet → stay on loading state
+    await load(state.tour, state.year, state.slam);
+    // Warm the other tour's same-or-default slam in the background.
+    const other: Tour = state.tour === "ATP" ? "WTA" : "ATP";
+    if (state.index) {
+      const slots = availableYears(state.index, other).length ? slamsForYear(state.index, state.year, other) : [];
+      const otherSel = slots.find((s) => s.entry && s.slam === state.slam)
+        ? { year: state.year, slam: state.slam }
+        : pickDefaultSlam(state.index, other);
+      if (otherSel) void load(other, otherSel.year, otherSel.slam);
+    }
   })();
 }
