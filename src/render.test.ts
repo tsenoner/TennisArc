@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
 import { buildSunburst, timeOnCourt } from "./state";
 import { layout } from "./layout";
+import type { LayoutArc } from "./layout";
 import { colorScale } from "./color";
 import { renderSunburst, renderControls } from "./render";
 import type { SlamIndex } from "./model";
@@ -48,5 +49,28 @@ describe("renderControls slam switcher", () => {
   it("renders a year stepper", () => {
     expect(html).toContain('data-action="year"');
     expect(html).toContain("2026");
+  });
+});
+
+describe("renderSunburst labels", () => {
+  const bigArc: LayoutArc = { id: "r", matchId: "1-0", occupant: "p0", projected: false, depth: 0, x0: 0, x1: Math.PI, y0: 40, y1: 120 };
+  const color = () => "#fff";
+  const labels = { anchors: new Set(["r"]), text: (id: string) => (id === "p0" ? "Sinner" : id) };
+
+  it("emits a curved textPath label for an anchored, wide-enough arc", () => {
+    const svg = renderSunburst([bigArc], color, 700, labels);
+    expect(svg).toContain("<textPath");
+    expect(svg).toContain("Sinner");
+    expect(svg).toContain('data-occupant="p0"');
+  });
+
+  it("omits the label when the arc is not an anchor", () => {
+    const svg = renderSunburst([bigArc], color, 700, { anchors: new Set<string>(), text: () => "Sinner" });
+    expect(svg).not.toContain("<textPath");
+  });
+
+  it("omits the label on a projected arc", () => {
+    const proj = { ...bigArc, projected: true };
+    expect(renderSunburst([proj], color, 700, labels)).not.toContain("<textPath");
   });
 });

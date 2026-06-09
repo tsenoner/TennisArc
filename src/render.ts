@@ -19,21 +19,52 @@ const arcGen = d3arc<LayoutArc>()
   .padAngle(PAD_ANGLE)
   .padRadius(PAD_RADIUS);
 
-/** Render the sunburst as a self-contained SVG string (centred). */
-export function renderSunburst(arcs: LayoutArc[], color: ColorFn, size: number): string {
+export interface SunburstLabels { anchors: Set<string>; text: (occupant: string) => string; }
+
+/** Render the sunburst as a self-contained SVG string (centred), with optional write-once curved labels. */
+export function renderSunburst(arcs: LayoutArc[], color: ColorFn, size: number, labels?: SunburstLabels): string {
   const c = size / 2;
+  const defs: string[] = [];
+  const texts: string[] = [];
+  const pt = (r: number, ang: number) => `${(r * Math.sin(ang)).toFixed(2)},${(-r * Math.cos(ang)).toFixed(2)}`;
+
   const paths = arcs
     .map((a) => {
       const d = arcGen(a) ?? "";
       const cls = a.projected ? "arc projected" : "arc";
+      if (labels && !a.projected && a.occupant && labels.anchors.has(a.id)) {
+        const label = labels.text(a.occupant);
+        const rc = (a.y0 + a.y1) / 2;
+        const span = a.x1 - a.x0;
+        const fs = Math.min(13, Math.max(8, (a.y1 - a.y0) * 0.42));
+        // gate: only label when the arc's chord can hold the text
+        if (label && rc * span >= label.length * fs * 0.55) {
+          const mid = (a.x0 + a.x1) / 2;
+          const rev = mid > Math.PI / 2 && mid < 3 * Math.PI / 2;
+          const big = span > Math.PI ? 1 : 0;
+          const pad = Math.min(0.03, span * 0.12);
+          const s0 = a.x0 + pad, s1 = a.x1 - pad;
+          const pid = `lp${a.id.replace(/[^a-z0-9]/gi, "")}`;
+          const dPath = rev
+            ? `M${pt(rc, s1)} A${rc},${rc} 0 ${big} 0 ${pt(rc, s0)}`
+            : `M${pt(rc, s0)} A${rc},${rc} 0 ${big} 1 ${pt(rc, s1)}`;
+          defs.push(`<path id="${pid}" d="${dPath}"></path>`);
+          texts.push(
+            `<text class="arc-label" font-size="${fs.toFixed(1)}">` +
+            `<textPath href="#${pid}" startOffset="50%" text-anchor="middle">${escapeHtml(label)}</textPath></text>`,
+          );
+        }
+      }
       return `<path class="${cls}" d="${d}" fill="${color(a.occupant)}" ` +
-        `data-action="zoom" data-id="${a.id}" data-match="${a.matchId}"></path>`;
+        `data-action="zoom" data-id="${a.id}" data-match="${a.matchId}" data-occupant="${escapeHtml(a.occupant ?? "")}"></path>`;
     })
     .join("");
+
   return (
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
     `role="img" aria-label="Tournament bracket sunburst">` +
-    `<g transform="translate(${c},${c})" data-action="reset">${paths}</g></svg>`
+    `<g transform="translate(${c},${c})" data-action="reset">` +
+    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}</g></svg>`
   );
 }
 
