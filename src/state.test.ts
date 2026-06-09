@@ -206,3 +206,24 @@ describe("seedInsights", () => {
     expect(up!.eloGap).toBeCloseTo(200, 0);
   });
 });
+
+import { countryBreakdown } from "./state";
+
+describe("countryBreakdown", () => {
+  it("groups players by country with entrants + still-in counts, ranked", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    // force two known countries
+    const ids = Object.keys(s.players);
+    ids.forEach((id, i) => { s.players[id] = { ...s.players[id], country: i < 5 ? "ESP" : "FRA" }; });
+    const rows = countryBreakdown(s);
+    const esp = rows.find((r) => r.country === "ESP")!;
+    expect(esp.entrants).toBe(5);
+    expect(esp.stillIn).toBeLessThanOrEqual(esp.entrants);
+    expect(esp.players.length).toBe(5);
+    // ranked by stillIn desc then entrants desc
+    for (let i = 1; i < rows.length; i++) {
+      const a = rows[i - 1], b = rows[i];
+      expect(a.stillIn > b.stillIn || (a.stillIn === b.stillIn && a.entrants >= b.entrants)).toBe(true);
+    }
+  });
+});

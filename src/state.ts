@@ -207,6 +207,37 @@ export function seedInsights(s: Snapshot, limit = 8): SeedInsights {
   };
 }
 
+export interface NationPlayer { id: string; name: string; roundReached: number; alive: boolean; }
+export interface NationRow { country: string; entrants: number; stillIn: number; players: NationPlayer[]; }
+
+/** Per-country breakdown: entrants, players still in, and each player's furthest round. */
+export function countryBreakdown(s: Snapshot): NationRow[] {
+  const out = eliminatedSet(s);
+  const reached = new Map<string, number>();
+  for (const m of Object.values(s.matches)) {
+    for (const side of ["p1", "p2"] as const) {
+      const pid = m[side];
+      if (!pid) continue;
+      const r = m.winner === side ? m.roundIndex + 1 : m.roundIndex;
+      if (r > (reached.get(pid) ?? -1)) reached.set(pid, r);
+    }
+  }
+  const byCountry = new Map<string, NationRow>();
+  for (const p of Object.values(s.players)) {
+    const c = p.country || "—";
+    let row = byCountry.get(c);
+    if (!row) { row = { country: c, entrants: 0, stillIn: 0, players: [] }; byCountry.set(c, row); }
+    const alive = !out.has(p.id);
+    row.entrants++;
+    if (alive) row.stillIn++;
+    row.players.push({ id: p.id, name: p.name, roundReached: reached.get(p.id) ?? 0, alive });
+  }
+  for (const row of byCountry.values()) row.players.sort((a, b) => b.roundReached - a.roundReached);
+  return [...byCountry.values()].sort(
+    (a, b) => b.stillIn - a.stillIn || b.entrants - a.entrants || a.country.localeCompare(b.country),
+  );
+}
+
 /** Players ranked by cumulative time on court (descending), zero-time excluded. */
 export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limit = 10): LeaderRow[] {
   return [...time.entries()]
