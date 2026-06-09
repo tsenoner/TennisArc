@@ -24,3 +24,13 @@ export function availableSlamOf(snap: Snapshot): AvailableSlam {
     drawSize: snap.tournament.drawSize,
   };
 }
+
+/** Merge fresh entries into an existing manifest list, keyed by tour+year+slam; newest year first. */
+export function mergeIndex(existing: AvailableSlam[], entries: AvailableSlam[]): AvailableSlam[] {
+  const key = (a: AvailableSlam) => `${a.tour}:${a.year}:${a.slam}`;
+  const byKey = new Map(existing.map((s) => [key(s), s]));
+  for (const e of entries) byKey.set(key(e), e);
+  return [...byKey.values()].sort(
+    (a, b) => b.year - a.year || a.slam.localeCompare(b.slam) || a.tour.localeCompare(b.tour),
+  );
+}

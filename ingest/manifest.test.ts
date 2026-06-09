@@ -39,3 +39,26 @@ describe("availableSlamOf", () => {
     });
   });
 });
+
+import { mergeIndex } from "./manifest";
+import type { AvailableSlam } from "../src/model";
+
+const entry = (over: Partial<AvailableSlam>): AvailableSlam => ({
+  tour: "ATP", year: 2026, slam: "roland-garros", name: "Roland Garros", surface: "Clay",
+  status: "live", generatedAt: "t0", drawSize: 128, ...over,
+});
+
+describe("mergeIndex", () => {
+  it("updates an existing slam in place (by tour+year+slam) and preserves others", () => {
+    const existing = [entry({ status: "live", generatedAt: "t0" }), entry({ slam: "australian-open", name: "Australian Open", surface: "Hard", status: "complete" })];
+    const merged = mergeIndex(existing, [entry({ status: "complete", generatedAt: "t1" })]);
+    expect(merged).toHaveLength(2);
+    const rg = merged.find((s) => s.slam === "roland-garros")!;
+    expect(rg).toMatchObject({ status: "complete", generatedAt: "t1" });
+    expect(merged.find((s) => s.slam === "australian-open")!.status).toBe("complete");
+  });
+  it("adds new slams and sorts newest year first", () => {
+    const merged = mergeIndex([entry({ year: 2024 })], [entry({ year: 2026 })]);
+    expect(merged.map((s) => s.year)).toEqual([2026, 2024]);
+  });
+});
