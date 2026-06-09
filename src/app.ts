@@ -77,7 +77,8 @@ export function createApp(root: HTMLElement): void {
       const cached = await store.getSnapshot(tour);
       if (cached) { state.snapshots[tour] = cached; if (state.tour === tour) draw(); }
     }
-    const fresh = await fetchSnapshot(tour);
+    // TODO(Task 5): replace hardcoded year/slam with dynamic state values
+    const fresh = await fetchSnapshot(tour, 2026, "roland-garros");
     if (fresh) {
       state.snapshots[tour] = fresh;
       void store?.setSnapshot(tour, fresh);
