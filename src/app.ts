@@ -179,6 +179,7 @@ export function createApp(root: HTMLElement): void {
     } else if (a === "colordim" && el.dataset.dim) {
       state.colorDim = el.dataset.dim as ColorDim;
       if (state.colorDim !== "country") state.selectedCountry = undefined;
+      state.selectedMatchId = undefined; state.selectedNodeId = undefined;
       draw();
     } else if (a === "country" && el.dataset.country) {
       state.selectedCountry = state.selectedCountry === el.dataset.country ? undefined : el.dataset.country;
