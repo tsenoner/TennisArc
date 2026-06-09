@@ -1,15 +1,15 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, type PlayerTime } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
-  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderMatchDetail,
+  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderMatchDetail, renderReadout, type ReadoutInfo,
 } from "./render";
 import { sofascoreMatchUrl } from "./deeplink";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { createStore, type Store } from "./store";
 import { fetchSnapshot, fetchIndex } from "./api";
 import { pickDefaultSlam, availableYears, slamsForYear } from "./slams";
-import type { SlamIndex, Snapshot, Tour } from "./model";
+import type { Player, SlamIndex, Snapshot, Tour } from "./model";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
@@ -44,6 +44,37 @@ export function createApp(root: HTMLElement): void {
   };
   let store: Store | undefined;
 
+  // Updated each draw so the (frequent) hover handler can build a readout without a full re-render.
+  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null } | undefined;
+
+  const surname = (name: string) => name.split(" ").slice(-1)[0] || name;
+
+  const buildReadout = (snap: Snapshot, time: Map<string, PlayerTime>, playerId: string | null): ReadoutInfo | null => {
+    if (!playerId) return null;
+    const p: Player | undefined = snap.players[playerId];
+    if (!p) return null;
+    const t = time.get(playerId);
+    const elo = surfaceElo(p, snap.tournament.surface);
+    const champ = buildSunburst(snap).occupant;
+    const reached = t?.roundReached ?? 0;
+    const roundLabel = playerId === champ && snap.rounds.length
+      ? "title contender" : (snap.rounds[reached]?.name ?? "");
+    return {
+      name: p.name, country: p.country, ranking: p.ranking, seed: p.seed,
+      eloLabel: elo != null ? `${snap.tournament.surface} ELO ${Math.round(elo)}` : "",
+      roundLabel, sec: t?.sec ?? 0, provisional: t?.provisional ?? false,
+      projected: false,
+    };
+  };
+
+  const updateReadout = (playerId: string | null) => {
+    if (!ctx) return;
+    const el = root.querySelector(".readout");
+    if (!el) return;
+    const info = buildReadout(ctx.snap, ctx.time, playerId ?? ctx.defaultId);
+    el.outerHTML = renderReadout(info);
+  };
+
   const controlsOpts = () => ({
     tour: state.tour, colorDim: state.colorDim, theme: state.theme,
     index: state.index, year: state.year || undefined, slam: state.slam || undefined,
@@ -58,9 +89,15 @@ export function createApp(root: HTMLElement): void {
       return;
     }
     const time = timeOnCourt(snap);
-    const arcs = layout(buildSunburst(snap), SIZE / 2 - 8, state.focusId);
+    const tree = buildSunburst(snap);
+    const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
     const color = colorScale(state.colorDim, snap, time);
     const lb = timeLeaderboard(snap, time);
+    const anchors = labelAnchors(tree);
+    const labelText = (occ: string) => surname(snap.players[occ]?.name ?? occ);
+    const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
+    const defaultId = focusOcc ?? tree.occupant ?? null;
+    ctx = { snap, time, defaultId };
 
     let detail = "";
     const m = state.selectedMatchId ? snap.matches[state.selectedMatchId] : undefined;
@@ -74,7 +111,8 @@ export function createApp(root: HTMLElement): void {
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst">${renderSunburst(arcs, color, SIZE)}</div>` +
+        `<div class="sunburst">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText })}` +
+          renderReadout(buildReadout(snap, time, defaultId)) + `</div>` +
         renderLeaderboard(lb, color) +
       `</div>` +
       renderLegend(state.colorDim) +
@@ -143,6 +181,12 @@ export function createApp(root: HTMLElement): void {
       state.focusId = id; state.selectedMatchId = el.dataset.match; draw();
     }
   });
+
+  root.addEventListener("pointermove", (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>("[data-occupant]");
+    updateReadout(el?.dataset.occupant || null);
+  });
+  root.addEventListener("pointerleave", () => updateReadout(null), true);
 
   draw(); // initial loading state
   void (async () => {
