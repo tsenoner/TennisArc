@@ -2,11 +2,10 @@ import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, 
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
-  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderMatchDetail, renderReadout,
+  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout,
   renderSeedPanel, renderCountryPanel, type ReadoutInfo,
 } from "./render";
 import { flagEmoji } from "./flags";
-import { sofascoreMatchUrl } from "./deeplink";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { createStore, type Store } from "./store";
 import { fetchSnapshot, fetchIndex } from "./api";
@@ -109,15 +108,6 @@ export function createApp(root: HTMLElement): void {
     const defaultId = focusOcc ?? tree.occupant ?? null;
     ctx = { snap, time, defaultId };
 
-    let detail = "";
-    const m = state.selectedMatchId ? snap.matches[state.selectedMatchId] : undefined;
-    if (m) {
-      const p1 = m.p1 ? snap.players[m.p1] ?? null : null;
-      const p2 = m.p2 ? snap.players[m.p2] ?? null : null;
-      const roundName = snap.rounds[m.roundIndex]?.name ?? "";
-      detail = renderMatchDetail(m, p1, p2, sofascoreMatchUrl(m, p1, p2), roundName);
-    }
-
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
@@ -126,8 +116,7 @@ export function createApp(root: HTMLElement): void {
         panel +
       `</div>` +
       renderLegend(state.colorDim) +
-      `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}</div>` +
-      detail;
+      `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}</div>`;
   };
 
   const load = async (tour: Tour, year: number, slam: string) => {

@@ -2,11 +2,11 @@ import { arc as d3arc } from "d3-shape";
 import type { LayoutArc } from "./layout";
 import type { ColorFn } from "./color";
 import { COLOR_DIMS, type ColorDim } from "./color";
-import type { Match, MatchStats, Player, Tour } from "./model";
+import type { Tour } from "./model";
 import type { Round, SlamIndex } from "./model";
 import type { Theme } from "./theme";
 import { flagEmoji } from "./flags";
-import type { LeaderRow, SeedInsights, NationRow } from "./state";
+import type { LeaderRow, SeedInsights, NationRow, InsightSide, MatchInsight } from "./state";
 import { availableYears, slamsForYear } from "./slams";
 
 const PAD_ANGLE = 0.004;   // radians of gap between adjacent arcs
@@ -185,67 +185,60 @@ export function renderReadout(info: ReadoutInfo | null): string {
   );
 }
 
-const STATUS_LABEL: Record<Match["status"], string> = {
-  notstarted: "Not started", scheduled: "Scheduled", live: "Live",
-  finished: "", retired: "Retired", walkover: "Walkover",
-};
-
-function renderScore(m: Match): string {
-  if (m.score && m.score.length) {
-    return m.score
-      .map((s) => {
-        const sup = s.tb != null ? `<sup>${s.tb}</sup>` : "";
-        // the tiebreak points belong to the set winner (higher game count)
-        return s.p1 >= s.p2 ? `${s.p1}${sup}-${s.p2}` : `${s.p1}-${s.p2}${sup}`;
-      })
-      .join(" ");
-  }
-  return STATUS_LABEL[m.status] || "—";
+function insightScore(ins: MatchInsight): string {
+  if (!ins.score || !ins.score.length) return ins.status === "live" ? "Live" : "—";
+  return ins.score
+    .map((set) => {
+      const sup = set.tb != null ? `<sup>${set.tb}</sup>` : "";
+      return set.p1 >= set.p2 ? `${set.p1}${sup}-${set.p2}` : `${set.p1}-${set.p2}${sup}`;
+    })
+    .join(" ");
 }
 
-function renderStats(stats: MatchStats | null): string {
-  if (!stats) return "";
-  const row = (label: string, v?: [number | string, number | string]) =>
-    v ? `<tr><td>${v[0]}</td><th>${label}</th><td>${v[1]}</td></tr>` : "";
-  const body =
-    row("Aces", stats.aces) +
-    row("Double faults", stats.doubleFaults) +
-    row("1st serve %", stats.firstServePct) +
-    row("Service pts won %", stats.servicePointsWonPct) +
-    row("Break pts won", stats.breakPointsConverted);
-  return body ? `<table class="md-stats">${body}</table>` : "";
-}
-
-function renderPlayerLine(m: Match, p: Player | null, side: "p1" | "p2"): string {
-  if (!p) return `<div class="md-player"><span class="md-tbd">TBD</span></div>`;
-  const tag = p.seed != null ? `(${p.seed})` : p.entry ? `(${p.entry})` : "";
-  const win = m.winner === side ? " md-win" : "";
+function insightPlayer(side: InsightSide, win: boolean, rounds: Round[]): string {
+  const tag = side.seed != null ? `#${side.ranking ?? "?"} · seed ${side.seed}`
+    : side.ranking != null ? `#${side.ranking}` : "";
+  const path = `${roundAbbrev(side.roundReached, rounds)}${side.sec > 0 ? ` · ${formatDuration(side.sec)}` : ""}`;
   return (
-    `<div class="md-player${win}">` +
-    `<span class="md-name">${escapeHtml(p.name)}</span> ` +
-    `<span class="md-ctry">${escapeHtml(p.country)}</span>` +
-    (tag ? ` <span class="md-seed">${tag}</span>` : "") +
-    `</div>`
+    `<div class="mi-pl${win ? " mi-win" : ""}">` +
+    `<span class="mi-fl">${flagEmoji(side.country)}</span>` +
+    `<span class="mi-who"><b>${escapeHtml(side.name)}</b>${win ? ' <span class="mi-chk">✓</span>' : ""}` +
+    `<small>${escapeHtml(tag)} · ${escapeHtml(path)}</small></span></div>`
   );
 }
 
-export function renderMatchDetail(
-  m: Match, p1: Player | null, p2: Player | null, url: string | null, roundName: string,
-): string {
-  const dur =
-    m.durationSec != null
-      ? `<div class="md-dur">⏱ ${formatDuration(m.durationSec)}${m.durationProvisional ? " (live)" : ""}</div>`
-      : "";
-  const link = url
-    ? `<a class="md-link" href="${url}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>`
-    : "";
+function statBar(label: string, v: [number, number] | null): string {
+  if (!v) return "";
+  const [a, b] = v, max = Math.max(1, a + b);
   return (
-    `<div class="detail" role="dialog" aria-label="Match detail">` +
-    `<button class="detail-close" data-action="close-detail" aria-label="Close">✕</button>` +
-    `<div class="md-round">${escapeHtml(roundName)}</div>` +
-    `<div class="md-matchup">${renderPlayerLine(m, p1, "p1")}<div class="md-score">${renderScore(m)}</div>${renderPlayerLine(m, p2, "p2")}</div>` +
-    dur + renderStats(m.stats) + link +
-    `</div>`
+    `<div class="mi-stat"><span class="mi-sv">${a}</span>` +
+    `<span class="mi-bar"><i style="width:${Math.round((a / max) * 100)}%"></i><i style="width:${Math.round((b / max) * 100)}%"></i></span>` +
+    `<span class="mi-sv">${b}</span><span class="mi-slab">${label}</span></div>`
+  );
+}
+
+/** Rich match insight rendered in the panel column (replaces the lens panel while a match is selected). */
+export function renderMatchInsight(ins: MatchInsight, sofaUrl: string | null, nodeId: string, rounds: Round[]): string {
+  const badges = ins.badges
+    .map((b) => `<span class="mi-bdg${b === "Upset" ? " up" : ""}">${escapeHtml(b)}</span>`)
+    .join("");
+  const dur = ins.durationSec != null
+    ? `⏱ ${formatDuration(ins.durationSec)}${ins.durationProvisional ? " (live)" : ""}` : "";
+  const link = sofaUrl
+    ? `<a class="mi-link" href="${sofaUrl}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";
+  return (
+    `<aside class="panel match-insight" role="dialog" aria-label="Match insight">` +
+    `<div class="mi-hd"><button class="mi-back" data-action="close-detail">‹ back</button>` +
+    `<span class="mi-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}</span></div>` +
+    `<div class="mi-mu">${insightPlayer(ins.p1, ins.winner === "p1", rounds)}` +
+    `<div class="mi-score">${insightScore(ins)}</div>` +
+    `${insightPlayer(ins.p2, ins.winner === "p2", rounds)}</div>` +
+    (badges ? `<div class="mi-badges">${badges}</div>` : "") +
+    statBar("Aces", ins.aces) + statBar("Double faults", ins.doubleFaults) +
+    (ins.eloLine ? `<div class="mi-elo">${escapeHtml(ins.eloLine)}${ins.upset ? " — upset" : ""}</div>` : "") +
+    (dur ? `<div class="mi-dur">${dur}</div>` : "") +
+    `<div class="mi-acts">${link}<button class="mi-focus" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Focus this section</button></div>` +
+    `</aside>`
   );
 }
 
