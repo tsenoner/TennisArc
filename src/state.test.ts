@@ -227,3 +227,26 @@ describe("countryBreakdown", () => {
     }
   });
 });
+
+import { matchInsight } from "./state";
+
+describe("matchInsight", () => {
+  it("derives upset + comeback + tiebreak badges and an ELO line", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 4, seed: 1 });
+    const m = s.matches["0-0"];
+    const win = m.winner === "p1" ? m.p1! : m.p2!;
+    const lose = m.winner === "p1" ? m.p2! : m.p1!;
+    s.players[win] = { ...s.players[win], elo: { overall: 1800, hard: 1800, clay: 1800, grass: 1800 } };
+    s.players[lose] = { ...s.players[lose], elo: { overall: 2000, hard: 2000, clay: 2000, grass: 2000 } };
+    // winner dropped the first set, then a tiebreak set
+    s.matches["0-0"] = { ...m, score: [{ p1: 4, p2: 6 }, { p1: 7, p2: 6, tb: 5 }, { p1: 6, p2: 3 }] };
+    if (m.winner === "p2") s.matches["0-0"].score = [{ p1: 6, p2: 4 }, { p1: 6, p2: 7, tb: 5 }, { p1: 3, p2: 6 }];
+    const ins = matchInsight(s, "0-0", timeOnCourt(s))!;
+    expect(ins.upset).toBe(true);
+    expect(ins.badges).toContain("Upset");
+    expect(ins.badges).toContain("From a set down");
+    expect(ins.badges.some((b) => /tiebreak/.test(b))).toBe(true);
+    expect(ins.eloLine).toMatch(/ELO favoured/);
+    expect(ins.p1.elo).not.toBeNull();
+  });
+});

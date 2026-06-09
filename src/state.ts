@@ -1,4 +1,4 @@
-import type { Match, Player, Snapshot } from "./model";
+import type { Match, MatchStatus, Player, SetScore, Snapshot } from "./model";
 
 export interface SunNode {
   id: string;                 // unique path id, e.g. "r", "r.0", "r.0.1" (for focus/zoom)
@@ -255,4 +255,69 @@ export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limi
     })
     .sort((a, b) => b.sec - a.sec)
     .slice(0, limit);
+}
+
+export interface InsightSide {
+  id: string | null; name: string; country: string;
+  seed: number | null; ranking: number | null;
+  elo: number | null; roundReached: number; sec: number;
+}
+
+export interface MatchInsight {
+  matchId: string; roundName: string; surface: string;
+  status: MatchStatus; winner: "p1" | "p2" | null;
+  score: SetScore[] | null; durationSec: number | null; durationProvisional: boolean;
+  p1: InsightSide; p2: InsightSide;
+  badges: string[]; upset: boolean; eloLine: string;
+  aces: [number, number] | null; doubleFaults: [number, number] | null;
+}
+
+function insightSide(s: Snapshot, pid: string | null, surface: string, time: Map<string, PlayerTime>): InsightSide {
+  const p = pid ? s.players[pid] : null;
+  const t = pid ? time.get(pid) : undefined;
+  return {
+    id: pid, name: p?.name ?? "TBD", country: p?.country ?? "",
+    seed: p?.seed ?? null, ranking: p?.ranking ?? null,
+    elo: p ? surfaceElo(p, surface) : null,
+    roundReached: t?.roundReached ?? 0, sec: t?.sec ?? 0,
+  };
+}
+
+/** Derive a rich, narrative match insight (badges, ELO context, per-player path) for one match. */
+export function matchInsight(s: Snapshot, matchId: string, time: Map<string, PlayerTime>): MatchInsight | null {
+  const m = s.matches[matchId];
+  if (!m) return null;
+  const surface = s.tournament.surface;
+  const p1 = insightSide(s, m.p1, surface, time);
+  const p2 = insightSide(s, m.p2, surface, time);
+  const badges: string[] = [];
+  let upset = false;
+  let eloLine = "";
+
+  if (p1.elo != null && p2.elo != null) {
+    const favSide = p1.elo >= p2.elo ? "p1" : "p2";
+    const fav = favSide === "p1" ? p1 : p2;
+    const oth = favSide === "p1" ? p2 : p1;
+    eloLine = `${surface}-ELO favoured ${fav.name} ${Math.round(winProbability(fav.elo!, oth.elo!) * 100)}%`;
+    if (m.winner && m.winner !== favSide) { upset = true; badges.push("Upset"); }
+  }
+  if (m.winner && m.score && m.score.length) {
+    const won = (set: SetScore) => (m.winner === "p1" ? set.p1 > set.p2 : set.p2 > set.p1);
+    if (!won(m.score[0])) badges.push("From a set down");
+    if (m.score.every(won)) badges.push("Straight sets");
+    const tb = m.score.filter((set) => set.tb != null).length;
+    if (tb) badges.push(`${tb} tiebreak${tb > 1 ? "s" : ""}`);
+  }
+  if (m.durationSec != null) {
+    if (m.durationSec >= 10800) badges.push("Marathon");
+    else if (m.status === "finished" && m.durationSec < 5400) badges.push("Quick");
+  }
+
+  return {
+    matchId, roundName: s.rounds[m.roundIndex]?.name ?? "", surface,
+    status: m.status, winner: m.winner, score: m.score,
+    durationSec: m.durationSec, durationProvisional: m.durationProvisional,
+    p1, p2, badges, upset, eloLine,
+    aces: m.stats?.aces ?? null, doubleFaults: m.stats?.doubleFaults ?? null,
+  };
 }
