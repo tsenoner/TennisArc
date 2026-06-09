@@ -1,9 +1,9 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedInsights, countryBreakdown, type PlayerTime } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedInsights, countryBreakdown, matchInsight, type PlayerTime } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout,
-  renderSeedPanel, renderCountryPanel, type ReadoutInfo,
+  renderSeedPanel, renderCountryPanel, renderMatchInsight, type ReadoutInfo,
 } from "./render";
 import { flagEmoji } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -11,6 +11,7 @@ import { createStore, type Store } from "./store";
 import { fetchSnapshot, fetchIndex } from "./api";
 import { pickDefaultSlam, availableYears, slamsForYear } from "./slams";
 import type { Player, SlamIndex, Snapshot, Tour } from "./model";
+import { sofascoreMatchUrl } from "./deeplink";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
@@ -24,6 +25,7 @@ interface AppState {
   colorDim: ColorDim;
   focusId: string | undefined;
   selectedMatchId: string | undefined;
+  selectedNodeId: string | undefined;
   selectedCountry: string | undefined;
   theme: Theme;
 }
@@ -42,7 +44,7 @@ export function createApp(root: HTMLElement): void {
   applyTheme(theme);
   const state: AppState = {
     tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
-    colorDim: "time", focusId: undefined, selectedMatchId: undefined, selectedCountry: undefined, theme,
+    colorDim: "time", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, selectedCountry: undefined, theme,
   };
   let store: Store | undefined;
 
@@ -100,8 +102,14 @@ export function createApp(root: HTMLElement): void {
       state.colorDim === "country"
         ? flagEmoji(snap.players[occ]?.country ?? "")
         : surname(snap.players[occ]?.name ?? occ);
-    const panel =
-      state.colorDim === "seed" ? renderSeedPanel(seedInsights(snap))
+    const panel = state.selectedMatchId && snap.matches[state.selectedMatchId]
+      ? (() => {
+          const mm = snap.matches[state.selectedMatchId!];
+          const ins = matchInsight(snap, state.selectedMatchId!, time)!;
+          const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
+          return renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
+        })()
+      : state.colorDim === "seed" ? renderSeedPanel(seedInsights(snap))
       : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
       : renderLeaderboard(timeLeaderboard(snap, time), color);
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
@@ -143,7 +151,7 @@ export function createApp(root: HTMLElement): void {
       if (def) { state.year = def.year; state.slam = def.slam; }
     }
     state.tour = tour;
-    state.focusId = undefined; state.selectedMatchId = undefined; state.selectedCountry = undefined;
+    state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.selectedCountry = undefined;
     draw(); void load(state.tour, state.year, state.slam);
   };
 
@@ -156,7 +164,7 @@ export function createApp(root: HTMLElement): void {
       selectForTour(el.dataset.tour as Tour);
     } else if (a === "slam" && el.dataset.slam) {
       state.slam = el.dataset.slam;
-      state.focusId = undefined; state.selectedMatchId = undefined; state.selectedCountry = undefined;
+      state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.selectedCountry = undefined;
       draw(); void load(state.tour, state.year, state.slam);
     } else if (a === "year" && el.dataset.year) {
       const y = Number(el.dataset.year);
@@ -165,7 +173,7 @@ export function createApp(root: HTMLElement): void {
         const keep = slots.find((s) => s.entry && s.slam === state.slam);
         state.year = y;
         state.slam = (keep ?? slots.find((s) => s.entry))?.slam ?? state.slam;
-        state.focusId = undefined; state.selectedMatchId = undefined; state.selectedCountry = undefined;
+        state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.selectedCountry = undefined;
         draw(); void load(state.tour, state.year, state.slam);
       }
     } else if (a === "colordim" && el.dataset.dim) {
@@ -177,12 +185,19 @@ export function createApp(root: HTMLElement): void {
       draw();
     } else if (a === "theme") {
       state.theme = nextTheme(state.theme); applyTheme(state.theme); saveTheme(state.theme); draw();
+    } else if (a === "inspect" && el.dataset.match) {
+      state.selectedMatchId = el.dataset.match;
+      state.selectedNodeId = id;
+      draw();
+    } else if (a === "focus" && el.dataset.id) {
+      state.focusId = el.dataset.id;
+      draw();
     } else if (a === "close-detail") {
-      state.selectedMatchId = undefined; draw();
+      state.selectedMatchId = undefined;
+      state.selectedNodeId = undefined;
+      draw();
     } else if (a === "reset" || id === "r" || (id && id === state.focusId)) {
-      state.focusId = undefined; state.selectedMatchId = undefined; draw();
-    } else if (a === "zoom" && id) {
-      state.focusId = id; state.selectedMatchId = el.dataset.match; draw();
+      state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw();
     }
   });
 

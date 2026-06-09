@@ -57,7 +57,7 @@ export function renderSunburst(arcs: LayoutArc[], color: ColorFn, size: number, 
         }
       }
       return `<path class="${cls}" d="${d}" fill="${color(a.occupant)}" ` +
-        `data-action="zoom" data-id="${a.id}" data-match="${a.matchId}" data-occupant="${escapeHtml(a.occupant ?? "")}"></path>`;
+        `data-action="inspect" data-id="${a.id}" data-match="${a.matchId}" data-occupant="${escapeHtml(a.occupant ?? "")}"></path>`;
     })
     .join("");
 

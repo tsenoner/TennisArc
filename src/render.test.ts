@@ -15,8 +15,8 @@ describe("renderSunburst", () => {
     expect(svg).toContain("<svg");
     expect(svg).toContain("viewBox");
     expect((svg.match(/<path/g) ?? []).length).toBe(arcs.length);
-    // each arc carries its node id for click-to-zoom
-    expect(svg).toContain('data-action="zoom"');
+    // each arc carries its node id for click-to-inspect
+    expect(svg).toContain('data-action="inspect"');
     expect(svg).toMatch(/fill="(#|rgb)/);
   });
 
