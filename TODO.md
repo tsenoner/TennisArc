@@ -129,3 +129,17 @@ chmod +x ~/TennisArc/scripts/cron-refresh.sh
 ### Alternative to the home box: residential/mobile proxy
 
 - [ ] A residential or mobile proxy wired into `ingest/sofascore.ts` (Playwright `launch({ proxy: { server, username, password } })`) would let the existing **manual** GitHub Actions workflow — or a Cloudflare Worker — ingest from anywhere (~$1–5/mo). Trades the Pi's one-time cost + home-network dependency for a recurring proxy bill and an extra failure point. Only worth it if a home runner isn't viable.
+
+---
+
+## UX overhaul — known follow-ups (from the 2026-06-09 final review)
+
+The overhaul (write-once labels, centre readout, 3 lens panels, match insight, multi-slam, birthdates) shipped on `feat/ux-overhaul`. Deferred, non-blocking items the final cross-plan review surfaced:
+
+- [ ] **Keyboard / screen-reader accessibility for the bracket.** The SVG arcs are pointer-only and the `<svg role="img">` collapses the subtree for assistive tech, so the draw isn't keyboard-navigable. Add Enter/Space activation for `inspect` + an accessible **linear fallback** list of the draw (the original design anticipated this), and give the Country rows + toggle buttons proper `button`/`aria-pressed`/`aria-expanded` semantics. (Control buttons already got `aria-pressed`/`aria-current`.)
+- [ ] **Cross-platform SVG flags.** `src/flags.ts` uses Unicode emoji flags — crisp on macOS/iOS/Android but **rendered as letter-boxes on Windows**. Bundle the `flag-icons` SVG set (ISO alpha-2, tree-shaken to the ~80 nations that appear) for parity. Deliberate v1 deviation from spec §8.
+- [ ] **Country-lens centre readout summary (spec §5).** When a nation is selected on the Country lens, show a nation summary ("🇮🇹 Italy — 1 of 4 in") in the centre instead of the per-player card.
+- [ ] **Guard `inspect` on projected/TBD arcs.** Mid-tournament, clicking an unplayed arc opens a near-empty match insight; skip it (or render a "not played yet" state). Not visible on a completed slam.
+- [ ] **Retire `Player.ageYears`.** Age now comes from `birthdate` → `ageOn`; `ageYears` (Tennis Abstract static age) is unused by the UI. Either drop it from the model + ingest, or use it as the fallback for the ~1–2% of players without a DOB match.
+- [ ] **`slamStatus` "upcoming".** `ingest/manifest.ts` never returns `"upcoming"` (defaults to `"live"`); emit it for a pre-play draw so the switcher can distinguish not-yet-started slams.
+- [ ] Nits: `encodeURI`/escape the SofaScore deep-link URL in `renderMatchInsight`; tidy the `winProbability` non-null assertions in `seedInsights`/`matchInsight` (TS narrowing lost through the `fav`/`oth` indirection).
