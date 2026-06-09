@@ -91,9 +91,9 @@ export function renderControls(opts: {
 }): string {
   const tours: Tour[] = ["ATP", "WTA"];
   const tourBtn = (t: Tour) =>
-    `<button class="ctrl${opts.tour === t ? " active" : ""}" data-action="tour" data-tour="${t}">${t}</button>`;
+    `<button class="ctrl${opts.tour === t ? " active" : ""}" data-action="tour" data-tour="${t}" aria-pressed="${opts.tour === t}">${t}</button>`;
   const dimBtn = (d: ColorDim) =>
-    `<button class="ctrl${opts.colorDim === d ? " active" : ""}" data-action="colordim" data-dim="${d}">${DIM_LABELS[d]}</button>`;
+    `<button class="ctrl${opts.colorDim === d ? " active" : ""}" data-action="colordim" data-dim="${d}" aria-pressed="${opts.colorDim === d}">${DIM_LABELS[d]}</button>`;
 
   let switcher = "";
   if (opts.index && opts.year != null) {
@@ -108,7 +108,7 @@ export function renderControls(opts: {
         const on = opts.slam === s.slam ? " active" : "";
         const off = s.entry ? "" : " disabled";
         const live = s.entry?.status === "live" ? " live" : "";
-        return `<button data-action="slam" data-slam="${s.slam}" class="ctrl slam${on}${live}"${off ? " disabled" : ""} data-surface="${s.surface}" title="${s.entry ? escapeHtml(s.entry.name) : s.slam + " — not available"}">${s.abbr}</button>`;
+        return `<button data-action="slam" data-slam="${s.slam}" class="ctrl slam${on}${live}"${off ? " disabled" : ""}${on ? ' aria-current="true"' : ""} data-surface="${s.surface}" title="${s.entry ? escapeHtml(s.entry.name) : s.slam + " — not available"}">${s.abbr}</button>`;
       })
       .join("");
     switcher =

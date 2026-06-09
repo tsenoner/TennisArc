@@ -29,7 +29,7 @@ export default defineConfig({
           {
             urlPattern: ({ url }) => url.pathname.startsWith("/data/"),
             handler: "StaleWhileRevalidate",
-            options: { cacheName: "tennisarc-data", expiration: { maxEntries: 8, maxAgeSeconds: 86400 } },
+            options: { cacheName: "tennisarc-data", expiration: { maxEntries: 64, maxAgeSeconds: 86400 } },
           },
         ],
       },

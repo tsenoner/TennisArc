@@ -49,25 +49,29 @@ export function createApp(root: HTMLElement): void {
   let store: Store | undefined;
 
   // Updated each draw so the (frequent) hover handler can build a readout without a full re-render.
-  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null } | undefined;
+  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean } | undefined;
 
   const surname = (name: string) => name.split(" ").slice(-1)[0] || name;
 
-  const buildReadout = (snap: Snapshot, time: Map<string, PlayerTime>, playerId: string | null): ReadoutInfo | null => {
+  const buildReadout = (
+    snap: Snapshot, time: Map<string, PlayerTime>, playerId: string | null,
+    champId: string | null, champProjected: boolean,
+  ): ReadoutInfo | null => {
     if (!playerId) return null;
     const p: Player | undefined = snap.players[playerId];
     if (!p) return null;
     const t = time.get(playerId);
     const elo = surfaceElo(p, snap.tournament.surface);
-    const champ = buildSunburst(snap).occupant;
     const reached = t?.roundReached ?? 0;
-    const roundLabel = playerId === champ && snap.rounds.length
-      ? "title contender" : (snap.rounds[reached]?.name ?? "");
+    const isChamp = playerId === champId && snap.rounds.length > 0;
+    const roundLabel = isChamp
+      ? (champProjected ? "title contender" : "champion")
+      : (snap.rounds[reached]?.name ?? "");
     return {
       name: p.name, country: p.country, ranking: p.ranking, seed: p.seed,
       eloLabel: elo != null ? `${snap.tournament.surface} ELO ${Math.round(elo)}` : "",
       roundLabel, sec: t?.sec ?? 0, provisional: t?.provisional ?? false,
-      projected: false,
+      projected: isChamp && champProjected,
       age: ageOn(p.birthdate, snap.generatedAt),
       birthday: formatBirthday(p.birthdate),
       birthdayNear: birthdayInWindow(p.birthdate, snap.generatedAt),
@@ -78,7 +82,7 @@ export function createApp(root: HTMLElement): void {
     if (!ctx) return;
     const el = root.querySelector(".readout");
     if (!el) return;
-    const info = buildReadout(ctx.snap, ctx.time, playerId ?? ctx.defaultId);
+    const info = buildReadout(ctx.snap, ctx.time, playerId ?? ctx.defaultId, ctx.champId, ctx.champProjected);
     el.outerHTML = renderReadout(info);
   };
 
@@ -117,13 +121,13 @@ export function createApp(root: HTMLElement): void {
       : renderLeaderboard(timeLeaderboard(snap, time), color);
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     const defaultId = focusOcc ?? tree.occupant ?? null;
-    ctx = { snap, time, defaultId };
+    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected };
 
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
         `<div class="sunburst">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText })}` +
-          renderReadout(buildReadout(snap, time, defaultId)) + `</div>` +
+          renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected)) + `</div>` +
         panel +
       `</div>` +
       renderLegend(state.colorDim) +
@@ -190,8 +194,15 @@ export function createApp(root: HTMLElement): void {
     } else if (a === "theme") {
       state.theme = nextTheme(state.theme); applyTheme(state.theme); saveTheme(state.theme); draw();
     } else if (a === "inspect" && el.dataset.match) {
-      state.selectedMatchId = el.dataset.match;
-      state.selectedNodeId = id;
+      if (state.colorDim === "country") {
+        // on the Country lens, clicking an arc selects that player's nation (highlight)
+        const s = state.snapshots[snapKey(state.tour, state.year, state.slam)];
+        const c = s?.players[el.dataset.occupant ?? ""]?.country;
+        if (c) state.selectedCountry = state.selectedCountry === c ? undefined : c;
+      } else {
+        state.selectedMatchId = el.dataset.match;
+        state.selectedNodeId = id;
+      }
       draw();
     } else if (a === "focus" && el.dataset.id) {
       state.focusId = el.dataset.id;
