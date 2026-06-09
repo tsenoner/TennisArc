@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
+import { snapshotFilename } from "./model";
 
 describe("synthetic fixture", () => {
   it("builds a balanced single-elim draw of the requested size", () => {
@@ -18,6 +19,13 @@ describe("synthetic fixture", () => {
     for (const m of Object.values(s.matches)) {
       if (m.nextMatchId) expect(s.matches[m.nextMatchId]).toBeDefined();
     }
+  });
+});
+
+describe("snapshotFilename", () => {
+  it("encodes tour (lowercased), year and slam", () => {
+    expect(snapshotFilename("ATP", 2026, "roland-garros")).toBe("atp-2026-roland-garros.json");
+    expect(snapshotFilename("WTA", 2025, "wimbledon")).toBe("wta-2025-wimbledon.json");
   });
 });
 

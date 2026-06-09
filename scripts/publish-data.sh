@@ -2,6 +2,15 @@
 # Refresh tennis data from a residential IP and publish to the `data` branch.
 # GitHub-hosted runners are Cloudflare-blocked, so run this locally (or via launchd/cron).
 #
+# Data layout (public/data/, all copied to the orphan `data` branch each run):
+#   index.json                          — manifest of available slams (merged each ingest)
+#   {tour}-{year}-{slam}.json           — one snapshot per slam (e.g. atp-2026-roland-garros.json)
+#   {atp,wta}.json                      — alias of the *active* slam (legacy; current app fallback)
+# Only the active slam is rewritten each run; completed slams persist because their JSON is
+# committed to the repo seed (public/data/). To FREEZE a finished slam, commit its final
+# {tour}-{year}-{slam}.json + the updated index.json to main once the final is played.
+# Backfill past years with: BACKFILL_YEARS=2024,2025 pnpm ingest
+#
 # Approach: uses a throwaway git worktree to build the clean data-only branch, so the
 # main working tree is never touched by the branch-switching logic and cannot be corrupted.
 set -euo pipefail

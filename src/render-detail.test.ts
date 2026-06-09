@@ -1,48 +1,45 @@
 import { describe, it, expect } from "vitest";
-import { renderMatchDetail } from "./render";
-import type { Match, Player } from "./model";
+import { renderMatchInsight } from "./render";
+import type { MatchInsight } from "./state";
 
-const player = (id: string, name: string, seed: number | null): Player => ({
-  id, name, country: "ESP", seed, entry: null, ranking: 3, ageYears: 22, sofaSlug: id,
-});
-const match = (over: Partial<Match> = {}): Match => ({
-  id: "5-0", roundIndex: 5, slot: 0, nextMatchId: null, p1: "a", p2: "b",
-  status: "finished", winner: "p1",
-  score: [{ p1: 6, p2: 4 }, { p1: 7, p2: 6, tb: 5 }],
-  live: null, durationSec: 9660, durationProvisional: false,
-  sofaEventId: 1, sofaCustomId: "abc123",
-  stats: { aces: [12, 5], doubleFaults: [2, 4], firstServePct: [71, 60] }, ...over,
-});
+const rounds = [
+  { index: 0, name: "Round of 128", size: 128, matchIds: [] },
+  { index: 5, name: "Semifinal", size: 4, matchIds: [] },
+  { index: 6, name: "Final", size: 2, matchIds: [] },
+];
+const base: MatchInsight = {
+  matchId: "6-0", roundName: "Final", surface: "Clay", status: "finished", winner: "p1",
+  score: [{ p1: 4, p2: 6 }, { p1: 7, p2: 6, tb: 5 }, { p1: 6, p2: 3 }],
+  durationSec: 11760, durationProvisional: false,
+  p1: { id: "a", name: "Carlos Alcaraz", country: "ESP", seed: 2, ranking: 2, elo: 2106, roundReached: 7, sec: 22320, age: 22, birthday: "5 May", birthdayNear: true },
+  p2: { id: "b", name: "Jannik Sinner", country: "ITA", seed: 1, ranking: 1, elo: 2215, roundReached: 6, sec: 19000, age: 24, birthday: "16 Aug", birthdayNear: false },
+  badges: ["Upset", "From a set down", "1 tiebreak", "Marathon"], upset: true,
+  eloLine: "Clay-ELO favoured Jannik Sinner 65%",
+  aces: [9, 12], doubleFaults: [3, 2],
+};
 
-describe("renderMatchDetail", () => {
-  it("shows both players, score, duration, stats and a deep-link", () => {
-    const html = renderMatchDetail(
-      match(), player("a", "Carlos Alcaraz", 2), player("b", "Jannik Sinner", 1),
-      "https://www.sofascore.com/tennis/match/x/abc123", "Final",
-    );
+describe("renderMatchInsight", () => {
+  it("renders matchup, flags, score, badges, ELO line, stats and links", () => {
+    const html = renderMatchInsight(base, "https://www.sofascore.com/tennis/match/x/abc", "r", rounds);
     expect(html).toContain("Carlos Alcaraz");
     expect(html).toContain("Jannik Sinner");
+    expect(html).toContain("🇪🇸");
     expect(html).toContain("Final");
-    expect(html).toContain("6-4");
-    expect(html).toContain("2h41"); // 9660s
-    expect(html).toContain("12"); // aces
-    expect(html).toContain('href="https://www.sofascore.com/tennis/match/x/abc123"');
+    expect(html).toContain("7<sup>5</sup>-6"); // set-2 tiebreak on winner side
+    expect(html).toContain("Upset");
+    expect(html).toContain("Clay-ELO favoured");
+    expect(html).toContain("12"); // sinner aces
+    expect(html).toContain('href="https://www.sofascore.com/tennis/match/x/abc"');
+    expect(html).toContain('data-action="focus"');
     expect(html).toContain('data-action="close-detail"');
+    expect(html).toContain("22y");
   });
 
-  it("omits the link when there is no url and tolerates null players/stats", () => {
-    const html = renderMatchDetail(
-      match({ sofaCustomId: null, stats: null, p2: null }), player("a", "X", null), null, null, "Semifinal",
-    );
-    expect(html).not.toContain("Open in SofaScore");
+  it("tolerates a TBD side and a missing link", () => {
+    const ins = { ...base, winner: null, score: null, eloLine: "", badges: [], aces: null, doubleFaults: null,
+      p2: { ...base.p2, id: null, name: "TBD", elo: null } };
+    const html = renderMatchInsight(ins, null, "r", rounds);
     expect(html).toContain("TBD");
-  });
-
-  it("places the tiebreak superscript on the set winner's side", () => {
-    const p1 = player("a", "A", 1), p2 = player("b", "B", 2);
-    const won = renderMatchDetail(match({ score: [{ p1: 7, p2: 6, tb: 4 }] }), p1, p2, null, "F");
-    expect(won).toContain("7<sup>4</sup>-6");
-    const lost = renderMatchDetail(match({ score: [{ p1: 6, p2: 7, tb: 3 }], winner: "p2" }), p1, p2, null, "F");
-    expect(lost).toContain("6-7<sup>3</sup>");
+    expect(html).not.toContain("Open in SofaScore");
   });
 });

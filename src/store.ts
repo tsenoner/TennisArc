@@ -1,27 +1,35 @@
 import { get, set } from "idb-keyval";
-import type { Snapshot, Tour } from "./model";
+import type { SlamIndex, Snapshot, Tour } from "./model";
 
 export interface Store {
-  getSnapshot(tour: Tour): Promise<Snapshot | null>;
-  setSnapshot(tour: Tour, snap: Snapshot): Promise<void>;
+  getSnapshot(tour: Tour, year: number, slam: string): Promise<Snapshot | null>;
+  setSnapshot(tour: Tour, year: number, slam: string, snap: Snapshot): Promise<void>;
+  getIndex(): Promise<SlamIndex | null>;
+  setIndex(index: SlamIndex): Promise<void>;
 }
 
-const key = (tour: Tour) => `snapshot:${tour}`;
+const snapKey = (tour: Tour, year: number, slam: string) => `snapshot:${tour}:${year}:${slam}`;
+const INDEX_KEY = "slam-index";
 
-/** IndexedDB-backed snapshot cache (offline-first). */
+/** IndexedDB-backed cache (offline-first). */
 export function createIdbStore(): Store {
   return {
-    async getSnapshot(tour) { return (await get<Snapshot>(key(tour))) ?? null; },
-    async setSnapshot(tour, snap) { await set(key(tour), snap); },
+    async getSnapshot(tour, year, slam) { return (await get<Snapshot>(snapKey(tour, year, slam))) ?? null; },
+    async setSnapshot(tour, year, slam, snap) { await set(snapKey(tour, year, slam), snap); },
+    async getIndex() { return (await get<SlamIndex>(INDEX_KEY)) ?? null; },
+    async setIndex(index) { await set(INDEX_KEY, index); },
   };
 }
 
 /** In-memory fallback (private mode / tests). */
 export function createMemoryStore(): Store {
-  const m = new Map<Tour, Snapshot>();
+  const snaps = new Map<string, Snapshot>();
+  let index: SlamIndex | null = null;
   return {
-    async getSnapshot(tour) { return m.get(tour) ?? null; },
-    async setSnapshot(tour, snap) { m.set(tour, snap); },
+    async getSnapshot(tour, year, slam) { return snaps.get(snapKey(tour, year, slam)) ?? null; },
+    async setSnapshot(tour, year, slam, snap) { snaps.set(snapKey(tour, year, slam), snap); },
+    async getIndex() { return index; },
+    async setIndex(i) { index = i; },
   };
 }
 
@@ -29,7 +37,7 @@ export function createMemoryStore(): Store {
 export async function createStore(): Promise<Store> {
   try {
     const probe = createIdbStore();
-    await probe.getSnapshot("ATP"); // throws if IDB is blocked
+    await probe.getIndex(); // throws if IDB is blocked
     return probe;
   } catch {
     return createMemoryStore();

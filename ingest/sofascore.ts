@@ -1,4 +1,5 @@
 import { chromium, type Browser, type Page } from "playwright";
+import { pickSeasonId, type SofaSeason } from "./seasons";
 
 export interface RawTournament {
   cuptrees: unknown;
@@ -26,22 +27,9 @@ async function apiGet(page: Page, path: string): Promise<unknown> {
   }, `${SOFA}${path}`);
 }
 
-/**
- * Resolve the newest season id for a unique tournament (e.g. the current year's draw).
- * If `expectYear` is given, throws unless the newest season is that year — this prevents
- * publishing last year's draw when a Slam's new-season hasn't been created on SofaScore yet
- * (e.g. right after the date-based slam switch but before the new draw exists).
- */
-export async function resolveSeasonId(page: Page, utId: number, expectYear?: number): Promise<number> {
-  const j = (await apiGet(page, `/unique-tournament/${utId}/seasons`)) as {
-    seasons?: { id: number; year?: string }[];
-  };
-  const newest = j.seasons?.[0];
-  if (!newest?.id) throw new Error(`no seasons for unique-tournament ${utId}`);
-  if (expectYear != null && Number(newest.year) !== expectYear) {
-    throw new Error(`unique-tournament ${utId}: newest season is ${newest.year}, expected ${expectYear} (new draw not created yet?)`);
-  }
-  return newest.id;
+export async function resolveSeasonId(page: Page, utId: number, year?: number): Promise<number> {
+  const j = (await apiGet(page, `/unique-tournament/${utId}/seasons`)) as { seasons?: SofaSeason[] };
+  return pickSeasonId(j.seasons ?? [], year);
 }
 
 /** Fetch the full cuptrees + per-event detail/stats for a tournament season (caller owns the page/browser). */

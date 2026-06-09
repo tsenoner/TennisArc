@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
 import { buildSunburst, winnerId, timeOnCourt, timeLeaderboard } from "./state";
+import { surfaceElo, projectFavorite, winProbability } from "./state";
+import type { Player } from "./model";
+
+const mkPlayer = (o: Partial<Player>): Player => ({
+  id: "x", name: "X", country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, birthdate: null, ...o,
+});
 
 describe("buildSunburst", () => {
   it("roots at the champion and has the draw size as leaves", () => {
@@ -110,5 +116,156 @@ describe("timeLeaderboard", () => {
     expect(time.get(loser)!.sec).toBe(0);
     const rows = timeLeaderboard(s, time, 50);
     expect(rows.some((r) => r.playerId === loser)).toBe(false);
+  });
+});
+
+describe("surfaceElo", () => {
+  it("picks the slam surface, falling back to overall then null", () => {
+    const p = mkPlayer({ elo: { overall: 2000, hard: 2100, clay: 1900, grass: 1800 } });
+    expect(surfaceElo(p, "Clay")).toBe(1900);
+    expect(surfaceElo(p, "Grass")).toBe(1800);
+    expect(surfaceElo(p, "Hard")).toBe(2100);
+    expect(surfaceElo(mkPlayer({ elo: { overall: 2000, hard: null, clay: null, grass: null } }), "Clay")).toBe(2000);
+    expect(surfaceElo(mkPlayer({ elo: null }), "Clay")).toBeNull();
+  });
+});
+
+describe("projectFavorite", () => {
+  const players: Record<string, Player> = {
+    a: mkPlayer({ id: "a", seed: 5, ranking: 20, elo: { overall: 1900, hard: 1900, clay: 2200, grass: 1900 } }),
+    b: mkPlayer({ id: "b", seed: 1, ranking: 2, elo: { overall: 2100, hard: 2100, clay: 2000, grass: 2100 } }),
+    c: mkPlayer({ id: "c", seed: null, ranking: 50, elo: null }),
+    d: mkPlayer({ id: "d", seed: null, ranking: 80, elo: null }),
+  };
+  it("favours higher SURFACE elo (clay specialist beats higher overall seed)", () => {
+    expect(projectFavorite(players, "a", "b", "Clay")).toBe("a"); // a clay 2200 > b clay 2000
+    expect(projectFavorite(players, "a", "b", "Hard")).toBe("b"); // b hard 2100 > a hard 1900
+  });
+  it("falls back to ranking then seed when elo is missing", () => {
+    expect(projectFavorite(players, "c", "d", "Clay")).toBe("c"); // c rank 50 < d rank 80
+  });
+  it("handles null participants (TBD)", () => {
+    expect(projectFavorite(players, null, "b", "Clay")).toBe("b");
+    expect(projectFavorite(players, "a", null, "Clay")).toBe("a");
+    expect(projectFavorite(players, null, null, "Clay")).toBeNull();
+  });
+});
+
+describe("winProbability", () => {
+  it("is 0.5 for equal elo and rises with the gap", () => {
+    expect(winProbability(2000, 2000)).toBeCloseTo(0.5, 5);
+    expect(winProbability(2200, 2000)).toBeCloseTo(0.7597, 3);
+    expect(winProbability(2000, 2200)).toBeCloseTo(0.2403, 3);
+  });
+});
+
+import { labelAnchors, buildSunburst as buildSun2 } from "./state";
+
+describe("labelAnchors", () => {
+  it("labels the champion once at the root and never repeats a player", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
+    const root = buildSun2(s);
+    const anchors = labelAnchors(root);
+    expect(anchors.has(root.id)).toBe(true); // champion labelled at centre
+    // a player advancing into the next decided round is NOT anchored on the outer arc
+    const advancing = root.children.find((c) => c.occupant === root.occupant)!;
+    expect(anchors.has(advancing.id)).toBe(false);
+    // every decided occupant appears exactly once across the anchor set
+    const seen = new Map<string, number>();
+    const walk = (n: typeof root) => {
+      if (anchors.has(n.id) && n.occupant) seen.set(n.occupant, (seen.get(n.occupant) ?? 0) + 1);
+      n.children.forEach(walk);
+    };
+    walk(root);
+    for (const count of seen.values()) expect(count).toBe(1);
+  });
+
+  it("does not anchor projected (undecided) arcs", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 5, completedRounds: 0 });
+    const root = buildSun2(s);
+    expect(labelAnchors(root).has(root.id)).toBe(false); // champion is projected → no anchor
+  });
+});
+
+import { seedInsights } from "./state";
+
+describe("seedInsights", () => {
+  it("counts seeded players still in and flags ELO upsets", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
+    // give two players elo so an upset is detectable on the first match
+    const m = s.matches["0-0"];
+    const win = m.winner === "p1" ? m.p1! : m.p2!;
+    const lose = m.winner === "p1" ? m.p2! : m.p1!;
+    s.players[win] = { ...s.players[win], elo: { overall: 1800, hard: 1800, clay: 1800, grass: 1800 } };
+    s.players[lose] = { ...s.players[lose], elo: { overall: 2000, hard: 2000, clay: 2000, grass: 2000 }, seed: 1 };
+    const out = seedInsights(s);
+    expect(out.seedsTotal).toBeGreaterThan(0);
+    expect(out.seedsRemaining).toBeLessThanOrEqual(out.seedsTotal);
+    const up = out.upsets.find((u) => u.winnerId === win && u.loserId === lose);
+    expect(up).toBeTruthy();
+    expect(up!.eloGap).toBeCloseTo(200, 0);
+  });
+});
+
+import { countryBreakdown } from "./state";
+
+describe("countryBreakdown", () => {
+  it("groups players by country with entrants + still-in counts, ranked", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    // force two known countries
+    const ids = Object.keys(s.players);
+    ids.forEach((id, i) => { s.players[id] = { ...s.players[id], country: i < 5 ? "ESP" : "FRA" }; });
+    const rows = countryBreakdown(s);
+    const esp = rows.find((r) => r.country === "ESP")!;
+    expect(esp.entrants).toBe(5);
+    expect(esp.stillIn).toBeLessThanOrEqual(esp.entrants);
+    expect(esp.players.length).toBe(5);
+    // ranked by stillIn desc then entrants desc
+    for (let i = 1; i < rows.length; i++) {
+      const a = rows[i - 1], b = rows[i];
+      expect(a.stillIn > b.stillIn || (a.stillIn === b.stillIn && a.entrants >= b.entrants)).toBe(true);
+    }
+  });
+});
+
+import { ageOn, birthdayInWindow, formatBirthday } from "./state";
+
+describe("age + birthday helpers", () => {
+  it("ageOn computes integer age as of a date", () => {
+    expect(ageOn("1987-05-22", "2026-06-07")).toBe(39);
+    expect(ageOn("1987-05-22", "2026-05-21")).toBe(38); // before birthday that year
+    expect(ageOn(null, "2026-06-07")).toBeNull();
+  });
+  it("birthdayInWindow detects a birthday within N days before the reference", () => {
+    expect(birthdayInWindow("2000-05-28", "2026-06-07", 16)).toBe(true);  // 28 May within ~2wk before 7 Jun
+    expect(birthdayInWindow("2000-01-01", "2026-06-07", 16)).toBe(false);
+    expect(birthdayInWindow(null, "2026-06-07", 16)).toBe(false);
+  });
+  it("formatBirthday gives a short day-month label", () => {
+    expect(formatBirthday("1987-05-22")).toBe("22 May");
+    expect(formatBirthday(null)).toBe("");
+  });
+});
+
+import { matchInsight } from "./state";
+
+describe("matchInsight", () => {
+  it("derives upset + comeback + tiebreak badges and an ELO line", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 4, seed: 1 });
+    const m = s.matches["0-0"];
+    const win = m.winner === "p1" ? m.p1! : m.p2!;
+    const lose = m.winner === "p1" ? m.p2! : m.p1!;
+    s.players[win] = { ...s.players[win], elo: { overall: 1800, hard: 1800, clay: 1800, grass: 1800 } };
+    s.players[lose] = { ...s.players[lose], elo: { overall: 2000, hard: 2000, clay: 2000, grass: 2000 } };
+    // winner dropped the first set, then a tiebreak set
+    s.matches["0-0"] = { ...m, score: [{ p1: 4, p2: 6 }, { p1: 7, p2: 6, tb: 5 }, { p1: 6, p2: 3 }] };
+    if (m.winner === "p2") s.matches["0-0"].score = [{ p1: 6, p2: 4 }, { p1: 6, p2: 7, tb: 5 }, { p1: 3, p2: 6 }];
+    const ins = matchInsight(s, "0-0", timeOnCourt(s))!;
+    expect(ins.upset).toBe(true);
+    expect(ins.badges).toContain("Upset");
+    expect(ins.badges).toContain("From a set down");
+    expect(ins.badges.some((b) => /tiebreak/.test(b))).toBe(true);
+    expect(ins.eloLine).toMatch(/ELO favoured/);
+    expect(ins.p1.elo).not.toBeNull();
   });
 });

@@ -28,6 +28,6 @@ describe("normalizeCuptrees", () => {
     expect(s.rounds.map((r) => [r.index, r.name, r.size])).toEqual([[0, "Semifinal", 4], [1, "Final", 2]]);
     expect(s.tournament).toMatchObject({ slam: "roland-garros", drawSize: 4 });
     expect(s.tour).toBe("ATP");
-    expect(s.schemaVersion).toBe(1);
+    expect(s.schemaVersion).toBe(2);
   });
 });
