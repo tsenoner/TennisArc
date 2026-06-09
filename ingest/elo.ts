@@ -1,4 +1,9 @@
-import type { Player, PlayerElo } from "../src/model";
+import type { Player, PlayerElo, Tour } from "../src/model";
+
+const ELO_URL: Record<Tour, string> = {
+  ATP: "https://tennisabstract.com/reports/atp_elo_ratings.html",
+  WTA: "https://tennisabstract.com/reports/wta_elo_ratings.html",
+};
 
 /** Lowercase, strip accents and any non-letter, for matching names across data sources. */
 export function normalizeName(name: string): string {
@@ -69,4 +74,11 @@ export function applyElo(
     }
   }
   return { matched, unmatched };
+}
+
+/** Fetch + parse the current Tennis Abstract Elo table for a tour (plain HTTPS, no Cloudflare). */
+export async function fetchElo(tour: Tour): Promise<Map<string, EloEntry>> {
+  const res = await fetch(ELO_URL[tour], { headers: { "User-Agent": "Mozilla/5.0 TennisArc/1.0" } });
+  if (!res.ok) throw new Error(`elo HTTP ${res.status} for ${tour}`);
+  return parseEloTable(await res.text());
 }

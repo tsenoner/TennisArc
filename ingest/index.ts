@@ -5,6 +5,7 @@ import { DRAW_SIZE, SLAMS, activeSlam, type SlamConfig } from "./config";
 import { openContext, fetchTournament, resolveSeasonId } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
 import { enrichMatch } from "./enrich";
+import { fetchElo, applyElo } from "./elo";
 
 const OUT_DIR = resolve(process.cwd(), "public/data");
 
@@ -23,6 +24,13 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
       const e = raw.events.get(match.sofaEventId);
       if (!e?.detail) continue;
       snap.matches[match.id] = enrichMatch(match, e.detail as any, (e.stats as any) ?? null, snap.players, nowSec);
+    }
+    try {
+      const elo = await fetchElo(tour);
+      const { matched, unmatched } = applyElo(snap.players, elo);
+      console.log(`${cfg.slam} ${tour}: ELO matched ${matched}/${Object.keys(snap.players).length} (${unmatched.length} unmatched)`);
+    } catch (err) {
+      console.warn(`${cfg.slam} ${tour}: ELO enrichment skipped (keeping elo=null):`, err);
     }
     // Guard against an unreleased/partial draw (e.g. right after a slam switch, before the new
     // bracket is published): keep last-good rather than publishing a broken bracket.
