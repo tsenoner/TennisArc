@@ -6,7 +6,7 @@ import { openContext, fetchTournament, resolveSeasonId } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
 import { enrichMatch } from "./enrich";
 import { fetchElo, applyElo } from "./elo";
-import { availableSlamOf, mergeIndex } from "./manifest";
+import { availableSlamOf, mergeIndex, backfillTargets } from "./manifest";
 
 const OUT_DIR = resolve(process.cwd(), "public/data");
 
@@ -71,6 +71,23 @@ async function publishSlam(cfg: SlamConfig, isoNow: string, nowSec: number, writ
 }
 
 async function main(): Promise<void> {
+  const backfill = backfillTargets(process.env.BACKFILL_YEARS);
+  if (backfill.length) {
+    const isoNow = new Date().toISOString();
+    const nowSec = Math.floor(Date.now() / 1000);
+    await mkdir(OUT_DIR, { recursive: true });
+    let entries: AvailableSlam[] = [];
+    for (const { year, slam } of backfill) {
+      const cfg = { ...SLAMS[slam], year };
+      console.log(`backfill: ${slam} (${year})`);
+      entries = entries.concat(await publishSlam(cfg, isoNow, nowSec, false));
+    }
+    const idx = await loadIndex();
+    const merged: SlamIndex = { schemaVersion: 2, generatedAt: isoNow, slams: mergeIndex(idx.slams, entries) };
+    await writeFile(resolve(OUT_DIR, "index.json"), JSON.stringify(merged));
+    console.log(`backfill done — index.json: ${merged.slams.length} slams`);
+    return;
+  }
   const slamKey = activeSlam();
   if (!slamKey) {
     console.log("no Slam in progress — skipping refresh (between tournaments, data unchanged)");

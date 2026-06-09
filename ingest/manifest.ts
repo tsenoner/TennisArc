@@ -1,4 +1,5 @@
 import type { AvailableSlam, SlamStatus, Snapshot } from "../src/model";
+import { SLAMS } from "./config";
 
 /** live if any match is in play; complete once the final is decided; otherwise still live. */
 export function slamStatus(snap: Snapshot): SlamStatus {
@@ -33,4 +34,13 @@ export function mergeIndex(existing: AvailableSlam[], entries: AvailableSlam[]):
   return [...byKey.values()].sort(
     (a, b) => b.year - a.year || a.slam.localeCompare(b.slam) || a.tour.localeCompare(b.tour),
   );
+}
+
+/** Expand a "2024,2025" env string into {year, slam} targets across all four slams. */
+export function backfillTargets(yearsCsv: string | undefined): { year: number; slam: string }[] {
+  if (!yearsCsv) return [];
+  const years = yearsCsv.split(",").map((y) => Number(y.trim())).filter((y) => Number.isInteger(y));
+  const out: { year: number; slam: string }[] = [];
+  for (const year of years) for (const slam of Object.keys(SLAMS)) out.push({ year, slam });
+  return out;
 }

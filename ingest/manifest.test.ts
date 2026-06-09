@@ -62,3 +62,21 @@ describe("mergeIndex", () => {
     expect(merged.map((s) => s.year)).toEqual([2026, 2024]);
   });
 });
+
+import { backfillTargets } from "./manifest";
+
+describe("backfillTargets", () => {
+  it("returns empty for no input", () => {
+    expect(backfillTargets(undefined)).toEqual([]);
+    expect(backfillTargets("")).toEqual([]);
+  });
+  it("expands a comma list of years across all four slams", () => {
+    const t = backfillTargets("2024,2025");
+    expect(t).toHaveLength(8);
+    expect(t).toContainEqual({ year: 2024, slam: "roland-garros" });
+    expect(t).toContainEqual({ year: 2025, slam: "wimbledon" });
+  });
+  it("ignores non-numeric years", () => {
+    expect(backfillTargets("2024,foo")).toHaveLength(4);
+  });
+});
