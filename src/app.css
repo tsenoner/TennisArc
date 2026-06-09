@@ -86,3 +86,19 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .slam-switch .ctrl.slam { min-width: 30px; }
 .slam-switch .ctrl.slam[disabled] { opacity: .35; cursor: default; }
 .slam-switch .ctrl.slam.live::after { content: "●"; color: var(--teal); font-size: 8px; vertical-align: super; margin-left: 1px; }
+
+/* write-once arc labels */
+.arc-label { fill: #f4f8fc; font-weight: 700; paint-order: stroke; stroke: rgba(4, 10, 16, .72); stroke-width: 2.4px; pointer-events: none; }
+:root[data-theme="light"] .arc-label { fill: #0c1218; stroke: rgba(255, 255, 255, .8); }
+
+/* faded + dashed projections (extends existing .arc.projected opacity) */
+.arc.projected { stroke: var(--dim); stroke-width: .8px; stroke-dasharray: 3 2; }
+
+/* centre readout overlay */
+.sunburst { position: relative; }
+.readout { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 150px; text-align: center; pointer-events: none; }
+.readout .ro-ctry { font-size: 11px; letter-spacing: .08em; color: var(--dim); }
+.readout .ro-name { font-weight: 700; font-size: 15px; margin-top: 1px; }
+.readout .ro-meta { font-size: 11px; color: var(--dim); margin-top: 2px; line-height: 1.4; }
+.readout .ro-elo { font-size: 11px; color: var(--teal); margin-top: 2px; }
+.readout.projected .ro-name { font-style: italic; }
