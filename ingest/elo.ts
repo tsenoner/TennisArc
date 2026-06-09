@@ -1,4 +1,4 @@
-import type { PlayerElo } from "../src/model";
+import type { Player, PlayerElo } from "../src/model";
 
 /** Lowercase, strip accents and any non-letter, for matching names across data sources. */
 export function normalizeName(name: string): string {
@@ -42,4 +42,31 @@ export function parseEloTable(html: string): Map<string, EloEntry> {
     });
   }
   return out;
+}
+
+/**
+ * Mutate `players`: attach ELO and back-fill age from `elo` by normalized name.
+ * `aliases` maps a normalized player name → the normalized ELO-table key for known mismatches.
+ * Unmatched players get `elo: null`. Returns match stats for logging/curation.
+ */
+export function applyElo(
+  players: Record<string, Player>,
+  elo: Map<string, EloEntry>,
+  aliases: Record<string, string> = {},
+): { matched: number; unmatched: string[] } {
+  let matched = 0;
+  const unmatched: string[] = [];
+  for (const p of Object.values(players)) {
+    const norm = normalizeName(p.name);
+    const entry = elo.get(aliases[norm] ?? norm);
+    if (entry) {
+      p.elo = entry.elo;
+      if (p.ageYears == null && entry.ageYears != null) p.ageYears = entry.ageYears;
+      matched++;
+    } else {
+      p.elo = null;
+      unmatched.push(p.name);
+    }
+  }
+  return { matched, unmatched };
 }

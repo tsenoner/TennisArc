@@ -31,3 +31,31 @@ describe("parseEloTable", () => {
     expect(f?.elo).toEqual({ overall: 1854.0, hard: 1800.0, clay: null, grass: null });
   });
 });
+
+import { applyElo } from "./elo";
+import type { Player } from "../src/model";
+
+function player(name: string): Player {
+  return { id: name, name, country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null };
+}
+
+describe("applyElo", () => {
+  const elo = new Map([
+    ["janniksinner", { name: "Jannik Sinner", ageYears: 24.7, elo: { overall: 2319.8, hard: 2263.2, clay: 2215.7, grass: 2088.3 } }],
+  ]);
+
+  it("sets elo + back-fills age on matched players, leaves unmatched null", () => {
+    const players: Record<string, Player> = { a: player("Jannik Sinner"), b: player("Nobody Here") };
+    const res = applyElo(players, elo);
+    expect(players.a.elo).toEqual({ overall: 2319.8, hard: 2263.2, clay: 2215.7, grass: 2088.3 });
+    expect(players.a.ageYears).toBe(24.7);
+    expect(players.b.elo).toBeNull();
+    expect(res).toEqual({ matched: 1, unmatched: ["Nobody Here"] });
+  });
+
+  it("honours an alias map for known name mismatches", () => {
+    const players: Record<string, Player> = { a: player("J. Sinner") };
+    applyElo(players, elo, { jsinner: "janniksinner" });
+    expect(players.a.elo?.overall).toBe(2319.8);
+  });
+});
