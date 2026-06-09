@@ -5,7 +5,7 @@ import { surfaceElo, projectFavorite, winProbability } from "./state";
 import type { Player } from "./model";
 
 const mkPlayer = (o: Partial<Player>): Player => ({
-  id: "x", name: "X", country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, ...o,
+  id: "x", name: "X", country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, birthdate: null, ...o,
 });
 
 describe("buildSunburst", () => {

@@ -30,6 +30,7 @@ export interface Player {
   ageYears: number | null;
   sofaSlug: string | null;
   elo: PlayerElo | null;
+  birthdate: string | null;   // ISO "YYYY-MM-DD" (from Jeff Sackmann player files)
 }
 
 export interface Match {

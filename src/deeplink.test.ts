@@ -3,7 +3,7 @@ import { slugify, sofascoreMatchUrl } from "./deeplink";
 import type { Match, Player } from "./model";
 
 const player = (id: string, name: string): Player => ({
-  id, name, country: "ITA", seed: 1, entry: null, ranking: 1, ageYears: 24, sofaSlug: id, elo: null,
+  id, name, country: "ITA", seed: 1, entry: null, ranking: 1, ageYears: 24, sofaSlug: id, elo: null, birthdate: null,
 });
 const baseMatch = (over: Partial<Match> = {}): Match => ({
   id: "1-0", roundIndex: 1, slot: 0, nextMatchId: null, p1: "a", p2: "b",

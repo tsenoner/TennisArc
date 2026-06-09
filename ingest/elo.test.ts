@@ -36,7 +36,7 @@ import { applyElo } from "./elo";
 import type { Player } from "../src/model";
 
 function player(name: string): Player {
-  return { id: name, name, country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null };
+  return { id: name, name, country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, birthdate: null };
 }
 
 describe("applyElo", () => {

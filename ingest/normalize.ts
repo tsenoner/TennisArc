@@ -53,7 +53,7 @@ export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snap
           players[pid] = {
             id: pid, name: p.team.name, country: "", seed, entry,
             ranking: p.team.ranking ?? null, ageYears: null, sofaSlug: p.team.slug ?? null,
-            elo: null,
+            elo: null, birthdate: null,
           };
         }
       }
