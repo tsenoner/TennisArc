@@ -3,7 +3,7 @@ import { renderMatchDetail } from "./render";
 import type { Match, Player } from "./model";
 
 const player = (id: string, name: string, seed: number | null): Player => ({
-  id, name, country: "ESP", seed, entry: null, ranking: 3, ageYears: 22, sofaSlug: id,
+  id, name, country: "ESP", seed, entry: null, ranking: 3, ageYears: 22, sofaSlug: id, elo: null,
 });
 const match = (over: Partial<Match> = {}): Match => ({
   id: "5-0", roundIndex: 5, slot: 0, nextMatchId: null, p1: "a", p2: "b",

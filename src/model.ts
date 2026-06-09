@@ -13,6 +13,13 @@ export interface MatchStats {
   breakPointsConverted?: [string, string];
 }
 
+export interface PlayerElo {
+  overall: number | null;
+  hard: number | null;
+  clay: number | null;
+  grass: number | null;
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -22,6 +29,7 @@ export interface Player {
   ranking: number | null;
   ageYears: number | null;
   sofaSlug: string | null;
+  elo: PlayerElo | null;
 }
 
 export interface Match {
@@ -60,4 +68,28 @@ export interface Snapshot {
   players: Record<string, Player>;
   matches: Record<string, Match>;
   rounds: Round[];
+}
+
+export type SlamStatus = "upcoming" | "live" | "complete";
+
+export interface AvailableSlam {
+  tour: Tour;
+  year: number;
+  slam: string;
+  name: string;
+  surface: string;
+  status: SlamStatus;
+  generatedAt: string;
+  drawSize: number;
+}
+
+export interface SlamIndex {
+  schemaVersion: number;
+  generatedAt: string;
+  slams: AvailableSlam[];
+}
+
+/** Canonical per-slam snapshot filename, shared by ingest (writer) and app (reader). */
+export function snapshotFilename(tour: Tour, year: number, slam: string): string {
+  return `${tour.toLowerCase()}-${year}-${slam}.json`;
 }

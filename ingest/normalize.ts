@@ -53,6 +53,7 @@ export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snap
           players[pid] = {
             id: pid, name: p.team.name, country: "", seed, entry,
             ranking: p.team.ranking ?? null, ageYears: null, sofaSlug: p.team.slug ?? null,
+            elo: null,
           };
         }
       }
@@ -75,7 +76,7 @@ export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snap
   });
 
   return {
-    schemaVersion: 1, generatedAt: "", tour: meta.tour,
+    schemaVersion: 2, generatedAt: "", tour: meta.tour,
     tournament: {
       slam: meta.slam, name: meta.name, year: meta.year, surface: meta.surface,
       sofaUniqueTournamentId: meta.sofaUniqueTournamentId, sofaSeasonId: meta.sofaSeasonId, drawSize: meta.drawSize,
