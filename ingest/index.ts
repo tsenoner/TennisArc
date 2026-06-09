@@ -6,6 +6,7 @@ import { openContext, fetchTournament, resolveSeasonId } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
 import { enrichMatch } from "./enrich";
 import { fetchElo, applyElo } from "./elo";
+import { fetchPlayers, applyBirthdates } from "./players";
 import { availableSlamOf, mergeIndex, backfillTargets } from "./manifest";
 
 const OUT_DIR = resolve(process.cwd(), "public/data");
@@ -32,6 +33,13 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
       console.log(`${cfg.slam} ${tour}: ELO matched ${matched}/${Object.keys(snap.players).length} (${unmatched.length} unmatched)`);
     } catch (err) {
       console.warn(`${cfg.slam} ${tour}: ELO enrichment skipped (keeping elo=null):`, err);
+    }
+    try {
+      const dob = await fetchPlayers(tour);
+      const { matched, unmatched } = applyBirthdates(snap.players, dob);
+      console.log(`${cfg.slam} ${tour}: birthdates matched ${matched} (${unmatched} unmatched)`);
+    } catch (err) {
+      console.warn(`${cfg.slam} ${tour}: birthdate enrichment skipped:`, err);
     }
     const matchCount = Object.keys(snap.matches).length;
     if (matchCount < DRAW_SIZE - 1) {
