@@ -186,3 +186,23 @@ describe("labelAnchors", () => {
     expect(labelAnchors(root).has(root.id)).toBe(false); // champion is projected → no anchor
   });
 });
+
+import { seedInsights } from "./state";
+
+describe("seedInsights", () => {
+  it("counts seeded players still in and flags ELO upsets", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
+    // give two players elo so an upset is detectable on the first match
+    const m = s.matches["0-0"];
+    const win = m.winner === "p1" ? m.p1! : m.p2!;
+    const lose = m.winner === "p1" ? m.p2! : m.p1!;
+    s.players[win] = { ...s.players[win], elo: { overall: 1800, hard: 1800, clay: 1800, grass: 1800 } };
+    s.players[lose] = { ...s.players[lose], elo: { overall: 2000, hard: 2000, clay: 2000, grass: 2000 }, seed: 1 };
+    const out = seedInsights(s);
+    expect(out.seedsTotal).toBeGreaterThan(0);
+    expect(out.seedsRemaining).toBeLessThanOrEqual(out.seedsTotal);
+    const up = out.upsets.find((u) => u.winnerId === win && u.loserId === lose);
+    expect(up).toBeTruthy();
+    expect(up!.eloGap).toBeCloseTo(200, 0);
+  });
+});

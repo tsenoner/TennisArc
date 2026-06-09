@@ -161,6 +161,52 @@ export interface LeaderRow {
   roundReached: number;
 }
 
+/** Players who lost a decided (finished/retired/walkover) match. */
+export function eliminatedSet(s: Snapshot): Set<string> {
+  const out = new Set<string>();
+  for (const m of Object.values(s.matches)) {
+    if (m.winner == null) continue;
+    const loser = m.winner === "p1" ? m.p2 : m.p1;
+    if (loser) out.add(loser);
+  }
+  return out;
+}
+
+export interface Upset {
+  winnerId: string; winnerName: string; loserId: string; loserName: string;
+  loserSeed: number | null; roundName: string; eloGap: number; // loser elo − winner elo (>0)
+}
+
+export interface SeedInsights { seedsTotal: number; seedsRemaining: number; upsets: Upset[]; }
+
+/** Seeds still alive + biggest upsets (winner was the surface-ELO underdog), strongest first. */
+export function seedInsights(s: Snapshot, limit = 8): SeedInsights {
+  const out = eliminatedSet(s);
+  const seeded = Object.values(s.players).filter((p) => p.seed != null);
+  const surface = s.tournament.surface;
+  const upsets: Upset[] = [];
+  for (const m of Object.values(s.matches)) {
+    if (m.winner == null) continue;
+    const winId = m.winner === "p1" ? m.p1 : m.p2;
+    const loseId = m.winner === "p1" ? m.p2 : m.p1;
+    if (!winId || !loseId) continue;
+    const w = s.players[winId], l = s.players[loseId];
+    if (!w || !l) continue;
+    const ew = surfaceElo(w, surface), el = surfaceElo(l, surface);
+    if (ew == null || el == null || el <= ew) continue; // upset only when winner was the ELO underdog
+    upsets.push({
+      winnerId: winId, winnerName: w.name, loserId: loseId, loserName: l.name,
+      loserSeed: l.seed, roundName: s.rounds[m.roundIndex]?.name ?? "", eloGap: el - ew,
+    });
+  }
+  upsets.sort((a, b) => b.eloGap - a.eloGap);
+  return {
+    seedsTotal: seeded.length,
+    seedsRemaining: seeded.filter((p) => !out.has(p.id)).length,
+    upsets: upsets.slice(0, limit),
+  };
+}
+
 /** Players ranked by cumulative time on court (descending), zero-time excluded. */
 export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limit = 10): LeaderRow[] {
   return [...time.entries()]
