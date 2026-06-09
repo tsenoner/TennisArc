@@ -228,6 +228,25 @@ describe("countryBreakdown", () => {
   });
 });
 
+import { ageOn, birthdayInWindow, formatBirthday } from "./state";
+
+describe("age + birthday helpers", () => {
+  it("ageOn computes integer age as of a date", () => {
+    expect(ageOn("1987-05-22", "2026-06-07")).toBe(39);
+    expect(ageOn("1987-05-22", "2026-05-21")).toBe(38); // before birthday that year
+    expect(ageOn(null, "2026-06-07")).toBeNull();
+  });
+  it("birthdayInWindow detects a birthday within N days before the reference", () => {
+    expect(birthdayInWindow("2000-05-28", "2026-06-07", 16)).toBe(true);  // 28 May within ~2wk before 7 Jun
+    expect(birthdayInWindow("2000-01-01", "2026-06-07", 16)).toBe(false);
+    expect(birthdayInWindow(null, "2026-06-07", 16)).toBe(false);
+  });
+  it("formatBirthday gives a short day-month label", () => {
+    expect(formatBirthday("1987-05-22")).toBe("22 May");
+    expect(formatBirthday(null)).toBe("");
+  });
+});
+
 import { matchInsight } from "./state";
 
 describe("matchInsight", () => {

@@ -1,5 +1,36 @@
 import type { Match, MatchStatus, Player, SetScore, Snapshot } from "./model";
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Integer age of a player (ISO birthdate) as of an ISO date. */
+export function ageOn(birthdate: string | null, onISO: string): number | null {
+  if (!birthdate) return null;
+  const b = new Date(birthdate + "T00:00:00Z"), on = new Date(onISO);
+  if (Number.isNaN(b.getTime()) || Number.isNaN(on.getTime())) return null;
+  let age = on.getUTCFullYear() - b.getUTCFullYear();
+  const m = on.getUTCMonth() - b.getUTCMonth();
+  if (m < 0 || (m === 0 && on.getUTCDate() < b.getUTCDate())) age--;
+  return age;
+}
+
+/** True if the player's birthday falls within `days` before (or on) the reference date — i.e. during the slam. */
+export function birthdayInWindow(birthdate: string | null, refISO: string, days = 16): boolean {
+  if (!birthdate) return false;
+  const b = new Date(birthdate + "T00:00:00Z"), ref = new Date(refISO);
+  if (Number.isNaN(b.getTime()) || Number.isNaN(ref.getTime())) return false;
+  const bday = Date.UTC(ref.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate());
+  const diffDays = (ref.getTime() - bday) / 86400000;
+  return diffDays >= 0 && diffDays <= days;
+}
+
+/** Short "22 May" label from an ISO birthdate. */
+export function formatBirthday(birthdate: string | null): string {
+  if (!birthdate) return "";
+  const b = new Date(birthdate + "T00:00:00Z");
+  if (Number.isNaN(b.getTime())) return "";
+  return `${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]}`;
+}
+
 export interface SunNode {
   id: string;                 // unique path id, e.g. "r", "r.0", "r.0.1" (for focus/zoom)
   matchId: string;            // the match this node represents (leaf → its round-0 match)
