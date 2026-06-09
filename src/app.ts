@@ -94,6 +94,7 @@ export function createApp(root: HTMLElement): void {
     const color = colorScale(state.colorDim, snap, time);
     const lb = timeLeaderboard(snap, time);
     const anchors = labelAnchors(tree);
+    anchors.delete(tree.id); // champion is named by the centre readout — skip its cramped on-arc label
     const labelText = (occ: string) => surname(snap.players[occ]?.name ?? occ);
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     const defaultId = focusOcc ?? tree.occupant ?? null;
