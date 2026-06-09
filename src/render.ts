@@ -5,7 +5,8 @@ import { COLOR_DIMS, type ColorDim } from "./color";
 import type { Match, MatchStats, Player, Tour } from "./model";
 import type { SlamIndex } from "./model";
 import type { Theme } from "./theme";
-import type { LeaderRow } from "./state";
+import { flagEmoji } from "./flags";
+import type { LeaderRow, SeedInsights, NationRow } from "./state";
 import { availableYears, slamsForYear } from "./slams";
 
 const PAD_ANGLE = 0.004;   // radians of gap between adjacent arcs
@@ -143,7 +144,7 @@ export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
       return (
         `<li class="lb-row">` +
         `<span class="lb-rank">${i + 1}</span>` +
-        `<span class="lb-name">${escapeHtml(r.name)} <span class="lb-ctry">${escapeHtml(r.country)}</span></span>` +
+        `<span class="lb-name">${escapeHtml(r.name)} <span class="lb-ctry">${flagEmoji(r.country)} ${escapeHtml(r.country)}</span></span>` +
         `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%;background:${color(r.playerId)}"></span></span>` +
         `<span class="lb-time">${formatDuration(r.sec)}${r.provisional ? "*" : ""}</span>` +
         `</li>`
@@ -175,7 +176,7 @@ export function renderReadout(info: ReadoutInfo | null): string {
   const meta2 = [info.roundLabel, time].filter(Boolean).join(" · ");
   return (
     `<div class="readout${info.projected ? " projected" : ""}">` +
-    `<div class="ro-ctry">${escapeHtml(info.country)}</div>` +
+    `<div class="ro-ctry">${flagEmoji(info.country)} ${escapeHtml(info.country)}</div>` +
     `<div class="ro-name">${escapeHtml(info.name)}</div>` +
     (meta1 ? `<div class="ro-meta">${escapeHtml(meta1)}</div>` : "") +
     (info.eloLabel ? `<div class="ro-elo">${escapeHtml(info.eloLabel)}</div>` : "") +
@@ -246,4 +247,44 @@ export function renderMatchDetail(
     dur + renderStats(m.stats) + link +
     `</div>`
   );
+}
+
+export function renderSeedPanel(ins: SeedInsights): string {
+  const pct = ins.seedsTotal ? Math.round((ins.seedsRemaining / ins.seedsTotal) * 100) : 0;
+  const rows = ins.upsets
+    .map((u) =>
+      `<li class="up-row">` +
+      `<span class="up-bolt">⚡</span>` +
+      `<span class="up-m"><b>${escapeHtml(u.winnerName)}</b> <small>d. ${u.loserSeed != null ? `[${u.loserSeed}] ` : ""}${escapeHtml(u.loserName)}</small></span>` +
+      `<span class="up-rd">${escapeHtml(u.roundName)}</span>` +
+      `</li>`)
+    .join("");
+  return (
+    `<aside class="panel seed-panel">` +
+    `<div class="seeds-in"><div class="seeds-top"><span>Seeds still in</span><b>${ins.seedsRemaining} / ${ins.seedsTotal}</b></div>` +
+    `<div class="seeds-track"><span style="width:${pct}%"></span></div></div>` +
+    (rows ? `<div class="panel-sub">Biggest upsets</div><ol class="up-list">${rows}</ol>` : `<div class="panel-empty">No upsets yet</div>`) +
+    `</aside>`
+  );
+}
+
+export function renderCountryPanel(rows: NationRow[], selected?: string): string {
+  const items = rows
+    .map((r) => {
+      const on = selected === r.country;
+      const head =
+        `<li class="ct-row${on ? " on" : ""}" data-action="country" data-country="${escapeHtml(r.country)}">` +
+        `<span class="ct-flag">${flagEmoji(r.country)}</span>` +
+        `<span class="ct-name">${escapeHtml(r.country)}</span>` +
+        `<span class="ct-cnt"><b>${r.stillIn}</b>/${r.entrants}</span></li>`;
+      if (!on) return head;
+      const expand = r.players
+        .map((p) =>
+          `<div class="ct-pl"><b>${escapeHtml(p.name)}</b>` +
+          `<span class="ct-rd${p.alive ? " alive" : ""}">${p.alive ? "in · " : ""}R${p.roundReached}</span></div>`)
+        .join("");
+      return head + `<li class="ct-expand">${expand}</li>`;
+    })
+    .join("");
+  return `<aside class="panel country-panel"><div class="panel-sub">Nations — still in</div><ol class="ct-list">${items}</ol></aside>`;
 }

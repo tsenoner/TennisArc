@@ -96,3 +96,32 @@ describe("renderReadout", () => {
     expect(renderReadout(null)).toContain('class="readout"');
   });
 });
+
+import { renderSeedPanel, renderCountryPanel } from "./render";
+import type { SeedInsights, NationRow } from "./state";
+
+describe("renderSeedPanel", () => {
+  const ins: SeedInsights = {
+    seedsTotal: 32, seedsRemaining: 11,
+    upsets: [{ winnerId: "a", winnerName: "Bublik", loserId: "b", loserName: "Medvedev", loserSeed: 6, roundName: "Round of 16", eloGap: 120 }],
+  };
+  it("shows seeds-in count and upset rows", () => {
+    const html = renderSeedPanel(ins);
+    expect(html).toContain("11");
+    expect(html).toContain("Bublik");
+    expect(html).toContain("Medvedev");
+  });
+});
+
+describe("renderCountryPanel", () => {
+  const rows: NationRow[] = [
+    { country: "ITA", entrants: 4, stillIn: 1, players: [{ id: "x", name: "Sinner", roundReached: 5, alive: true }] },
+  ];
+  it("renders a nation row with flag, counts and select action; expands the selected one", () => {
+    const html = renderCountryPanel(rows, "ITA");
+    expect(html).toContain("🇮🇹");
+    expect(html).toContain('data-action="country"');
+    expect(html).toContain('data-country="ITA"');
+    expect(html).toContain("Sinner"); // expanded because ITA is selected
+  });
+});
