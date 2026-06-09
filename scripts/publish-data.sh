@@ -32,41 +32,32 @@ cp "$REPO_ROOT"/public/data/*.json "$STAGING/"
 git config --get user.name  >/dev/null 2>&1 || git config user.name  "tennisarc-bot"
 git config --get user.email >/dev/null 2>&1 || git config user.email "bot@users.noreply.github.com"
 
-# 5. Create or reset a local data-pub ref we can check out into the worktree.
-#    We try to base it on origin/data so the push is incremental; if that doesn't
-#    exist yet we start an orphan commit instead.
-if git fetch "$REMOTE" data 2>/dev/null; then
-  git branch -f data-pub FETCH_HEAD
-else
-  # No remote data branch yet — create an empty orphan ref via a temp worktree trick:
-  # write a stub commit that we'll immediately overwrite below.
-  git worktree add --orphan -b data-pub "$WORKTREE_DIR"
-  (
-    cd "$WORKTREE_DIR"
-    git commit --allow-empty -m "init data branch" >/dev/null
-  )
-  git worktree remove --force "$WORKTREE_DIR"
-fi
+# 5. Build the data branch as a SINGLE orphan commit (no parent) so it never
+#    accumulates stale JSON snapshots: `git log data` stays one commit deep and the
+#    force-push below replaces the published tip outright. The branch is just a file
+#    server for Vercel — nothing reads its history, so there's nothing to preserve.
+git branch -D data-pub >/dev/null 2>&1 || true
+git worktree add --orphan -b data-pub "$WORKTREE_DIR" >/dev/null
 
-# 6. Check out data-pub into the throwaway worktree.
-git worktree add "$WORKTREE_DIR" data-pub
-
-# 7. Wipe whatever was there and drop in the fresh JSON (files at root, no subdirs).
+# 6. Drop in the fresh JSON (files at root, no subdirs) and commit.
 (
   cd "$WORKTREE_DIR"
-  git rm -rf . >/dev/null 2>&1 || true
   cp "$STAGING"/*.json .
   # Tell Vercel never to build the data branch (it has no app) — prevents failing preview deploys.
   printf '%s\n' '{"git":{"deploymentEnabled":false}}' > vercel.json
   git add -A
-  if git diff --cached --quiet; then
-    echo "no changes vs last data branch commit; nothing to publish"
-    exit 0
-  fi
   git commit -q -m "data: refresh $(date -u +%FT%TZ)"
-  git push -f "$REMOTE" data-pub:data
-  echo "published data branch"
 )
+
+# 7. Skip the push when the new tree is byte-identical to what's already published
+#    (a tree SHA ignores commit date/message), else force-push the single commit.
+if git fetch "$REMOTE" data 2>/dev/null && \
+   [ "$(git -C "$WORKTREE_DIR" rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'FETCH_HEAD^{tree}')" ]; then
+  echo "data unchanged vs published branch; nothing to publish"
+  exit 0
+fi
+git -C "$WORKTREE_DIR" push -f "$REMOTE" data-pub:data
+echo "published data branch (single orphan commit)"
 
 # Keep the main working tree clean: the fresh ingest in public/data was only needed to
 # build the data branch (which now carries it), so restore the committed seed.
