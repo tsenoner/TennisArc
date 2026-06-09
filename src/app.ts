@@ -1,9 +1,11 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, type PlayerTime } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedInsights, countryBreakdown, type PlayerTime } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
-  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderMatchDetail, renderReadout, type ReadoutInfo,
+  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderMatchDetail, renderReadout,
+  renderSeedPanel, renderCountryPanel, type ReadoutInfo,
 } from "./render";
+import { flagEmoji } from "./flags";
 import { sofascoreMatchUrl } from "./deeplink";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { createStore, type Store } from "./store";
@@ -23,6 +25,7 @@ interface AppState {
   colorDim: ColorDim;
   focusId: string | undefined;
   selectedMatchId: string | undefined;
+  selectedCountry: string | undefined;
   theme: Theme;
 }
 
@@ -40,7 +43,7 @@ export function createApp(root: HTMLElement): void {
   applyTheme(theme);
   const state: AppState = {
     tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
-    colorDim: "time", focusId: undefined, selectedMatchId: undefined, theme,
+    colorDim: "time", focusId: undefined, selectedMatchId: undefined, selectedCountry: undefined, theme,
   };
   let store: Store | undefined;
 
@@ -91,11 +94,17 @@ export function createApp(root: HTMLElement): void {
     const time = timeOnCourt(snap);
     const tree = buildSunburst(snap);
     const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
-    const color = colorScale(state.colorDim, snap, time);
-    const lb = timeLeaderboard(snap, time);
+    const color = colorScale(state.colorDim, snap, time, state.selectedCountry);
     const anchors = labelAnchors(tree);
     anchors.delete(tree.id); // champion is named by the centre readout — skip its cramped on-arc label
-    const labelText = (occ: string) => surname(snap.players[occ]?.name ?? occ);
+    const labelText = (occ: string) =>
+      state.colorDim === "country"
+        ? flagEmoji(snap.players[occ]?.country ?? "")
+        : surname(snap.players[occ]?.name ?? occ);
+    const panel =
+      state.colorDim === "seed" ? renderSeedPanel(seedInsights(snap))
+      : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry)
+      : renderLeaderboard(timeLeaderboard(snap, time), color);
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     const defaultId = focusOcc ?? tree.occupant ?? null;
     ctx = { snap, time, defaultId };
@@ -114,7 +123,7 @@ export function createApp(root: HTMLElement): void {
       `<div class="stage">` +
         `<div class="sunburst">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText })}` +
           renderReadout(buildReadout(snap, time, defaultId)) + `</div>` +
-        renderLeaderboard(lb, color) +
+        panel +
       `</div>` +
       renderLegend(state.colorDim) +
       `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}</div>` +
@@ -145,7 +154,7 @@ export function createApp(root: HTMLElement): void {
       if (def) { state.year = def.year; state.slam = def.slam; }
     }
     state.tour = tour;
-    state.focusId = undefined; state.selectedMatchId = undefined;
+    state.focusId = undefined; state.selectedMatchId = undefined; state.selectedCountry = undefined;
     draw(); void load(state.tour, state.year, state.slam);
   };
 
@@ -158,7 +167,7 @@ export function createApp(root: HTMLElement): void {
       selectForTour(el.dataset.tour as Tour);
     } else if (a === "slam" && el.dataset.slam) {
       state.slam = el.dataset.slam;
-      state.focusId = undefined; state.selectedMatchId = undefined;
+      state.focusId = undefined; state.selectedMatchId = undefined; state.selectedCountry = undefined;
       draw(); void load(state.tour, state.year, state.slam);
     } else if (a === "year" && el.dataset.year) {
       const y = Number(el.dataset.year);
@@ -167,11 +176,16 @@ export function createApp(root: HTMLElement): void {
         const keep = slots.find((s) => s.entry && s.slam === state.slam);
         state.year = y;
         state.slam = (keep ?? slots.find((s) => s.entry))?.slam ?? state.slam;
-        state.focusId = undefined; state.selectedMatchId = undefined;
+        state.focusId = undefined; state.selectedMatchId = undefined; state.selectedCountry = undefined;
         draw(); void load(state.tour, state.year, state.slam);
       }
     } else if (a === "colordim" && el.dataset.dim) {
-      state.colorDim = el.dataset.dim as ColorDim; draw();
+      state.colorDim = el.dataset.dim as ColorDim;
+      if (state.colorDim !== "country") state.selectedCountry = undefined;
+      draw();
+    } else if (a === "country" && el.dataset.country) {
+      state.selectedCountry = state.selectedCountry === el.dataset.country ? undefined : el.dataset.country;
+      draw();
     } else if (a === "theme") {
       state.theme = nextTheme(state.theme); applyTheme(state.theme); saveTheme(state.theme); draw();
     } else if (a === "close-detail") {
