@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
 import { buildSunburst, winnerId, timeOnCourt, timeLeaderboard } from "./state";
+import { surfaceElo, projectFavorite, winProbability } from "./state";
+import type { Player } from "./model";
+
+const mkPlayer = (o: Partial<Player>): Player => ({
+  id: "x", name: "X", country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, ...o,
+});
 
 describe("buildSunburst", () => {
   it("roots at the champion and has the draw size as leaves", () => {
@@ -110,5 +116,45 @@ describe("timeLeaderboard", () => {
     expect(time.get(loser)!.sec).toBe(0);
     const rows = timeLeaderboard(s, time, 50);
     expect(rows.some((r) => r.playerId === loser)).toBe(false);
+  });
+});
+
+describe("surfaceElo", () => {
+  it("picks the slam surface, falling back to overall then null", () => {
+    const p = mkPlayer({ elo: { overall: 2000, hard: 2100, clay: 1900, grass: 1800 } });
+    expect(surfaceElo(p, "Clay")).toBe(1900);
+    expect(surfaceElo(p, "Grass")).toBe(1800);
+    expect(surfaceElo(p, "Hard")).toBe(2100);
+    expect(surfaceElo(mkPlayer({ elo: { overall: 2000, hard: null, clay: null, grass: null } }), "Clay")).toBe(2000);
+    expect(surfaceElo(mkPlayer({ elo: null }), "Clay")).toBeNull();
+  });
+});
+
+describe("projectFavorite", () => {
+  const players: Record<string, Player> = {
+    a: mkPlayer({ id: "a", seed: 5, ranking: 20, elo: { overall: 1900, hard: 1900, clay: 2200, grass: 1900 } }),
+    b: mkPlayer({ id: "b", seed: 1, ranking: 2, elo: { overall: 2100, hard: 2100, clay: 2000, grass: 2100 } }),
+    c: mkPlayer({ id: "c", seed: null, ranking: 50, elo: null }),
+    d: mkPlayer({ id: "d", seed: null, ranking: 80, elo: null }),
+  };
+  it("favours higher SURFACE elo (clay specialist beats higher overall seed)", () => {
+    expect(projectFavorite(players, "a", "b", "Clay")).toBe("a"); // a clay 2200 > b clay 2000
+    expect(projectFavorite(players, "a", "b", "Hard")).toBe("b"); // b hard 2100 > a hard 1900
+  });
+  it("falls back to ranking then seed when elo is missing", () => {
+    expect(projectFavorite(players, "c", "d", "Clay")).toBe("c"); // c rank 50 < d rank 80
+  });
+  it("handles null participants (TBD)", () => {
+    expect(projectFavorite(players, null, "b", "Clay")).toBe("b");
+    expect(projectFavorite(players, "a", null, "Clay")).toBe("a");
+    expect(projectFavorite(players, null, null, "Clay")).toBeNull();
+  });
+});
+
+describe("winProbability", () => {
+  it("is 0.5 for equal elo and rises with the gap", () => {
+    expect(winProbability(2000, 2000)).toBeCloseTo(0.5, 5);
+    expect(winProbability(2200, 2000)).toBeCloseTo(0.7597, 3);
+    expect(winProbability(2000, 2200)).toBeCloseTo(0.2403, 3);
   });
 });

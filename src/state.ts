@@ -27,21 +27,46 @@ function feedersOf(s: Snapshot, matchId: string): Match[] {
     .sort((a, b) => a.slot - b.slot);
 }
 
-/** Better-seeded player wins a projection: seeded beats unseeded; lower seed/ranking wins; tie → a. */
-export function betterSeed(players: Record<string, Player>, a: string | null, b: string | null): string | null {
+const surfaceKey = (surface: string): "hard" | "clay" | "grass" => {
+  const s = surface.toLowerCase();
+  if (s.includes("clay")) return "clay";
+  if (s.includes("grass")) return "grass";
+  return "hard";
+};
+
+/** A player's ELO for the slam surface, falling back to overall, then null. */
+export function surfaceElo(p: Player, surface: string): number | null {
+  if (!p.elo) return null;
+  return p.elo[surfaceKey(surface)] ?? p.elo.overall ?? null;
+}
+
+/** ELO win-probability of A over B (standard logistic, base 10 / 400). */
+export function winProbability(eloA: number, eloB: number): number {
+  return 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
+}
+
+/**
+ * The projected winner of a matchup: higher surface-ELO wins; falls back to
+ * lower ranking, then lower seed, then A. Used for unplayed (TBD) matches.
+ */
+export function projectFavorite(
+  players: Record<string, Player>, a: string | null, b: string | null, surface: string,
+): string | null {
   if (!a) return b;
   if (!b) return a;
   const pa = players[a], pb = players[b];
   if (!pa) return pb ? b : null;
   if (!pb) return a;
-  const sa = pa.seed ?? Infinity, sb = pb.seed ?? Infinity;
-  if (sa !== sb) return sa < sb ? a : b;
+  const ea = surfaceElo(pa, surface), eb = surfaceElo(pb, surface);
+  if (ea != null && eb != null && ea !== eb) return ea > eb ? a : b;
   const ra = pa.ranking ?? Infinity, rb = pb.ranking ?? Infinity;
   if (ra !== rb) return ra < rb ? a : b;
+  const sa = pa.seed ?? Infinity, sb = pb.seed ?? Infinity;
+  if (sa !== sb) return sa < sb ? a : b;
   return a;
 }
 
-/** Projected winner of a match: decided result if any, else the better-seeded projected finalist. */
+/** Projected winner of a match: decided result if any, else the projected favourite (by surface ELO). */
 export function projectedWinner(s: Snapshot, matchId: string): string | null {
   const m = s.matches[matchId];
   const decided = winnerId(m);
@@ -49,7 +74,7 @@ export function projectedWinner(s: Snapshot, matchId: string): string | null {
   const feeders = feedersOf(s, matchId);
   const a = feeders[0] ? projectedWinner(s, feeders[0].id) : m.p1;
   const b = feeders[1] ? projectedWinner(s, feeders[1].id) : m.p2;
-  return betterSeed(s.players, a, b);
+  return projectFavorite(s.players, a, b, s.tournament.surface);
 }
 
 /** Build the champion-centred sunburst tree from the flat match list. */
