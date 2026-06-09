@@ -118,7 +118,16 @@ describe("renderCountryPanel", () => {
     { country: "ITA", entrants: 4, stillIn: 1, players: [{ id: "x", name: "Sinner", roundReached: 5, alive: true }] },
   ];
   it("renders a nation row with flag, counts and select action; expands the selected one", () => {
-    const html = renderCountryPanel(rows, "ITA");
+    const rounds = [
+      { index: 0, name: "Round of 128", size: 128, matchIds: [] },
+      { index: 1, name: "Round of 64", size: 64, matchIds: [] },
+      { index: 2, name: "Round of 32", size: 32, matchIds: [] },
+      { index: 3, name: "Round of 16", size: 16, matchIds: [] },
+      { index: 4, name: "Quarterfinal", size: 8, matchIds: [] },
+      { index: 5, name: "Semifinal", size: 4, matchIds: [] },
+      { index: 6, name: "Final", size: 2, matchIds: [] },
+    ];
+    const html = renderCountryPanel(rows, "ITA", rounds);
     expect(html).toContain("🇮🇹");
     expect(html).toContain('data-action="country"');
     expect(html).toContain('data-country="ITA"');

@@ -3,7 +3,7 @@ import type { LayoutArc } from "./layout";
 import type { ColorFn } from "./color";
 import { COLOR_DIMS, type ColorDim } from "./color";
 import type { Match, MatchStats, Player, Tour } from "./model";
-import type { SlamIndex } from "./model";
+import type { Round, SlamIndex } from "./model";
 import type { Theme } from "./theme";
 import { flagEmoji } from "./flags";
 import type { LeaderRow, SeedInsights, NationRow } from "./state";
@@ -268,7 +268,18 @@ export function renderSeedPanel(ins: SeedInsights): string {
   );
 }
 
-export function renderCountryPanel(rows: NationRow[], selected?: string): string {
+/** Short round label from a player's furthest-reached round index. */
+function roundAbbrev(reached: number, rounds: Round[]): string {
+  if (reached >= rounds.length) return "Champion";
+  const name = rounds[reached]?.name ?? `R${reached}`;
+  return name
+    .replace(/^Round of\s*/i, "R")
+    .replace(/^Quarterfinal.*/i, "QF")
+    .replace(/^Semifinal.*/i, "SF")
+    .replace(/^Final$/i, "F");
+}
+
+export function renderCountryPanel(rows: NationRow[], selected: string | undefined, rounds: Round[]): string {
   const items = rows
     .map((r) => {
       const on = selected === r.country;
@@ -281,7 +292,7 @@ export function renderCountryPanel(rows: NationRow[], selected?: string): string
       const expand = r.players
         .map((p) =>
           `<div class="ct-pl"><b>${escapeHtml(p.name)}</b>` +
-          `<span class="ct-rd${p.alive ? " alive" : ""}">${p.alive ? "in · " : ""}R${p.roundReached}</span></div>`)
+          `<span class="ct-rd${p.alive ? " alive" : ""}">${p.alive ? "in · " : ""}${roundAbbrev(p.roundReached, rounds)}</span></div>`)
         .join("");
       return head + `<li class="ct-expand">${expand}</li>`;
     })

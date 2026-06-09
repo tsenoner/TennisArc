@@ -103,7 +103,7 @@ export function createApp(root: HTMLElement): void {
         : surname(snap.players[occ]?.name ?? occ);
     const panel =
       state.colorDim === "seed" ? renderSeedPanel(seedInsights(snap))
-      : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry)
+      : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
       : renderLeaderboard(timeLeaderboard(snap, time), color);
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     const defaultId = focusOcc ?? tree.occupant ?? null;
