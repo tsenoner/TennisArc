@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedInsights, countryBreakdown, matchInsight, type PlayerTime } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedInsights, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, type PlayerTime } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -68,6 +68,9 @@ export function createApp(root: HTMLElement): void {
       eloLabel: elo != null ? `${snap.tournament.surface} ELO ${Math.round(elo)}` : "",
       roundLabel, sec: t?.sec ?? 0, provisional: t?.provisional ?? false,
       projected: false,
+      age: ageOn(p.birthdate, snap.generatedAt),
+      birthday: formatBirthday(p.birthdate),
+      birthdayNear: birthdayInWindow(p.birthdate, snap.generatedAt),
     };
   };
 

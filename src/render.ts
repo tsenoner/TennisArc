@@ -164,6 +164,7 @@ export interface ReadoutInfo {
   sec: number;             // cumulative on-court seconds (0 if none)
   provisional: boolean;
   projected: boolean;      // subject is a projection (e.g. projected champion)
+  age: number | null; birthday: string; birthdayNear: boolean;
 }
 
 /** The always-legible centre card naming the hovered/focused player. */
@@ -180,6 +181,9 @@ export function renderReadout(info: ReadoutInfo | null): string {
     `<div class="ro-name">${escapeHtml(info.name)}</div>` +
     (meta1 ? `<div class="ro-meta">${escapeHtml(meta1)}</div>` : "") +
     (info.eloLabel ? `<div class="ro-elo">${escapeHtml(info.eloLabel)}</div>` : "") +
+    (info.age != null
+      ? `<div class="ro-meta">${info.age}y${info.birthdayNear ? ` · 🎂 ${escapeHtml(info.birthday)}` : ""}</div>`
+      : "") +
     (meta2 ? `<div class="ro-meta">${escapeHtml(meta2)}</div>` : "") +
     `</div>`
   );
@@ -199,11 +203,12 @@ function insightPlayer(side: InsightSide, win: boolean, rounds: Round[]): string
   const tag = side.seed != null ? `#${side.ranking ?? "?"} · seed ${side.seed}`
     : side.ranking != null ? `#${side.ranking}` : "";
   const path = `${roundAbbrev(side.roundReached, rounds)}${side.sec > 0 ? ` · ${formatDuration(side.sec)}` : ""}`;
+  const bd = side.age != null ? ` · ${side.age}y${side.birthdayNear ? ` 🎂 ${escapeHtml(side.birthday)}` : ""}` : "";
   return (
     `<div class="mi-pl${win ? " mi-win" : ""}">` +
     `<span class="mi-fl">${flagEmoji(side.country)}</span>` +
     `<span class="mi-who"><b>${escapeHtml(side.name)}</b>${win ? ' <span class="mi-chk">✓</span>' : ""}` +
-    `<small>${escapeHtml(tag)} · ${escapeHtml(path)}</small></span></div>`
+    `<small>${escapeHtml(tag)} · ${escapeHtml(path)}${bd}</small></span></div>`
   );
 }
 

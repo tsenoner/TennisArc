@@ -81,6 +81,7 @@ describe("renderReadout", () => {
   const info: ReadoutInfo = {
     name: "Carlos Alcaraz", country: "ESP", ranking: 2, seed: 2,
     eloLabel: "Clay ELO 2107", roundLabel: "4th round", sec: 22320, provisional: false, projected: false,
+    age: null, birthday: "", birthdayNear: false,
   };
 
   it("renders name, rank/seed, country, elo and time", () => {

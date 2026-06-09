@@ -11,8 +11,8 @@ const base: MatchInsight = {
   matchId: "6-0", roundName: "Final", surface: "Clay", status: "finished", winner: "p1",
   score: [{ p1: 4, p2: 6 }, { p1: 7, p2: 6, tb: 5 }, { p1: 6, p2: 3 }],
   durationSec: 11760, durationProvisional: false,
-  p1: { id: "a", name: "Carlos Alcaraz", country: "ESP", seed: 2, ranking: 2, elo: 2106, roundReached: 7, sec: 22320 },
-  p2: { id: "b", name: "Jannik Sinner", country: "ITA", seed: 1, ranking: 1, elo: 2215, roundReached: 6, sec: 19000 },
+  p1: { id: "a", name: "Carlos Alcaraz", country: "ESP", seed: 2, ranking: 2, elo: 2106, roundReached: 7, sec: 22320, age: 22, birthday: "5 May", birthdayNear: true },
+  p2: { id: "b", name: "Jannik Sinner", country: "ITA", seed: 1, ranking: 1, elo: 2215, roundReached: 6, sec: 19000, age: 24, birthday: "16 Aug", birthdayNear: false },
   badges: ["Upset", "From a set down", "1 tiebreak", "Marathon"], upset: true,
   eloLine: "Clay-ELO favoured Jannik Sinner 65%",
   aces: [9, 12], doubleFaults: [3, 2],
@@ -32,6 +32,7 @@ describe("renderMatchInsight", () => {
     expect(html).toContain('href="https://www.sofascore.com/tennis/match/x/abc"');
     expect(html).toContain('data-action="focus"');
     expect(html).toContain('data-action="close-detail"');
+    expect(html).toContain("22y");
   });
 
   it("tolerates a TBD side and a missing link", () => {

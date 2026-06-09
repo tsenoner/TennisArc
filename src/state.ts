@@ -292,6 +292,7 @@ export interface InsightSide {
   id: string | null; name: string; country: string;
   seed: number | null; ranking: number | null;
   elo: number | null; roundReached: number; sec: number;
+  age: number | null; birthday: string; birthdayNear: boolean;
 }
 
 export interface MatchInsight {
@@ -303,7 +304,7 @@ export interface MatchInsight {
   aces: [number, number] | null; doubleFaults: [number, number] | null;
 }
 
-function insightSide(s: Snapshot, pid: string | null, surface: string, time: Map<string, PlayerTime>): InsightSide {
+function insightSide(s: Snapshot, pid: string | null, surface: string, time: Map<string, PlayerTime>, ref: string): InsightSide {
   const p = pid ? s.players[pid] : null;
   const t = pid ? time.get(pid) : undefined;
   return {
@@ -311,6 +312,9 @@ function insightSide(s: Snapshot, pid: string | null, surface: string, time: Map
     seed: p?.seed ?? null, ranking: p?.ranking ?? null,
     elo: p ? surfaceElo(p, surface) : null,
     roundReached: t?.roundReached ?? 0, sec: t?.sec ?? 0,
+    age: p ? ageOn(p.birthdate, ref) : null,
+    birthday: p ? formatBirthday(p.birthdate) : "",
+    birthdayNear: p ? birthdayInWindow(p.birthdate, ref) : false,
   };
 }
 
@@ -319,8 +323,9 @@ export function matchInsight(s: Snapshot, matchId: string, time: Map<string, Pla
   const m = s.matches[matchId];
   if (!m) return null;
   const surface = s.tournament.surface;
-  const p1 = insightSide(s, m.p1, surface, time);
-  const p2 = insightSide(s, m.p2, surface, time);
+  const ref = s.generatedAt ?? new Date().toISOString();
+  const p1 = insightSide(s, m.p1, surface, time, ref);
+  const p2 = insightSide(s, m.p2, surface, time, ref);
   const badges: string[] = [];
   let upset = false;
   let eloLine = "";
