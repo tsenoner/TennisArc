@@ -74,3 +74,25 @@ describe("renderSunburst labels", () => {
     expect(renderSunburst([proj], color, 700, labels)).not.toContain("<textPath");
   });
 });
+
+import { renderReadout, type ReadoutInfo } from "./render";
+
+describe("renderReadout", () => {
+  const info: ReadoutInfo = {
+    name: "Carlos Alcaraz", country: "ESP", ranking: 2, seed: 2,
+    eloLabel: "Clay ELO 2107", roundLabel: "4th round", sec: 22320, provisional: false, projected: false,
+  };
+
+  it("renders name, rank/seed, country, elo and time", () => {
+    const html = renderReadout(info);
+    expect(html).toContain("Carlos Alcaraz");
+    expect(html).toContain("ESP");
+    expect(html).toContain("#2");
+    expect(html).toContain("Clay ELO 2107");
+    expect(html).toContain("6h12"); // 22320s
+  });
+
+  it("renders an empty container for null (no subject)", () => {
+    expect(renderReadout(null)).toContain('class="readout"');
+  });
+});

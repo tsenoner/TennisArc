@@ -153,6 +153,37 @@ export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
   return `<aside class="leaderboard"><h2>Most time on court</h2><ol class="lb-list">${items}</ol></aside>`;
 }
 
+export interface ReadoutInfo {
+  name: string;
+  country: string;
+  ranking: number | null;
+  seed: number | null;
+  eloLabel: string;        // e.g. "Clay ELO 2107" or "" when unknown
+  roundLabel: string;      // e.g. "Quarter-final" / "out · R32" / "champion"
+  sec: number;             // cumulative on-court seconds (0 if none)
+  provisional: boolean;
+  projected: boolean;      // subject is a projection (e.g. projected champion)
+}
+
+/** The always-legible centre card naming the hovered/focused player. */
+export function renderReadout(info: ReadoutInfo | null): string {
+  if (!info) return `<div class="readout" aria-hidden="true"></div>`;
+  const rank = info.ranking != null ? `#${info.ranking}` : "";
+  const seed = info.seed != null ? `seed ${info.seed}` : "";
+  const meta1 = [rank, seed].filter(Boolean).join(" · ");
+  const time = info.sec > 0 ? `${formatDuration(info.sec)}${info.provisional ? " (live)" : ""} on court` : "";
+  const meta2 = [info.roundLabel, time].filter(Boolean).join(" · ");
+  return (
+    `<div class="readout${info.projected ? " projected" : ""}">` +
+    `<div class="ro-ctry">${escapeHtml(info.country)}</div>` +
+    `<div class="ro-name">${escapeHtml(info.name)}</div>` +
+    (meta1 ? `<div class="ro-meta">${escapeHtml(meta1)}</div>` : "") +
+    (info.eloLabel ? `<div class="ro-elo">${escapeHtml(info.eloLabel)}</div>` : "") +
+    (meta2 ? `<div class="ro-meta">${escapeHtml(meta2)}</div>` : "") +
+    `</div>`
+  );
+}
+
 const STATUS_LABEL: Record<Match["status"], string> = {
   notstarted: "Not started", scheduled: "Scheduled", live: "Live",
   finished: "", retired: "Retired", walkover: "Walkover",
