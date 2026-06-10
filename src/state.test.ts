@@ -190,7 +190,7 @@ describe("labelAnchors", () => {
 import { seedProgress } from "./state";
 
 describe("seedProgress", () => {
-  it("lists each seed with how far they got (deepest first) and flags ELO upsets", () => {
+  it("lists the seeds in seed order, carries surface ELO, and flags ELO upsets", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
     // make the round-0 loser the higher-ELO favourite so their loss reads as an upset
     const m = s.matches["0-0"];
@@ -199,19 +199,60 @@ describe("seedProgress", () => {
     s.players[win] = { ...s.players[win], elo: { overall: 1800, hard: 1800, clay: 1800, grass: 1800 } };
     s.players[lose] = { ...s.players[lose], elo: { overall: 2000, hard: 2000, clay: 2000, grass: 2000 } };
     const out = seedProgress(s);
-    expect(out.seedsTotal).toBe(8);       // all 8 in a draw of 8 are seeded
-    expect(out.seedsRemaining).toBe(1);   // only the champion survives a completed draw
+    expect(out.mode).toBe("seed");
+    expect(out.total).toBe(8);       // all 8 in a draw of 8 are seeded
+    expect(out.remaining).toBe(1);   // only the champion survives a completed draw
     expect(out.rows).toHaveLength(8);
-    // deepest-first ordering
+    // seed-ascending ordering; the badge rank equals the seed number
     for (let i = 1; i < out.rows.length; i++) {
-      expect(out.rows[i - 1].roundReached).toBeGreaterThanOrEqual(out.rows[i].roundReached);
+      expect(out.rows[i].seed!).toBeGreaterThan(out.rows[i - 1].seed!);
     }
+    expect(out.rows[0]).toMatchObject({ rank: 1, seed: 1 });
+    // each row carries the surface ELO (clay)
+    const loser = out.rows.find((r) => r.playerId === lose)!;
+    expect(loser.elo).toBe(2000); // clay ELO of the (overridden) favourite
     // the favourite who lost round 0 is out, reached nothing, and is flagged as an upset
-    const fell = out.rows.find((r) => r.playerId === lose)!;
-    expect(fell).toMatchObject({ alive: false, roundReached: 0, upset: true });
+    expect(loser).toMatchObject({ alive: false, roundReached: 0, upset: true });
     // the champion is alive and went furthest (log2(8) = 3 rounds)
     const champ = out.rows.find((r) => r.alive)!;
     expect(champ.roundReached).toBe(3);
+  });
+
+  it("elo sort ranks the top 32 by surface ELO (incl. unseeded) with the ELO position as the badge", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
+    // unseed the last entrant and make it the strongest by clay ELO; the rest descend
+    s.players["p7"] = { ...s.players["p7"], seed: null, elo: { overall: 2500, hard: 2500, clay: 2500, grass: 2500 } };
+    for (let i = 0; i < 7; i++) {
+      const e = 2000 - i * 10;
+      s.players[`p${i}`] = { ...s.players[`p${i}`], elo: { overall: e, hard: e, clay: e, grass: e } };
+    }
+    const out = seedProgress(s, "elo");
+    expect(out.mode).toBe("elo");
+    expect(out.rows[0]).toMatchObject({ rank: 1, playerId: "p7", seed: null }); // strongest is unseeded
+    for (let i = 1; i < out.rows.length; i++) {
+      expect(out.rows[i].elo!).toBeLessThanOrEqual(out.rows[i - 1].elo!); // strictly descending ELO
+    }
+  });
+});
+
+import { cumulativeOnCourt } from "./state";
+
+describe("cumulativeOnCourt", () => {
+  it("accumulates a player's match durations round by round (running total)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3 });
+    const cum = cumulativeOnCourt(s);
+    // p0 plays match 0-0 in round 0 → through(0) is exactly that match's duration
+    expect(cum.through("p0", 0)).toBe(s.matches["0-0"].durationSec ?? 0);
+    // running total is non-decreasing across rounds
+    expect(cum.through("p0", 1)).toBeGreaterThanOrEqual(cum.through("p0", 0));
+    expect(cum.through("p0", 2)).toBeGreaterThanOrEqual(cum.through("p0", 1));
+    // out-of-range round clamps to the final total
+    expect(cum.through("p0", 99)).toBe(cum.through("p0", 2));
+    expect(cum.max).toBeGreaterThan(0);
+  });
+  it("returns 0 for an unknown player", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    expect(cumulativeOnCourt(s).through("nobody", 0)).toBe(0);
   });
 });
 

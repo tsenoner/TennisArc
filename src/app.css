@@ -25,8 +25,30 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .seg .ctrl + .ctrl { border-left: 1px solid var(--line); }
 .ctrl.active { background: var(--accent); color: #fff; }
 .ctrl.theme { margin-left: auto; border: 1px solid var(--line); border-radius: 9px; }
+.issues-link { border: 1px solid var(--line); border-radius: 9px; text-decoration: none; display: inline-flex; align-items: center; }
+
+/* mobile-only top-bar dropdowns (slam / lens) — hidden on desktop, the inline segments show instead */
+.only-narrow { display: none; }
+.dd { position: relative; }
+.dd-trig { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 9px; }
+.dd-caret { font-size: 10px; color: var(--dim); }
+.dd-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .38);
+  display: flex; flex-direction: column; gap: 6px; min-width: 160px; max-width: 78vw; }
+.dd-right .dd-pop { left: auto; right: 0; }              /* lens popover hugs the right edge so it can't overflow */
+.dd-pop .ctrl { border: 1px solid var(--line); border-radius: 8px; text-align: left; }
+.dd-pop .yr { padding: 0 6px; font-variant-numeric: tabular-nums; align-self: center; }
+.dd-slam { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dd-slam .ctrl { text-align: center; }
+.dd-slam .ctrl.slam { min-width: 38px; }
+
+/* mobile lens drawer chrome — inert on desktop */
+.panel-fab, .lens-scrim { display: none; }
 
 .stage { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 10px 14px; }
+/* lens cards hug their content instead of stretching to the full stage height */
+.stage > .leaderboard, .stage > .panel { align-self: flex-start; max-height: 100%; }
 .sunburst { flex: 1; min-width: 0; }
 .sunburst svg { width: 100%; height: 100%; display: block; }
 .arc { cursor: pointer; stroke: var(--bg); stroke-width: 0.5; }
@@ -37,13 +59,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .leaderboard h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--dim); margin: 0 0 10px; }
 .lb-list { list-style: none; margin: 0; padding: 0; }
-.lb-row { display: grid; grid-template-columns: 18px 1fr 60px auto; gap: 8px;
+.lb-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 48px auto; gap: 8px;
   align-items: center; padding: 4px 0; font-size: 13px; }
 .lb-rank { color: var(--dim); text-align: right; }
-.lb-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lb-ctry { color: var(--dim); font-size: 11px; }
+.lb-name { min-width: 0; }
+.lb-who { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-ctry { display: block; color: var(--dim); font-size: 11px; }
 .lb-bar { background: var(--line); border-radius: 4px; height: 8px; overflow: hidden; }
-.lb-bar > span { display: block; height: 100%; }
+.lb-bar > span { display: block; height: 100%; background: var(--accent); }
 .lb-time { color: var(--dim); font-variant-numeric: tabular-nums; text-align: right; }
 
 .legend { display: flex; align-items: center; gap: 8px; padding: 6px 14px 12px;
@@ -51,7 +74,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 /* gradient stops must match the ramps in color.ts (HEAT for time, SEED for seed) */
 .legend-grad { width: 120px; height: 8px; border-radius: 4px;
   background: linear-gradient(90deg, #2f6f8f, #d9a441, #e0683c); }
-.legend-grad.seed { background: linear-gradient(90deg, #433f5c, #7c5cc9, #b794f6); }
+.legend-grad.seed { background: linear-gradient(90deg, #352170, #6d3fd4, #a36bff, #e2cdff); }
 
 /* match insight (in the panel column) */
 .match-insight { display: flex; flex-direction: column; gap: 10px; }
@@ -84,33 +107,35 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .mi-scrim { display: none; }
 
 @media (max-width: 720px) {
-  /* one scrollable control bar instead of 2–3 wrapped rows — reclaims vertical space.
-     The right-edge fade is a "scroll for more →" affordance so the lens/theme controls
-     (which sit past the slam switcher) are discoverable rather than silently clipped. */
-  .controls { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 6px; padding: 8px 10px;
-    scrollbar-width: none; -webkit-overflow-scrolling: touch;
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
-    mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent); }
-  .controls::-webkit-scrollbar { display: none; }
-  .controls > * { flex: 0 0 auto; }
+  /* The bar now holds only the tour seg + two compact dropdowns + theme + Issues — it all
+     fits on one row, so no horizontal scroll machinery is needed. */
+  .controls { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; }
   .brand { margin-right: 2px; }
   .brand-name { display: none; }            /* logo only on phones */
   .ctrl { padding: 6px 9px; }
-  .ctrl.theme { margin-left: 0; }           /* stay inline at the end of the scroll row */
-  /* Keep the two core mode-switches (Tour + Lens) on-screen; let the wider slam switcher
-     scroll — its clipped trailing button + the edge fade are the "scroll for more" cue.
-     (Source order is Tour → Slam → Lens, so reorder via flex `order` on mobile only.) */
-  .controls .tour-seg { order: 1; }
-  .controls .lens-seg { order: 2; }
-  .controls .slam-switch { order: 3; }
-  .controls .ctrl.theme { order: 4; }
-  .controls .slam-switch .ctrl.slam { min-width: 26px; }  /* 4 classes → beats base 30px rule */
+  .only-wide { display: none; }             /* inline slam/lens segments → replaced by dropdowns */
+  .only-narrow { display: inline-flex; }    /* show the slam/lens dropdowns */
 
   .stage { flex-direction: column; }
   .sunburst { min-height: 52vh; }
-  .leaderboard { width: 100%; max-width: none; max-height: 32vh; }
-  /* .stage prefix beats the base `.panel { max-width: 38vw }` defined later in the file */
-  .stage .panel { width: 100%; max-width: none; }
+
+  /* lens panel becomes a bottom drawer opened by the FAB; sits BELOW the match sheet (z 38/39 < 40/41) */
+  .panel-fab { display: inline-flex; position: fixed; right: 14px; z-index: 37;
+    bottom: calc(14px + env(safe-area-inset-bottom)); align-items: center; gap: 6px;
+    padding: 11px 16px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; box-shadow: 0 6px 22px rgba(0, 0, 0, .38); }
+  .lens-scrim.open { display: block; position: fixed; inset: 0; z-index: 38; background: rgba(4, 8, 12, .55); }
+  /* every lens panel (leaderboard/seed/country) is a bottom drawer — but NOT the match sheet,
+     which has its own fixed positioning + higher z-band below. */
+  .stage > .leaderboard, .stage > .panel:not(.match-insight) {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
+    width: auto; max-width: none; max-height: 76vh; align-self: auto; overflow-y: auto;
+    margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, .5);
+    transform: translateY(100%); transition: transform .22s ease-out; }
+  .stage > .leaderboard.open, .stage > .panel:not(.match-insight).open { transform: translateY(0); }
 
   /* tapping a player → match detail as a bottom sheet over the bracket (was off-screen below) */
   .mi-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(4, 8, 12, .55); }
@@ -132,9 +157,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .slam-switch .ctrl.slam[disabled] { opacity: .35; cursor: default; }
 .slam-switch .ctrl.slam.live::after { content: "●"; color: var(--teal); font-size: 8px; vertical-align: super; margin-left: 1px; }
 
-/* write-once arc labels */
-.arc-label { fill: #f4f8fc; font-weight: 700; paint-order: stroke; stroke: rgba(4, 10, 16, .72); stroke-width: 2.4px; pointer-events: none; }
+/* write-once arc labels (dominant-baseline centres the text on its path, not above it) */
+.arc-label { fill: #f4f8fc; font-weight: 700; paint-order: stroke; stroke: rgba(4, 10, 16, .72); stroke-width: 2.4px;
+  dominant-baseline: central; pointer-events: none; }
 :root[data-theme="light"] .arc-label { fill: #0c1218; stroke: rgba(255, 255, 255, .8); }
+.arc-radial { font-weight: 500; }   /* outer spokes (R128/R64): same halo thickness as the rest, for even legibility */
+/* round axis (R128 … Final) pinned to 12 o'clock on each ring */
+.ring-label { fill: var(--dim); font-weight: 700; letter-spacing: .03em; paint-order: stroke;
+  stroke: var(--bg); stroke-width: 2.6px; pointer-events: none; }
 
 /* faded + dashed projections (extends existing .arc.projected opacity) */
 .arc.projected { stroke: var(--dim); stroke-width: .8px; stroke-dasharray: 3 2; }
@@ -142,6 +172,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 /* centre readout overlay — a legible frosted card so the (champion / hovered) name
    never washes out against the arcs behind it, on phone and desktop alike */
 .sunburst { position: relative; }
+/* hover-to-highlight a seed's path: dim every other arc, light theirs */
+.sunburst.arc-dim-mode path.arc { opacity: .22; transition: opacity .12s; }
+.sunburst path.arc.arc-hl { opacity: 1; stroke: var(--seed); stroke-width: 1.6; }
 .readout { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 158px; text-align: center; pointer-events: none; }
 .readout.filled { padding: 9px 12px; border-radius: 14px; border: 1px solid var(--line);
   background: var(--panel);  /* opaque fallback for browsers without color-mix() */
@@ -160,6 +193,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .panel-empty { color: var(--dim); font-size: 13px; padding: 8px 2px; }
 
 /* seed panel */
+.sp-sort { display: flex; margin-bottom: 8px; }
+.sp-sort .ctrl { flex: 1; padding: 5px 0; font-size: 12px; }
 .seeds-in { background: #0e151d; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
 .seeds-top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
 .seeds-top b { color: var(--seed); }
@@ -173,7 +208,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .sp-seed { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 18px;
   padding: 0 5px; border-radius: 5px; background: color-mix(in srgb, var(--seed) 20%, transparent);
   color: var(--seed); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.sp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-row { cursor: pointer; }
+.sp-name { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.sp-name .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--dim);
+  border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; flex: none; }
+.sp-tag.uns { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.sp-meta { display: inline-flex; align-items: center; gap: 7px; justify-content: flex-end; white-space: nowrap; }
+.sp-elo { color: var(--teal); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .sp-bolt { color: var(--accent); }
 .sp-rd { font-size: 10.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
 .sp-rd.alive { color: var(--seed); }

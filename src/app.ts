@@ -1,9 +1,9 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, type PlayerTime } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, type PlayerTime, type SeedSort } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout,
-  renderSeedPanel, renderCountryPanel, renderMatchInsight, type ReadoutInfo,
+  renderSeedPanel, renderCountryPanel, renderMatchInsight, roundAbbrev, renderPanelFab, type ReadoutInfo,
 } from "./render";
 import { flagEmoji } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -23,11 +23,14 @@ interface AppState {
   index: SlamIndex | undefined;
   snapshots: Record<string, Snapshot>;
   colorDim: ColorDim;
+  seedSort: SeedSort;
   focusId: string | undefined;
   selectedMatchId: string | undefined;
   selectedNodeId: string | undefined;
   selectedCountry: string | undefined;
   theme: Theme;
+  openMenu: "slam" | "lens" | undefined;
+  panelOpen: boolean;
 }
 
 function staleLabel(generatedAt: string | undefined, nowMs: number): string {
@@ -44,7 +47,8 @@ export function createApp(root: HTMLElement): void {
   applyTheme(theme);
   const state: AppState = {
     tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
-    colorDim: "time", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, selectedCountry: undefined, theme,
+    colorDim: "time", seedSort: "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, selectedCountry: undefined, theme,
+    openMenu: undefined, panelOpen: false,
   };
   let store: Store | undefined;
 
@@ -86,12 +90,37 @@ export function createApp(root: HTMLElement): void {
     el.outerHTML = renderReadout(info);
   };
 
+  // Highlight every sunburst arc a player occupies (their path through the draw) without re-rendering.
+  // The cache holds the currently-lit arc nodes so leave/move can clear them without re-querying;
+  // it is dropped at the top of draw() so the innerHTML swap never leaves detached references behind.
+  let hlNodes: Element[] = [];
+  const highlightPath = (playerId: string | null) => {
+    const sb = root.querySelector<HTMLElement>(".sunburst");
+    for (const n of hlNodes) n.classList.remove("arc-hl");
+    hlNodes = [];
+    if (!playerId || !sb) { sb?.classList.remove("arc-dim-mode"); return; }
+    // playerId comes from a row's data-occupant, read back DECODED (the browser undoes the escapeHtml
+    // applied when the arc was written). CSS.escape escapes that decoded value for the selector, so the
+    // two escapers act on different layers (HTML serialization vs CSS selector) and need not match byte-for-byte.
+    hlNodes = [...root.querySelectorAll(`.sunburst path.arc[data-occupant="${CSS.escape(playerId)}"]`)];
+    for (const n of hlNodes) n.classList.add("arc-hl");
+    sb.classList.toggle("arc-dim-mode", hlNodes.length > 0);
+  };
+
+  // Top-bar dropdown menu helpers (mobile): the trigger button, and the focusable (non-disabled) menu items.
+  const ddTrigger = (m: "slam" | "lens") =>
+    root.querySelector<HTMLElement>(`.dd [data-action="toggle-menu"][data-menu="${m}"]`);
+  const ddItems = () =>
+    [...root.querySelectorAll<HTMLElement>('.dd-pop [role^="menuitem"]:not([disabled])')];
+
   const controlsOpts = () => ({
     tour: state.tour, colorDim: state.colorDim, theme: state.theme,
     index: state.index, year: state.year || undefined, slam: state.slam || undefined,
+    open: state.openMenu,
   });
 
   const draw = () => {
+    hlNodes = []; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
     const snap = state.year ? state.snapshots[snapKey(state.tour, state.year, state.slam)] : undefined;
     if (!snap) {
       root.innerHTML =
@@ -102,23 +131,36 @@ export function createApp(root: HTMLElement): void {
     const time = timeOnCourt(snap);
     const tree = buildSunburst(snap);
     const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
-    const color = colorScale(state.colorDim, snap, time, state.selectedCountry);
+    const color = colorScale(state.colorDim, snap, state.selectedCountry, state.seedSort);
+    // Round axis (R128 … Final), one per ring, derived from the laid-out arcs so it follows focus/zoom.
+    const ringSeen = new Map<number, { y0: number; y1: number }>();
+    for (const a of arcs) if (a.depth >= 1 && !ringSeen.has(a.depth)) ringSeen.set(a.depth, { y0: a.y0, y1: a.y1 });
+    const rings = [...ringSeen.entries()].map(([depth, r]) => ({
+      y: (r.y0 + r.y1) / 2, label: roundAbbrev(snap.rounds.length - depth, snap.rounds),
+    }));
     const anchors = labelAnchors(tree);
     anchors.delete(tree.id); // champion is named by the centre readout — skip its cramped on-arc label
     const labelText = (occ: string) =>
       state.colorDim === "country"
         ? flagEmoji(snap.players[occ]?.country ?? "")
         : surname(snap.players[occ]?.name ?? occ);
-    const panel = state.selectedMatchId && snap.matches[state.selectedMatchId]
-      ? (() => {
-          const mm = snap.matches[state.selectedMatchId!];
-          const ins = matchInsight(snap, state.selectedMatchId!, time)!;
-          const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
-          return renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
-        })()
-      : state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap), snap.rounds)
-      : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
-      : renderLeaderboard(timeLeaderboard(snap, time), color);
+    const isMatch = !!(state.selectedMatchId && snap.matches[state.selectedMatchId]);
+    let panel: string;
+    if (isMatch) {
+      const mm = snap.matches[state.selectedMatchId!];
+      const ins = matchInsight(snap, state.selectedMatchId!, time)!;
+      const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
+      panel = renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
+    } else {
+      const lens = state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap, state.seedSort), snap.rounds)
+        : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
+        : renderLeaderboard(timeLeaderboard(snap, time));
+      // The lens panel doubles as a mobile bottom drawer; `.open` (state.panelOpen) slides it in,
+      // the scrim dims the bracket behind it. Both are inert on desktop (CSS).
+      const drawer = state.panelOpen ? lens.replace('class="', 'class="open ') : lens;
+      panel = `<div class="lens-scrim${state.panelOpen ? " open" : ""}" data-action="panel" aria-hidden="true"></div>` +
+        drawer + renderPanelFab(state.colorDim, state.seedSort);
+    }
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     const defaultId = focusOcc ?? tree.occupant ?? null;
     ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected };
@@ -126,11 +168,11 @@ export function createApp(root: HTMLElement): void {
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText })}` +
+        `<div class="sunburst">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText }, rings)}` +
           renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected)) + `</div>` +
         panel +
       `</div>` +
-      renderLegend(state.colorDim) +
+      renderLegend(state.colorDim, state.seedSort) +
       `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}</div>`;
   };
 
@@ -167,10 +209,24 @@ export function createApp(root: HTMLElement): void {
     if (!el || el.hasAttribute("disabled")) return;
     const a = el.dataset.action;
     const id = el.dataset.id;
-    if (a === "tour" && el.dataset.tour) {
+    const menuBefore = state.openMenu;   // a selection inside an open dropdown should return focus to its trigger
+    if (a === "toggle-menu" && el.dataset.menu) {
+      const m = el.dataset.menu as "slam" | "lens";
+      const willOpen = state.openMenu !== m;
+      state.openMenu = willOpen ? m : undefined;
+      draw();
+      // Move focus into the just-opened menu (first item) or keep it on the trigger when it closes.
+      if (willOpen) ddItems()[0]?.focus(); else ddTrigger(m)?.focus();
+      return;
+    }
+    if (a === "panel") {
+      state.panelOpen = !state.panelOpen;
+      draw();
+    } else if (a === "tour" && el.dataset.tour) {
       selectForTour(el.dataset.tour as Tour);
     } else if (a === "slam" && el.dataset.slam) {
       state.slam = el.dataset.slam;
+      state.openMenu = undefined;
       state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.selectedCountry = undefined;
       draw(); void load(state.tour, state.year, state.slam);
     } else if (a === "year" && el.dataset.year) {
@@ -180,13 +236,19 @@ export function createApp(root: HTMLElement): void {
         const keep = slots.find((s) => s.entry && s.slam === state.slam);
         state.year = y;
         state.slam = (keep ?? slots.find((s) => s.entry))?.slam ?? state.slam;
+        state.openMenu = undefined;
         state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.selectedCountry = undefined;
         draw(); void load(state.tour, state.year, state.slam);
       }
     } else if (a === "colordim" && el.dataset.dim) {
       state.colorDim = el.dataset.dim as ColorDim;
+      state.openMenu = undefined;
       if (state.colorDim !== "country") state.selectedCountry = undefined;
       state.selectedMatchId = undefined; state.selectedNodeId = undefined;
+      draw();
+    } else if (a === "seed-sort" && el.dataset.sort) {
+      // toggles the seed lens between seed order and ELO order — reorders the panel AND recolours the wheel
+      state.seedSort = el.dataset.sort as SeedSort;
       draw();
     } else if (a === "country" && el.dataset.country) {
       state.selectedCountry = state.selectedCountry === el.dataset.country ? undefined : el.dataset.country;
@@ -202,6 +264,7 @@ export function createApp(root: HTMLElement): void {
       } else {
         state.selectedMatchId = el.dataset.match;
         state.selectedNodeId = id;
+        state.panelOpen = false;   // a selected match replaces the lens drawer with the match sheet
       }
       draw();
     } else if (a === "focus" && el.dataset.id) {
@@ -214,18 +277,53 @@ export function createApp(root: HTMLElement): void {
     } else if (a === "reset" || id === "r" || (id && id === state.focusId)) {
       state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw();
     }
+    // Selecting a slam/year/lens item from inside an open dropdown closes it → restore focus to its trigger.
+    if (menuBefore && state.openMenu === undefined) ddTrigger(menuBefore)?.focus();
   });
 
   root.addEventListener("pointermove", (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-occupant]");
     updateReadout(el?.dataset.occupant || null);
+    // hovering a seed row lights that seed's path through the sunburst (the centre card names them too)
+    highlightPath(el?.hasAttribute("data-seed-row") ? el.dataset.occupant || null : null);
   });
-  root.addEventListener("pointerleave", () => updateReadout(null), true);
+  root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(null); }, true);
 
-  // Escape closes the match detail (incl. the mobile bottom sheet), else un-zooms a focused section.
+  // Outside-tap closes an open top-bar dropdown (no-op when nothing is open).
+  document.addEventListener("pointerdown", (e) => {
+    if (!state.openMenu) return;
+    if ((e.target as HTMLElement).closest(".dd")) return;
+    state.openMenu = undefined; draw();
+  });
+
+  // Keyboard support for an open dropdown (ARIA menu pattern): Arrow/Home/End rove between items;
+  // Tab closes the menu and returns focus to its trigger so it isn't lost when the tree re-renders.
+  window.addEventListener("keydown", (e) => {
+    if (!state.openMenu) return;
+    if (e.key === "Tab") {
+      const m = state.openMenu;
+      state.openMenu = undefined; e.preventDefault(); draw(); ddTrigger(m)?.focus();
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") return;
+    const items = ddItems();
+    if (!items.length) return;
+    e.preventDefault();
+    const idx = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === "Home" ? 0
+      : e.key === "End" ? items.length - 1
+      : e.key === "ArrowDown" ? (idx + 1) % items.length
+      : (idx - 1 + items.length) % items.length;
+    items[next]?.focus();
+  });
+
+  // Escape unwinds the most recently opened layer: dropdown → match detail → lens drawer → focused section.
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (state.selectedMatchId) { state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw(); }
+    if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
+    else if (state.selectedMatchId) { state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw(); }
+    else if (state.panelOpen) { state.panelOpen = false; draw(); }
     else if (state.focusId) { state.focusId = undefined; draw(); }
   });
 

@@ -151,7 +151,7 @@ export interface PlayerTime {
 }
 
 /** Whether a match's on-court time should be counted, and whether it's provisional. */
-function countsTime(m: Match): { count: boolean; provisional: boolean } {
+export function countsTime(m: Match): { count: boolean; provisional: boolean } {
   if (m.status === "finished" || m.status === "retired") return { count: true, provisional: false };
   if (m.status === "live") return { count: true, provisional: true };
   return { count: false, provisional: false }; // walkover / scheduled / notstarted
@@ -183,6 +183,49 @@ export function timeOnCourt(s: Snapshot): Map<string, PlayerTime> {
   return out;
 }
 
+export interface CumulativeTime {
+  /** Cumulative on-court seconds a player had accrued *through* the given round index (inclusive). */
+  through(playerId: string, round: number): number;
+  max: number; // largest end-of-tournament total, for the colour domain
+}
+
+/**
+ * Running cumulative on-court time per player, by round — for the Time lens, where each ring shows
+ * the time a player had spent *so far* by the time they reached that round (R128 arc = their first
+ * match; deeper arcs add each subsequent match), rather than one flat per-player total.
+ */
+export function cumulativeOnCourt(s: Snapshot): CumulativeTime {
+  const numRounds = s.rounds.length;
+  const prefix = new Map<string, number[]>(); // playerId → per-round seconds (later prefix-summed)
+  const ensure = (pid: string): number[] => {
+    let a = prefix.get(pid);
+    if (!a) { a = new Array(Math.max(1, numRounds)).fill(0); prefix.set(pid, a); }
+    return a;
+  };
+  for (const m of Object.values(s.matches)) {
+    const { count } = countsTime(m);
+    if (!count || m.durationSec == null) continue;
+    if (m.roundIndex < 0 || m.roundIndex >= numRounds) continue;
+    for (const side of ["p1", "p2"] as const) {
+      const pid = m[side];
+      if (pid) ensure(pid)[m.roundIndex] += m.durationSec; // ≤ 1 match per player per round
+    }
+  }
+  let max = 1;
+  for (const arr of prefix.values()) {
+    for (let r = 1; r < arr.length; r++) arr[r] += arr[r - 1]; // in-place prefix sum
+    if (arr[arr.length - 1] > max) max = arr[arr.length - 1];
+  }
+  return {
+    through: (pid, round) => {
+      const arr = prefix.get(pid);
+      if (!arr || !arr.length) return 0;
+      return arr[Math.max(0, Math.min(round, arr.length - 1))];
+    },
+    max,
+  };
+}
+
 export interface LeaderRow {
   playerId: string;
   name: string;
@@ -203,20 +246,37 @@ export function eliminatedSet(s: Snapshot): Set<string> {
   return out;
 }
 
+export type SeedSort = "seed" | "elo";
+
 export interface SeedRow {
-  seed: number; playerId: string; name: string; country: string;
+  rank: number;           // the badge number: seed# (seed sort) or ELO position 1..32 (elo sort)
+  seed: number | null;    // tournament seed (null = unseeded; only reachable under the elo sort)
+  playerId: string; name: string; country: string;
+  elo: number | null;     // surface ELO for the slam surface
   roundReached: number;   // deepest round index reached (winner → roundIndex + 1)
   alive: boolean;         // still in the draw
   upset: boolean;         // went out to a lower surface-ELO opponent
 }
-export interface SeedProgress { seedsTotal: number; seedsRemaining: number; rows: SeedRow[]; }
+export interface SeedProgress { mode: SeedSort; total: number; remaining: number; rows: SeedRow[]; }
+
+/** Players ranked by surface ELO, strongest first → pid → 1-based rank. Only players with an ELO. */
+export function eloRank(s: Snapshot): Map<string, number> {
+  const surface = s.tournament.surface;
+  const ranked = Object.values(s.players)
+    .map((p) => ({ id: p.id, e: surfaceElo(p, surface) }))
+    .filter((x): x is { id: string; e: number } => x.e != null)
+    .sort((a, b) => b.e - a.e || a.id.localeCompare(b.id)); // id tie-break → deterministic across snapshots
+  return new Map(ranked.map((x, i) => [x.id, i + 1]));
+}
 
 /**
- * Each seed and how far they got — the seeds' own journeys, not the giant-killers who beat them.
- * Rows run deepest-first (champion → early exits); `upset` flags a seed beaten by a lower surface-ELO
- * opponent, so the fall is shown without naming the player who actually won the match.
+ * The draw's strongest 32 and how far each got — by tournament seed, or by surface ELO.
+ * "seed" sort lists the seeds in seed order; "elo" sort lists the top 32 by surface ELO
+ * (which can include unseeded players), strongest first — the same set the wheel lights up.
+ * `upset` flags a player beaten by a lower surface-ELO opponent, so the fall is shown
+ * without naming the giant-killer.
  */
-export function seedProgress(s: Snapshot): SeedProgress {
+export function seedProgress(s: Snapshot, sort: SeedSort = "seed"): SeedProgress {
   const out = eliminatedSet(s);
   const surface = s.tournament.surface;
   const reached = new Map<string, number>();
@@ -236,13 +296,26 @@ export function seedProgress(s: Snapshot): SeedProgress {
     const ew = surfaceElo(w, surface), el = surfaceElo(l, surface);
     if (ew != null && el != null && el > ew) upsetLosers.add(loseId); // loser was the favourite
   }
-  const seeded = Object.values(s.players).filter((p) => p.seed != null);
-  const rows: SeedRow[] = seeded.map((p) => ({
-    seed: p.seed!, playerId: p.id, name: p.name, country: p.country,
+
+  let pool: Player[];
+  let badge: (p: Player) => number;
+  if (sort === "elo") {
+    const rank = eloRank(s);
+    pool = Object.values(s.players)
+      .filter((p) => (rank.get(p.id) ?? Infinity) <= 32)
+      .sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+    badge = (p) => rank.get(p.id)!;
+  } else {
+    pool = Object.values(s.players).filter((p) => p.seed != null).sort((a, b) => a.seed! - b.seed!);
+    badge = (p) => p.seed!;
+  }
+
+  const rows: SeedRow[] = pool.map((p) => ({
+    rank: badge(p), seed: p.seed ?? null,
+    playerId: p.id, name: p.name, country: p.country, elo: surfaceElo(p, surface),
     roundReached: reached.get(p.id) ?? 0, alive: !out.has(p.id), upset: upsetLosers.has(p.id),
   }));
-  rows.sort((a, b) => b.roundReached - a.roundReached || Number(b.alive) - Number(a.alive) || a.seed - b.seed);
-  return { seedsTotal: seeded.length, seedsRemaining: rows.filter((r) => r.alive).length, rows };
+  return { mode: sort, total: rows.length, remaining: rows.filter((r) => r.alive).length, rows };
 }
 
 export interface NationPlayer { id: string; name: string; roundReached: number; alive: boolean; }

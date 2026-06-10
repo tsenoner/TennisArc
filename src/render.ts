@@ -6,7 +6,7 @@ import type { Tour } from "./model";
 import type { Round, SlamIndex } from "./model";
 import type { Theme } from "./theme";
 import { flagEmoji } from "./flags";
-import type { LeaderRow, SeedProgress, NationRow, InsightSide, MatchInsight } from "./state";
+import type { LeaderRow, SeedProgress, SeedSort, NationRow, InsightSide, MatchInsight } from "./state";
 import { availableYears, slamsForYear } from "./slams";
 
 const PAD_ANGLE = 0.004;   // radians of gap between adjacent arcs
@@ -21,13 +21,27 @@ const arcGen = d3arc<LayoutArc>()
   .padRadius(PAD_RADIUS);
 
 export interface SunburstLabels { anchors: Set<string>; text: (occupant: string) => string; }
+/** A round name pinned to a ring's mid-radius, drawn as a faint axis at 12 o'clock. */
+export interface RingLabel { y: number; label: string; }
 
 /** Render the sunburst as a self-contained SVG string (centred), with optional write-once curved labels. */
-export function renderSunburst(arcs: LayoutArc[], color: ColorFn, size: number, labels?: SunburstLabels): string {
+export function renderSunburst(
+  arcs: LayoutArc[], color: ColorFn, size: number, labels?: SunburstLabels, rings?: RingLabel[],
+): string {
   const c = size / 2;
   const defs: string[] = [];
   const texts: string[] = [];
   const pt = (r: number, ang: number) => `${(r * Math.sin(ang)).toFixed(2)},${(-r * Math.cos(ang)).toFixed(2)}`;
+
+  // Faint round axis at 12 o'clock so each ring reads as a round (R128 … Final), following focus/zoom.
+  const ringTexts = (rings ?? [])
+    .map((rg, i) => {
+      const half = Math.min(0.42, 30 / Math.max(rg.y, 1)); // ~30px-wide tab centred on the top
+      const id = `rg${i}`;
+      defs.push(`<path id="${id}" d="M${pt(rg.y, -half)} A${rg.y},${rg.y} 0 0 1 ${pt(rg.y, half)}"></path>`);
+      return `<text class="ring-label" font-size="9"><textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(rg.label)}</textPath></text>`;
+    })
+    .join("");
 
   const paths = arcs
     .map((a) => {
@@ -35,28 +49,78 @@ export function renderSunburst(arcs: LayoutArc[], color: ColorFn, size: number, 
       const cls = a.projected ? "arc projected" : "arc";
       if (labels && !a.projected && a.occupant && labels.anchors.has(a.id)) {
         const label = labels.text(a.occupant);
-        const rc = (a.y0 + a.y1) / 2;
-        const span = a.x1 - a.x0;
-        const fs = Math.min(13, Math.max(8, (a.y1 - a.y0) * 0.42));
-        // gate: only label when the arc's chord can hold the text
-        if (label && rc * span >= label.length * fs * 0.55) {
+        if (label) {
+          const rc = (a.y0 + a.y1) / 2;
+          const span = a.x1 - a.x0;
           const mid = (a.x0 + a.x1) / 2;
-          const rev = mid > Math.PI / 2 && mid < 3 * Math.PI / 2;
+          const radial = a.y1 - a.y0;
+          const idb = a.id.replace(/[^a-z0-9]/gi, "");
           const big = span > Math.PI ? 1 : 0;
-          const pad = Math.min(0.03, span * 0.12);
-          const s0 = a.x0 + pad, s1 = a.x1 - pad;
-          const pid = `lp${a.id.replace(/[^a-z0-9]/gi, "")}`;
-          const dPath = rev
-            ? `M${pt(rc, s1)} A${rc},${rc} 0 ${big} 0 ${pt(rc, s0)}`
-            : `M${pt(rc, s0)} A${rc},${rc} 0 ${big} 1 ${pt(rc, s1)}`;
-          defs.push(`<path id="${pid}" d="${dPath}"></path>`);
-          texts.push(
-            `<text class="arc-label" font-size="${fs.toFixed(1)}">` +
-            `<textPath href="#${pid}" startOffset="50%" text-anchor="middle">${escapeHtml(label)}</textPath></text>`,
-          );
+          const apad = Math.min(0.03, span * 0.12);
+          const s0 = a.x0 + apad, s1 = a.x1 - apad;
+          const chord = rc * (s1 - s0);               // usable tangential length for fitting
+          const revT = mid > Math.PI / 2 && mid < 3 * Math.PI / 2;  // curved flips on the bottom half
+          const revR = mid > Math.PI;                 // radial (spoke) flips on the left half
+          const curved = (r: number, txt: string, f: number, id: string) => {
+            const dPath = revT
+              ? `M${pt(r, s1)} A${r},${r} 0 ${big} 0 ${pt(r, s0)}`
+              : `M${pt(r, s0)} A${r},${r} 0 ${big} 1 ${pt(r, s1)}`;
+            defs.push(`<path id="${id}" d="${dPath}"></path>`);
+            texts.push(
+              `<text class="arc-label" font-size="${f.toFixed(1)}">` +
+              `<textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(txt)}</textPath></text>`,
+            );
+          };
+          const radialAt = (ang: number, txt: string, f: number, id: string) => {
+            const dPath = revR
+              ? `M${pt(a.y1 - 2, ang)} L${pt(a.y0 + 2, ang)}`
+              : `M${pt(a.y0 + 2, ang)} L${pt(a.y1 - 2, ang)}`;
+            defs.push(`<path id="${id}" d="${dPath}"></path>`);
+            texts.push(
+              `<text class="arc-label arc-radial" font-size="${f.toFixed(1)}">` +
+              `<textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(txt)}</textPath></text>`,
+            );
+          };
+          const [l1, l2] = splitTwo(label);
+          if (radial > rc * span) {
+            // RADIAL — text runs OUTWARDS along the ring depth (R128, R64). A ring wide enough for two
+            // columns (R64) gets a SECOND radial row so long names show in full without rotating to a
+            // curve; the thinnest ring (R128) keeps a single spoke.
+            const rf = Math.min(11, Math.max(7.5, radial * 0.24));
+            const rbudget = Math.max(2, Math.floor((radial - 4) / (rf * 0.6)));
+            const colW = rf * 1.05;
+            if (rc * span >= 2 * colW && label.length > rbudget) {
+              const off = (colW * 0.5) / rc;            // angular offset for two side-by-side columns
+              // order columns by which half of the wheel we're on (matches the revR reading flip), so
+              // the first row never lands above the second in the top-left / bottom-right quarters
+              radialAt(revR ? mid + off : mid - off, fitLabel(l1, rbudget), rf, `lr1${idb}`);
+              radialAt(revR ? mid - off : mid + off, fitLabel(l2, rbudget), rf, `lr2${idb}`);
+            } else {
+              radialAt(mid, fitLabel(label, rbudget), rf, `lr${idb}`);
+            }
+          } else {
+            // CURVED — text follows the ring (R32 inward): one line → two lines (≥3 chars) → truncate.
+            const fs = Math.min(13, Math.max(8, radial * 0.42));
+            const budget = Math.floor(chord / (fs * 0.58));
+            const f2 = Math.min(fs, 10);                // slightly smaller so two lines fit narrow rings
+            const budget2 = Math.floor(chord / (f2 * 0.58));
+            const fitFs = chord / (label.length * 0.58); // font size at which the whole name fills one line
+            if (label.length <= budget) {
+              curved(rc, label, fs, `lp${idb}`);        // fits on one line at full size
+            } else if (radial >= 2.3 * f2 && l1.length >= 3 && l2.length >= 3 && l1.length <= budget2 && l2.length <= budget2) {
+              const gap = f2 * 0.62;                     // two curved lines — whole name, no mid-word break
+              const upper = Math.cos(mid) > 0;           // top half → first line on the outer ring
+              curved(upper ? rc + gap : rc - gap, l1, f2, `la${idb}`);
+              curved(upper ? rc - gap : rc + gap, l2, f2, `lb${idb}`);
+            } else if (fitFs >= 8) {
+              curved(rc, label, Math.min(fs, fitFs), `lp${idb}`); // shrink one line to show the full short name ("Halys")
+            } else {
+              curved(rc, fitLabel(label, budget), fs, `lp${idb}`); // truncate — last resort
+            }
+          }
         }
       }
-      return `<path class="${cls}" d="${d}" fill="${color(a.occupant)}" ` +
+      return `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
         `data-action="inspect" data-id="${a.id}" data-match="${a.matchId}" data-occupant="${escapeHtml(a.occupant ?? "")}"></path>`;
     })
     .join("");
@@ -65,8 +129,33 @@ export function renderSunburst(arcs: LayoutArc[], color: ColorFn, size: number, 
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
     `role="img" aria-label="Tournament bracket sunburst">` +
     `<g transform="translate(${c},${c})" data-action="reset">` +
-    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}</g></svg>`
+    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}</g></svg>`
   );
+}
+
+/** Truncate a label to a character budget with an ellipsis (never empty). */
+function fitLabel(s: string, budget: number): string {
+  if (s.length <= budget) return s;
+  if (budget <= 1) return s.slice(0, 1);
+  return s.slice(0, budget - 1) + "…";
+}
+
+/** Split a name into two lines, preferring a space/hyphen near the middle, else mid-word. */
+function splitTwo(s: string): [string, string] {
+  const mid = s.length / 2;
+  let best = -1, bestDist = Infinity;
+  for (let i = 1; i < s.length - 1; i++) {
+    if (s[i] === " " || s[i] === "-") {
+      const dist = Math.abs(i - mid);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    }
+  }
+  if (best > 0) {
+    const cut = s[best] === "-" ? best + 1 : best; // keep a hyphen on the first line, drop a space
+    return [s.slice(0, cut).trim(), s.slice(best + 1).trim()];
+  }
+  const m = Math.ceil(s.length / 2);
+  return [s.slice(0, m), s.slice(m)];
 }
 
 /** Escape text that may contain user/player data before embedding in HTML. */
@@ -88,34 +177,59 @@ const DIM_LABELS: Record<ColorDim, string> = { time: "Time", seed: "Seed", count
 export function renderControls(opts: {
   tour: Tour; colorDim: ColorDim; theme: Theme;
   index?: SlamIndex; year?: number; slam?: string;
+  open?: "slam" | "lens";
 }): string {
   const tours: Tour[] = ["ATP", "WTA"];
   const tourBtn = (t: Tour) =>
     `<button class="ctrl${opts.tour === t ? " active" : ""}" data-action="tour" data-tour="${t}" aria-pressed="${opts.tour === t}">${t}</button>`;
-  const dimBtn = (d: ColorDim) =>
-    `<button class="ctrl${opts.colorDim === d ? " active" : ""}" data-action="colordim" data-dim="${d}" aria-pressed="${opts.colorDim === d}">${DIM_LABELS[d]}</button>`;
+  // `menu` switches a button from plain group semantics (aria-pressed / aria-current) to ARIA
+  // menu-item semantics, used when the same control is rendered inside a role="menu" popover.
+  const dimBtn = (d: ColorDim, menu = false) => {
+    const sel = opts.colorDim === d;
+    const a11y = menu ? ` role="menuitemradio" aria-checked="${sel}"` : ` aria-pressed="${sel}"`;
+    return `<button class="ctrl${sel ? " active" : ""}"${a11y} data-action="colordim" data-dim="${d}">${DIM_LABELS[d]}</button>`;
+  };
 
-  let switcher = "";
+  let switcher = "";          // inline slam switcher (desktop / .only-wide)
+  let slamDD = "";            // narrow dropdown wrapping the same year/slam buttons
   if (opts.index && opts.year != null) {
     const years = availableYears(opts.index, opts.tour);
     const i = years.indexOf(opts.year);
     const prevY = i >= 0 && i + 1 < years.length ? years[i + 1] : "";
     const nextY = i > 0 ? years[i - 1] : "";
-    const yearStep = (delta: number, target: number | "") =>
-      `<button class="ctrl yr-step" data-action="year" data-year="${target}"${target === "" ? " disabled" : ""} aria-label="${delta < 0 ? "Previous" : "Next"} year">${delta < 0 ? "◀" : "▶"}</button>`;
-    const slots = slamsForYear(opts.index, opts.year, opts.tour)
-      .map((s) => {
-        const on = opts.slam === s.slam ? " active" : "";
-        const off = s.entry ? "" : " disabled";
-        const live = s.entry?.status === "live" ? " live" : "";
-        return `<button data-action="slam" data-slam="${s.slam}" class="ctrl slam${on}${live}"${off ? " disabled" : ""}${on ? ' aria-current="true"' : ""} data-surface="${s.surface}" title="${s.entry ? escapeHtml(s.entry.name) : s.slam + " — not available"}">${s.abbr}</button>`;
-      })
-      .join("");
+    const yearStep = (delta: number, target: number | "", menu = false) =>
+      `<button class="ctrl yr-step"${menu ? ' role="menuitem"' : ""} data-action="year" data-year="${target}"${target === "" ? " disabled" : ""} aria-label="${delta < 0 ? "Previous" : "Next"} year">${delta < 0 ? "◀" : "▶"}</button>`;
+    const slamsHere = slamsForYear(opts.index, opts.year, opts.tour);
+    const slamBtn = (s: (typeof slamsHere)[number], menu = false) => {
+      const on = opts.slam === s.slam;
+      const off = s.entry ? "" : " disabled";
+      const live = s.entry?.status === "live" ? " live" : "";
+      const a11y = menu ? ` role="menuitemradio" aria-checked="${on}"` : (on ? ' aria-current="true"' : "");
+      return `<button data-action="slam" data-slam="${s.slam}" class="ctrl slam${on ? " active" : ""}${live}"${off ? " disabled" : ""}${a11y} data-surface="${s.surface}" title="${s.entry ? escapeHtml(s.entry.name) : s.slam + " — not available"}">${s.abbr}</button>`;
+    };
+    const inner = (menu: boolean) =>
+      yearStep(-1, prevY, menu) + `<span class="yr">${opts.year}</span>` + yearStep(1, nextY, menu) +
+      slamsHere.map((s) => slamBtn(s, menu)).join("");
     switcher =
-      `<div class="seg slam-switch" role="group" aria-label="Grand Slam">` +
-      yearStep(-1, prevY) + `<span class="yr">${opts.year}</span>` + yearStep(1, nextY) +
-      slots + `</div>`;
+      `<div class="seg slam-switch only-wide" role="group" aria-label="Grand Slam">` + inner(false) + `</div>`;
+    const cur = slamsHere.find((s) => s.slam === opts.slam);
+    const slamOpen = opts.open === "slam";
+    slamDD =
+      `<div class="dd only-narrow">` +
+      `<button class="ctrl dd-trig" data-action="toggle-menu" data-menu="slam" aria-haspopup="true" aria-expanded="${slamOpen}">` +
+      `${opts.year} ${escapeHtml(cur?.abbr ?? "Slam")} <span class="dd-caret" aria-hidden="true">▾</span></button>` +
+      (slamOpen ? `<div class="dd-pop dd-pop-slam" role="menu"><div class="dd-slam">${inner(true)}</div></div>` : "") +
+      `</div>`;
   }
+
+  const lensOpen = opts.open === "lens";
+  const lensInline = `<div class="seg lens-seg only-wide" role="group" aria-label="Colour by">${COLOR_DIMS.map((d) => dimBtn(d)).join("")}</div>`;
+  const lensDD =
+    `<div class="dd dd-right only-narrow">` +
+    `<button class="ctrl dd-trig" data-action="toggle-menu" data-menu="lens" aria-haspopup="true" aria-expanded="${lensOpen}">` +
+    `${DIM_LABELS[opts.colorDim]} <span class="dd-caret" aria-hidden="true">▾</span></button>` +
+    (lensOpen ? `<div class="dd-pop" role="menu">${COLOR_DIMS.map((d) => dimBtn(d, true)).join("")}</div>` : "") +
+    `</div>`;
 
   return (
     `<header class="controls">` +
@@ -123,21 +237,32 @@ export function renderControls(opts: {
     `<img class="brand-mark" src="/logo.svg" width="28" height="28" alt="" />` +
     `<span class="brand-name">Tennis<span>Arc</span></span></a>` +
     `<div class="seg tour-seg" role="group" aria-label="Tour">${tours.map(tourBtn).join("")}</div>` +
-    switcher +
-    `<div class="seg lens-seg" role="group" aria-label="Colour by">${COLOR_DIMS.map(dimBtn).join("")}</div>` +
+    switcher + slamDD +
+    lensInline + lensDD +
     `<button class="ctrl theme" data-action="theme" aria-label="Toggle theme">${opts.theme === "dark" ? "☀" : "☾"}</button>` +
+    `<a class="ctrl issues-link" href="https://github.com/tsenoner/TennisArc/issues" target="_blank" rel="noopener noreferrer" aria-label="Report an issue on GitHub">Issues</a>` +
     `</header>`
   );
 }
 
-export function renderLegend(dim: ColorDim): string {
+/** Mobile-only floating button that opens the lens drawer; its label names the active lens. */
+export function renderPanelFab(dim: ColorDim, seedSort: SeedSort = "seed"): string {
+  const label = dim === "time" ? "Time on court"
+    : dim === "seed" ? (seedSort === "elo" ? "Top 32 · ELO" : "Seeds")
+    : "Nations";
+  return `<button class="panel-fab" data-action="panel" aria-label="Open ${escapeHtml(label)} panel">${escapeHtml(label)}</button>`;
+}
+
+export function renderLegend(dim: ColorDim, seedSort: SeedSort = "seed"): string {
   if (dim === "country") return `<div class="legend">Colour: nationality</div>`;
-  const label = dim === "time" ? "fresh → most court time" : "unseeded → top seed";
+  const label = dim === "time" ? "fresh → most court time"
+    : dim === "seed" && seedSort === "elo" ? "weaker → stronger (ELO)"
+    : "unseeded → top seed";
   const grad = dim === "seed" ? "legend-grad seed" : "legend-grad";
   return `<div class="legend"><span class="${grad}" aria-hidden="true"></span><span>${label}</span></div>`;
 }
 
-export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
+export function renderLeaderboard(rows: LeaderRow[]): string {
   const max = Math.max(1, ...rows.map((r) => r.sec));
   const items = rows
     .map((r, i) => {
@@ -145,8 +270,9 @@ export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
       return (
         `<li class="lb-row">` +
         `<span class="lb-rank">${i + 1}</span>` +
-        `<span class="lb-name">${escapeHtml(r.name)} <span class="lb-ctry">${flagEmoji(r.country)} ${escapeHtml(r.country)}</span></span>` +
-        `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%;background:${color(r.playerId)}"></span></span>` +
+        `<span class="lb-name"><span class="lb-who">${escapeHtml(r.name)}</span>` +
+        `<span class="lb-ctry">${flagEmoji(r.country)} ${escapeHtml(r.country)}</span></span>` +
+        `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%"></span></span>` +
         `<span class="lb-time">${formatDuration(r.sec)}${r.provisional ? "*" : ""}</span>` +
         `</li>`
       );
@@ -251,39 +377,57 @@ export function renderMatchInsight(ins: MatchInsight, sofaUrl: string | null, no
   );
 }
 
-/** Seed lens panel: every seed and how far they got (deepest run first), not the giant-killers. */
+/**
+ * Seed lens panel. A Seed|ELO toggle reorders the list AND recolours the wheel:
+ * "seed" lists the seeds in seed order; "elo" lists (and lights) the top 32 by surface ELO,
+ * flagging the unseeded contenders the seeding leaves out. How far each got, not the giant-killers.
+ */
 export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
-  const pct = prog.seedsTotal ? Math.round((prog.seedsRemaining / prog.seedsTotal) * 100) : 0;
+  const pct = prog.total ? Math.round((prog.remaining / prog.total) * 100) : 0;
+  const elo = prog.mode === "elo";
+  const toggle =
+    `<div class="seg sp-sort" role="group" aria-label="Rank by">` +
+    `<button class="ctrl${!elo ? " active" : ""}" data-action="seed-sort" data-sort="seed" aria-pressed="${!elo}">Seed</button>` +
+    `<button class="ctrl${elo ? " active" : ""}" data-action="seed-sort" data-sort="elo" aria-pressed="${elo}">ELO</button>` +
+    `</div>`;
+  const title = elo ? "Top 32 by ELO" : "Seeds still in";
+  const sub = elo ? "By surface ELO" : "Seed progress";
   const rows = prog.rows
     .map((r) => {
       const champ = r.roundReached >= rounds.length;
       const label = roundAbbrev(r.roundReached, rounds);
+      // The visible label is intentionally word-free ("→ R16" / "R64"); the aria-label keeps the
+      // in/out distinction for screen readers, since colour alone shouldn't carry that meaning.
       const where = champ
-        ? `<span class="sp-rd champ">🏆 Champion</span>`
+        ? `<span class="sp-rd champ" aria-label="champion">🏆 Champion</span>`
         : r.alive
-        ? `<span class="sp-rd alive">in · ${escapeHtml(label)}</span>`
-        : `<span class="sp-rd">out · ${escapeHtml(label)}</span>`;
-      const bolt = r.upset ? ` <span class="sp-bolt" role="img" aria-label="upset — lost as the favourite">⚡</span>` : "";
+        ? `<span class="sp-rd alive" aria-label="in, reached ${escapeHtml(label)}">→ ${escapeHtml(label)}</span>`
+        : `<span class="sp-rd out" aria-label="out, ${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+      const bolt = r.upset ? `<span class="sp-bolt" role="img" aria-label="upset — lost as the favourite">⚡</span>` : "";
+      const elov = r.elo != null ? `<span class="sp-elo" title="surface ELO">${Math.round(r.elo)}</span>` : "";
+      // In ELO mode, flag the contenders the seeding leaves out (the whole point of the view).
+      const tag = elo && r.seed == null ? `<span class="sp-tag uns" title="not seeded">unseeded</span>` : "";
       return (
-        `<li class="sp-row${r.alive ? " on" : ""}">` +
-        `<span class="sp-seed">${r.seed}</span>` +
-        `<span class="sp-name">${escapeHtml(r.name)}${bolt}</span>` +
-        where +
+        `<li class="sp-row${r.alive ? " on" : ""}" data-seed-row data-occupant="${escapeHtml(r.playerId)}">` +
+        `<span class="sp-seed">${r.rank}</span>` +
+        `<span class="sp-name"><span class="nm">${escapeHtml(r.name)}</span>${tag}</span>` +
+        `<span class="sp-meta">${elov}${bolt}${where}</span>` +
         `</li>`
       );
     })
     .join("");
   return (
     `<aside class="panel seed-panel">` +
-    `<div class="seeds-in"><div class="seeds-top"><span>Seeds still in</span><b>${prog.seedsRemaining} / ${prog.seedsTotal}</b></div>` +
+    toggle +
+    `<div class="seeds-in"><div class="seeds-top"><span>${title}</span><b>${prog.remaining} / ${prog.total}</b></div>` +
     `<div class="seeds-track"><span style="width:${pct}%"></span></div></div>` +
-    (rows ? `<div class="panel-sub">Seed progress</div><ol class="sp-list">${rows}</ol>` : `<div class="panel-empty">No seeds in this draw</div>`) +
+    (rows ? `<div class="panel-sub">${sub}</div><ol class="sp-list">${rows}</ol>` : `<div class="panel-empty">No data for this draw</div>`) +
     `</aside>`
   );
 }
 
 /** Short round label from a player's furthest-reached round index. */
-function roundAbbrev(reached: number, rounds: Round[]): string {
+export function roundAbbrev(reached: number, rounds: Round[]): string {
   if (reached >= rounds.length) return "Champion";
   const name = rounds[reached]?.name ?? `R${reached}`;
   return name
