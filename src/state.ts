@@ -248,6 +248,8 @@ export function eliminatedSet(s: Snapshot): Set<string> {
 
 export interface SeedRow {
   seed: number; playerId: string; name: string; country: string;
+  ranking: number | null; // ATP/WTA ranking
+  elo: number | null;     // surface ELO for the slam surface
   roundReached: number;   // deepest round index reached (winner → roundIndex + 1)
   alive: boolean;         // still in the draw
   upset: boolean;         // went out to a lower surface-ELO opponent
@@ -256,7 +258,7 @@ export interface SeedProgress { seedsTotal: number; seedsRemaining: number; rows
 
 /**
  * Each seed and how far they got — the seeds' own journeys, not the giant-killers who beat them.
- * Rows run deepest-first (champion → early exits); `upset` flags a seed beaten by a lower surface-ELO
+ * Rows run by ranking (best-ranked first); `upset` flags a seed beaten by a lower surface-ELO
  * opponent, so the fall is shown without naming the player who actually won the match.
  */
 export function seedProgress(s: Snapshot): SeedProgress {
@@ -282,9 +284,10 @@ export function seedProgress(s: Snapshot): SeedProgress {
   const seeded = Object.values(s.players).filter((p) => p.seed != null);
   const rows: SeedRow[] = seeded.map((p) => ({
     seed: p.seed!, playerId: p.id, name: p.name, country: p.country,
+    ranking: p.ranking ?? null, elo: surfaceElo(p, surface),
     roundReached: reached.get(p.id) ?? 0, alive: !out.has(p.id), upset: upsetLosers.has(p.id),
   }));
-  rows.sort((a, b) => b.roundReached - a.roundReached || Number(b.alive) - Number(a.alive) || a.seed - b.seed);
+  rows.sort((a, b) => (a.ranking ?? Infinity) - (b.ranking ?? Infinity) || a.seed - b.seed);
   return { seedsTotal: seeded.length, seedsRemaining: rows.filter((r) => r.alive).length, rows };
 }
 

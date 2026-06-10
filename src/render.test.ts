@@ -115,11 +115,11 @@ describe("renderSeedPanel", () => {
   const prog: SeedProgress = {
     seedsTotal: 32, seedsRemaining: 1,
     rows: [
-      { seed: 1, playerId: "a", name: "Sinner", country: "ITA", roundReached: 7, alive: true, upset: false },
-      { seed: 6, playerId: "b", name: "Medvedev", country: "RUS", roundReached: 1, alive: false, upset: true },
+      { seed: 1, playerId: "a", name: "Sinner", country: "ITA", ranking: 1, elo: 2107.6, roundReached: 7, alive: true, upset: false },
+      { seed: 6, playerId: "b", name: "Medvedev", country: "RUS", ranking: 6, elo: 1980.2, roundReached: 1, alive: false, upset: true },
     ],
   };
-  it("shows seeds-in count, the champion, and a fallen seed's exit round (not the giant-killer)", () => {
+  it("shows seeds-in count, the champion, ELO, and a fallen seed's exit round (not the giant-killer)", () => {
     const html = renderSeedPanel(prog, SLAM_ROUNDS);
     expect(html).toContain("1 / 32");
     expect(html).toContain("Sinner");
@@ -127,6 +127,8 @@ describe("renderSeedPanel", () => {
     expect(html).toContain("Medvedev");
     expect(html).toContain("out · R64");   // fell in the Round of 64
     expect(html).toContain("⚡");          // upset flag, without naming who beat them
+    expect(html).toContain("2108");        // surface ELO, rounded, shown persistently
+    expect(html).toContain('data-occupant="a"'); // seed rows carry their player id for hover-highlight
   });
 });
 

@@ -89,6 +89,20 @@ export function createApp(root: HTMLElement): void {
     el.outerHTML = renderReadout(info);
   };
 
+  // Highlight every sunburst arc a player occupies (their path through the draw) without re-rendering.
+  // The cache holds the currently-lit arc nodes so leave/move can clear them without re-querying;
+  // it is dropped at the top of draw() so the innerHTML swap never leaves detached references behind.
+  let hlNodes: Element[] = [];
+  const highlightPath = (playerId: string | null) => {
+    const sb = root.querySelector<HTMLElement>(".sunburst");
+    for (const n of hlNodes) n.classList.remove("arc-hl");
+    hlNodes = [];
+    if (!playerId || !sb) { sb?.classList.remove("arc-dim-mode"); return; }
+    hlNodes = [...root.querySelectorAll(`.sunburst path.arc[data-occupant="${CSS.escape(playerId)}"]`)];
+    for (const n of hlNodes) n.classList.add("arc-hl");
+    sb.classList.toggle("arc-dim-mode", hlNodes.length > 0);
+  };
+
   const controlsOpts = () => ({
     tour: state.tour, colorDim: state.colorDim, theme: state.theme,
     index: state.index, year: state.year || undefined, slam: state.slam || undefined,
@@ -96,6 +110,7 @@ export function createApp(root: HTMLElement): void {
   });
 
   const draw = () => {
+    hlNodes = []; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
     const snap = state.year ? state.snapshots[snapKey(state.tour, state.year, state.slam)] : undefined;
     if (!snap) {
       root.innerHTML =
@@ -247,8 +262,10 @@ export function createApp(root: HTMLElement): void {
   root.addEventListener("pointermove", (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-occupant]");
     updateReadout(el?.dataset.occupant || null);
+    // hovering a seed row lights that seed's path through the sunburst (the centre card names them too)
+    highlightPath(el?.hasAttribute("data-seed-row") ? el.dataset.occupant || null : null);
   });
-  root.addEventListener("pointerleave", () => updateReadout(null), true);
+  root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(null); }, true);
 
   // Outside-tap closes an open top-bar dropdown (no-op when nothing is open).
   document.addEventListener("pointerdown", (e) => {

@@ -172,6 +172,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 /* centre readout overlay — a legible frosted card so the (champion / hovered) name
    never washes out against the arcs behind it, on phone and desktop alike */
 .sunburst { position: relative; }
+/* hover-to-highlight a seed's path: dim every other arc, light theirs */
+.sunburst.arc-dim-mode path.arc { opacity: .22; transition: opacity .12s; }
+.sunburst path.arc.arc-hl { opacity: 1; stroke: var(--seed); stroke-width: 1.6; }
 .readout { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 158px; text-align: center; pointer-events: none; }
 .readout.filled { padding: 9px 12px; border-radius: 14px; border: 1px solid var(--line);
   background: var(--panel);  /* opaque fallback for browsers without color-mix() */
@@ -203,7 +206,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .sp-seed { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 18px;
   padding: 0 5px; border-radius: 5px; background: color-mix(in srgb, var(--seed) 20%, transparent);
   color: var(--seed); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sp-row { cursor: pointer; }
 .sp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-elo { color: var(--teal); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .sp-bolt { color: var(--accent); }
 .sp-rd { font-size: 10.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
 .sp-rd.alive { color: var(--seed); }

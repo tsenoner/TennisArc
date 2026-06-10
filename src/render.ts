@@ -381,10 +381,11 @@ export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
         ? `<span class="sp-rd alive">in · ${escapeHtml(label)}</span>`
         : `<span class="sp-rd">out · ${escapeHtml(label)}</span>`;
       const bolt = r.upset ? ` <span class="sp-bolt" role="img" aria-label="upset — lost as the favourite">⚡</span>` : "";
+      const elo = r.elo != null ? ` <span class="sp-elo" title="surface ELO">${Math.round(r.elo)}</span>` : "";
       return (
-        `<li class="sp-row${r.alive ? " on" : ""}">` +
+        `<li class="sp-row${r.alive ? " on" : ""}" data-seed-row data-occupant="${escapeHtml(r.playerId)}">` +
         `<span class="sp-seed">${r.seed}</span>` +
-        `<span class="sp-name">${escapeHtml(r.name)}${bolt}</span>` +
+        `<span class="sp-name">${escapeHtml(r.name)}${elo}${bolt}</span>` +
         where +
         `</li>`
       );

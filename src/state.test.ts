@@ -190,7 +190,7 @@ describe("labelAnchors", () => {
 import { seedProgress } from "./state";
 
 describe("seedProgress", () => {
-  it("lists each seed with how far they got (deepest first) and flags ELO upsets", () => {
+  it("lists each seed ordered by ranking, carrying surface ELO, and flags ELO upsets", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
     // make the round-0 loser the higher-ELO favourite so their loss reads as an upset
     const m = s.matches["0-0"];
@@ -202,13 +202,17 @@ describe("seedProgress", () => {
     expect(out.seedsTotal).toBe(8);       // all 8 in a draw of 8 are seeded
     expect(out.seedsRemaining).toBe(1);   // only the champion survives a completed draw
     expect(out.rows).toHaveLength(8);
-    // deepest-first ordering
+    // ranking-ascending ordering (best-ranked first; ranking ?? Infinity, tie-break by seed)
     for (let i = 1; i < out.rows.length; i++) {
-      expect(out.rows[i - 1].roundReached).toBeGreaterThanOrEqual(out.rows[i].roundReached);
+      const ra = out.rows[i - 1].ranking ?? Infinity, rb = out.rows[i].ranking ?? Infinity;
+      expect(ra).toBeLessThanOrEqual(rb);
     }
+    // each row carries ranking and the surface ELO (clay)
+    const loser = out.rows.find((r) => r.playerId === lose)!;
+    expect(loser.ranking).not.toBeNull();
+    expect(loser.elo).toBe(2000); // clay ELO of the (overridden) favourite
     // the favourite who lost round 0 is out, reached nothing, and is flagged as an upset
-    const fell = out.rows.find((r) => r.playerId === lose)!;
-    expect(fell).toMatchObject({ alive: false, roundReached: 0, upset: true });
+    expect(loser).toMatchObject({ alive: false, roundReached: 0, upset: true });
     // the champion is alive and went furthest (log2(8) = 3 rounds)
     const champ = out.rows.find((r) => r.alive)!;
     expect(champ.roundReached).toBe(3);
