@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedInsights, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, type PlayerTime } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, type PlayerTime } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -116,7 +116,7 @@ export function createApp(root: HTMLElement): void {
           const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
           return renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
         })()
-      : state.colorDim === "seed" ? renderSeedPanel(seedInsights(snap))
+      : state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap), snap.rounds)
       : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
       : renderLeaderboard(timeLeaderboard(snap, time), color);
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
@@ -221,6 +221,13 @@ export function createApp(root: HTMLElement): void {
     updateReadout(el?.dataset.occupant || null);
   });
   root.addEventListener("pointerleave", () => updateReadout(null), true);
+
+  // Escape closes the match detail (incl. the mobile bottom sheet), else un-zooms a focused section.
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (state.selectedMatchId) { state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw(); }
+    else if (state.focusId) { state.focusId = undefined; draw(); }
+  });
 
   draw(); // initial loading state
   void (async () => {

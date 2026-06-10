@@ -187,23 +187,31 @@ describe("labelAnchors", () => {
   });
 });
 
-import { seedInsights } from "./state";
+import { seedProgress } from "./state";
 
-describe("seedInsights", () => {
-  it("counts seeded players still in and flags ELO upsets", () => {
+describe("seedProgress", () => {
+  it("lists each seed with how far they got (deepest first) and flags ELO upsets", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
-    // give two players elo so an upset is detectable on the first match
+    // make the round-0 loser the higher-ELO favourite so their loss reads as an upset
     const m = s.matches["0-0"];
     const win = m.winner === "p1" ? m.p1! : m.p2!;
     const lose = m.winner === "p1" ? m.p2! : m.p1!;
     s.players[win] = { ...s.players[win], elo: { overall: 1800, hard: 1800, clay: 1800, grass: 1800 } };
-    s.players[lose] = { ...s.players[lose], elo: { overall: 2000, hard: 2000, clay: 2000, grass: 2000 }, seed: 1 };
-    const out = seedInsights(s);
-    expect(out.seedsTotal).toBeGreaterThan(0);
-    expect(out.seedsRemaining).toBeLessThanOrEqual(out.seedsTotal);
-    const up = out.upsets.find((u) => u.winnerId === win && u.loserId === lose);
-    expect(up).toBeTruthy();
-    expect(up!.eloGap).toBeCloseTo(200, 0);
+    s.players[lose] = { ...s.players[lose], elo: { overall: 2000, hard: 2000, clay: 2000, grass: 2000 } };
+    const out = seedProgress(s);
+    expect(out.seedsTotal).toBe(8);       // all 8 in a draw of 8 are seeded
+    expect(out.seedsRemaining).toBe(1);   // only the champion survives a completed draw
+    expect(out.rows).toHaveLength(8);
+    // deepest-first ordering
+    for (let i = 1; i < out.rows.length; i++) {
+      expect(out.rows[i - 1].roundReached).toBeGreaterThanOrEqual(out.rows[i].roundReached);
+    }
+    // the favourite who lost round 0 is out, reached nothing, and is flagged as an upset
+    const fell = out.rows.find((r) => r.playerId === lose)!;
+    expect(fell).toMatchObject({ alive: false, roundReached: 0, upset: true });
+    // the champion is alive and went furthest (log2(8) = 3 rounds)
+    const champ = out.rows.find((r) => r.alive)!;
+    expect(champ.roundReached).toBe(3);
   });
 });
 
