@@ -79,4 +79,15 @@ describe("backfillTargets", () => {
   it("ignores non-numeric years", () => {
     expect(backfillTargets("2024,foo")).toHaveLength(4);
   });
+  it("restricts to the given slams when a slams filter is passed", () => {
+    const t = backfillTargets("2026", "australian-open");
+    expect(t).toEqual([{ year: 2026, slam: "australian-open" }]);
+  });
+  it("accepts multiple slams and ignores unknown keys", () => {
+    const t = backfillTargets("2026", "australian-open,not-a-slam,wimbledon");
+    expect(t).toEqual([
+      { year: 2026, slam: "australian-open" },
+      { year: 2026, slam: "wimbledon" },
+    ]);
+  });
 });

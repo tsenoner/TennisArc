@@ -12,7 +12,8 @@
     "test:watch": "TZ=UTC vitest",
     "typecheck": "tsc --noEmit",
     "generate-pwa-assets": "pwa-assets-generator",
-    "ingest": "tsx ingest/index.ts"
+    "ingest": "tsx ingest/index.ts",
+    "reindex": "tsx ingest/reindex.ts"
   },
   "dependencies": {
     "d3-hierarchy": "^3.1.2",

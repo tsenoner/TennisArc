@@ -79,7 +79,7 @@ async function publishSlam(cfg: SlamConfig, isoNow: string, nowSec: number, writ
 }
 
 async function main(): Promise<void> {
-  const backfill = backfillTargets(process.env.BACKFILL_YEARS);
+  const backfill = backfillTargets(process.env.BACKFILL_YEARS, process.env.BACKFILL_SLAMS);
   if (backfill.length) {
     const isoNow = new Date().toISOString();
     const nowSec = Math.floor(Date.now() / 1000);

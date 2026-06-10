@@ -16,10 +16,10 @@ export interface SlamConfig {
 // NOTE: dates/ids are for the 2026 season — bump them when rolling to a new year (windows are
 // generous on the late side on purpose: a few wasted cycles beats truncating a live tournament).
 export const SLAMS: Record<string, SlamConfig> = {
-  "australian-open": { slam: "australian-open", name: "Australian Open", surface: "Hard",  year: 2026, from: "2026-01-15", to: "2026-02-03", unitournament: { ATP: 2363, WTA: 2521 } },
+  "australian-open": { slam: "australian-open", name: "Australian Open", surface: "Hard",  year: 2026, from: "2026-01-15", to: "2026-02-03", unitournament: { ATP: 2363, WTA: 2571 } },
   "roland-garros":   { slam: "roland-garros",   name: "Roland Garros",   surface: "Clay",  year: 2026, from: "2026-05-21", to: "2026-06-09", unitournament: { ATP: 2480, WTA: 2577 } },
   wimbledon:         { slam: "wimbledon",       name: "Wimbledon",       surface: "Grass", year: 2026, from: "2026-06-26", to: "2026-07-14", unitournament: { ATP: 2361, WTA: 2600 } },
-  "us-open":         { slam: "us-open",         name: "US Open",         surface: "Hard",  year: 2026, from: "2026-08-25", to: "2026-09-15", unitournament: { ATP: 2449, WTA: 2547 } },
+  "us-open":         { slam: "us-open",         name: "US Open",         surface: "Hard",  year: 2026, from: "2026-08-25", to: "2026-09-15", unitournament: { ATP: 2449, WTA: 2601 } },
 };
 
 export const DRAW_SIZE = 128;

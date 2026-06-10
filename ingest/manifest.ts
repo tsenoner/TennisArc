@@ -36,11 +36,21 @@ export function mergeIndex(existing: AvailableSlam[], entries: AvailableSlam[]):
   );
 }
 
-/** Expand a "2024,2025" env string into {year, slam} targets across all four slams. */
-export function backfillTargets(yearsCsv: string | undefined): { year: number; slam: string }[] {
+/**
+ * Expand a "2024,2025" years env into {year, slam} targets. By default every slam in `SLAMS`;
+ * pass `slamsCsv` (e.g. "australian-open") to restrict to specific slams — handy for backfilling
+ * one major without re-scraping the others. Unknown slam keys are ignored.
+ */
+export function backfillTargets(
+  yearsCsv: string | undefined, slamsCsv?: string,
+): { year: number; slam: string }[] {
   if (!yearsCsv) return [];
   const years = yearsCsv.split(",").map((y) => Number(y.trim())).filter((y) => Number.isInteger(y));
+  const all = Object.keys(SLAMS);
+  const slams = slamsCsv
+    ? slamsCsv.split(",").map((s) => s.trim()).filter((s) => all.includes(s))
+    : all;
   const out: { year: number; slam: string }[] = [];
-  for (const year of years) for (const slam of Object.keys(SLAMS)) out.push({ year, slam });
+  for (const year of years) for (const slam of slams) out.push({ year, slam });
   return out;
 }
