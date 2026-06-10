@@ -25,8 +25,30 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .seg .ctrl + .ctrl { border-left: 1px solid var(--line); }
 .ctrl.active { background: var(--accent); color: #fff; }
 .ctrl.theme { margin-left: auto; border: 1px solid var(--line); border-radius: 9px; }
+.issues-link { border: 1px solid var(--line); border-radius: 9px; text-decoration: none; display: inline-flex; align-items: center; }
+
+/* mobile-only top-bar dropdowns (slam / lens) — hidden on desktop, the inline segments show instead */
+.only-narrow { display: none; }
+.dd { position: relative; }
+.dd-trig { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 9px; }
+.dd-caret { font-size: 10px; color: var(--dim); }
+.dd-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .38);
+  display: flex; flex-direction: column; gap: 6px; min-width: 160px; max-width: 78vw; }
+.dd-right .dd-pop { left: auto; right: 0; }              /* lens popover hugs the right edge so it can't overflow */
+.dd-pop .ctrl { border: 1px solid var(--line); border-radius: 8px; text-align: left; }
+.dd-pop .yr { padding: 0 6px; font-variant-numeric: tabular-nums; align-self: center; }
+.dd-slam { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dd-slam .ctrl { text-align: center; }
+.dd-slam .ctrl.slam { min-width: 38px; }
+
+/* mobile lens drawer chrome — inert on desktop */
+.panel-fab, .lens-scrim { display: none; }
 
 .stage { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 10px 14px; }
+/* lens cards hug their content instead of stretching to the full stage height */
+.stage > .leaderboard, .stage > .panel { align-self: flex-start; max-height: 100%; }
 .sunburst { flex: 1; min-width: 0; }
 .sunburst svg { width: 100%; height: 100%; display: block; }
 .arc { cursor: pointer; stroke: var(--bg); stroke-width: 0.5; }
@@ -37,11 +59,12 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .leaderboard h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--dim); margin: 0 0 10px; }
 .lb-list { list-style: none; margin: 0; padding: 0; }
-.lb-row { display: grid; grid-template-columns: 18px 1fr 60px auto; gap: 8px;
+.lb-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 48px auto; gap: 8px;
   align-items: center; padding: 4px 0; font-size: 13px; }
 .lb-rank { color: var(--dim); text-align: right; }
-.lb-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lb-ctry { color: var(--dim); font-size: 11px; }
+.lb-name { min-width: 0; }
+.lb-who { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-ctry { display: block; color: var(--dim); font-size: 11px; }
 .lb-bar { background: var(--line); border-radius: 4px; height: 8px; overflow: hidden; }
 .lb-bar > span { display: block; height: 100%; background: var(--accent); }
 .lb-time { color: var(--dim); font-variant-numeric: tabular-nums; text-align: right; }
@@ -84,33 +107,35 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .mi-scrim { display: none; }
 
 @media (max-width: 720px) {
-  /* one scrollable control bar instead of 2–3 wrapped rows — reclaims vertical space.
-     The right-edge fade is a "scroll for more →" affordance so the lens/theme controls
-     (which sit past the slam switcher) are discoverable rather than silently clipped. */
-  .controls { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 6px; padding: 8px 10px;
-    scrollbar-width: none; -webkit-overflow-scrolling: touch;
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
-    mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent); }
-  .controls::-webkit-scrollbar { display: none; }
-  .controls > * { flex: 0 0 auto; }
+  /* The bar now holds only the tour seg + two compact dropdowns + theme + Issues — it all
+     fits on one row, so no horizontal scroll machinery is needed. */
+  .controls { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; }
   .brand { margin-right: 2px; }
   .brand-name { display: none; }            /* logo only on phones */
   .ctrl { padding: 6px 9px; }
-  .ctrl.theme { margin-left: 0; }           /* stay inline at the end of the scroll row */
-  /* Keep the two core mode-switches (Tour + Lens) on-screen; let the wider slam switcher
-     scroll — its clipped trailing button + the edge fade are the "scroll for more" cue.
-     (Source order is Tour → Slam → Lens, so reorder via flex `order` on mobile only.) */
-  .controls .tour-seg { order: 1; }
-  .controls .lens-seg { order: 2; }
-  .controls .slam-switch { order: 3; }
-  .controls .ctrl.theme { order: 4; }
-  .controls .slam-switch .ctrl.slam { min-width: 26px; }  /* 4 classes → beats base 30px rule */
+  .only-wide { display: none; }             /* inline slam/lens segments → replaced by dropdowns */
+  .only-narrow { display: inline-flex; }    /* show the slam/lens dropdowns */
 
   .stage { flex-direction: column; }
   .sunburst { min-height: 52vh; }
-  .leaderboard { width: 100%; max-width: none; max-height: 32vh; }
-  /* .stage prefix beats the base `.panel { max-width: 38vw }` defined later in the file */
-  .stage .panel { width: 100%; max-width: none; }
+
+  /* lens panel becomes a bottom drawer opened by the FAB; sits BELOW the match sheet (z 38/39 < 40/41) */
+  .panel-fab { display: inline-flex; position: fixed; right: 14px; z-index: 37;
+    bottom: calc(14px + env(safe-area-inset-bottom)); align-items: center; gap: 6px;
+    padding: 11px 16px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; box-shadow: 0 6px 22px rgba(0, 0, 0, .38); }
+  .lens-scrim.open { display: block; position: fixed; inset: 0; z-index: 38; background: rgba(4, 8, 12, .55); }
+  /* every lens panel (leaderboard/seed/country) is a bottom drawer — but NOT the match sheet,
+     which has its own fixed positioning + higher z-band below. */
+  .stage > .leaderboard, .stage > .panel:not(.match-insight) {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
+    width: auto; max-width: none; max-height: 76vh; align-self: auto; overflow-y: auto;
+    margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, .5);
+    transform: translateY(100%); transition: transform .22s ease-out; }
+  .stage > .leaderboard.open, .stage > .panel:not(.match-insight).open { transform: translateY(0); }
 
   /* tapping a player → match detail as a bottom sheet over the bracket (was off-screen below) */
   .mi-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(4, 8, 12, .55); }

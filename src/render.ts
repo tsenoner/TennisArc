@@ -177,6 +177,7 @@ const DIM_LABELS: Record<ColorDim, string> = { time: "Time", seed: "Seed", count
 export function renderControls(opts: {
   tour: Tour; colorDim: ColorDim; theme: Theme;
   index?: SlamIndex; year?: number; slam?: string;
+  open?: "slam" | "lens";
 }): string {
   const tours: Tour[] = ["ATP", "WTA"];
   const tourBtn = (t: Tour) =>
@@ -184,7 +185,8 @@ export function renderControls(opts: {
   const dimBtn = (d: ColorDim) =>
     `<button class="ctrl${opts.colorDim === d ? " active" : ""}" data-action="colordim" data-dim="${d}" aria-pressed="${opts.colorDim === d}">${DIM_LABELS[d]}</button>`;
 
-  let switcher = "";
+  let switcher = "";          // inline slam switcher (desktop / .only-wide)
+  let slamDD = "";            // narrow dropdown wrapping the same year/slam buttons
   if (opts.index && opts.year != null) {
     const years = availableYears(opts.index, opts.tour);
     const i = years.indexOf(opts.year);
@@ -192,7 +194,8 @@ export function renderControls(opts: {
     const nextY = i > 0 ? years[i - 1] : "";
     const yearStep = (delta: number, target: number | "") =>
       `<button class="ctrl yr-step" data-action="year" data-year="${target}"${target === "" ? " disabled" : ""} aria-label="${delta < 0 ? "Previous" : "Next"} year">${delta < 0 ? "◀" : "▶"}</button>`;
-    const slots = slamsForYear(opts.index, opts.year, opts.tour)
+    const slamsHere = slamsForYear(opts.index, opts.year, opts.tour);
+    const slots = slamsHere
       .map((s) => {
         const on = opts.slam === s.slam ? " active" : "";
         const off = s.entry ? "" : " disabled";
@@ -200,11 +203,28 @@ export function renderControls(opts: {
         return `<button data-action="slam" data-slam="${s.slam}" class="ctrl slam${on}${live}"${off ? " disabled" : ""}${on ? ' aria-current="true"' : ""} data-surface="${s.surface}" title="${s.entry ? escapeHtml(s.entry.name) : s.slam + " — not available"}">${s.abbr}</button>`;
       })
       .join("");
+    const inner =
+      yearStep(-1, prevY) + `<span class="yr">${opts.year}</span>` + yearStep(1, nextY) + slots;
     switcher =
-      `<div class="seg slam-switch" role="group" aria-label="Grand Slam">` +
-      yearStep(-1, prevY) + `<span class="yr">${opts.year}</span>` + yearStep(1, nextY) +
-      slots + `</div>`;
+      `<div class="seg slam-switch only-wide" role="group" aria-label="Grand Slam">` + inner + `</div>`;
+    const cur = slamsHere.find((s) => s.slam === opts.slam);
+    const slamOpen = opts.open === "slam";
+    slamDD =
+      `<div class="dd only-narrow">` +
+      `<button class="ctrl dd-trig" data-action="toggle-menu" data-menu="slam" aria-haspopup="true" aria-expanded="${slamOpen}">` +
+      `${opts.year} ${escapeHtml(cur?.abbr ?? "Slam")} <span class="dd-caret" aria-hidden="true">▾</span></button>` +
+      (slamOpen ? `<div class="dd-pop dd-pop-slam" role="menu"><div class="dd-slam">${inner}</div></div>` : "") +
+      `</div>`;
   }
+
+  const lensOpen = opts.open === "lens";
+  const lensInline = `<div class="seg lens-seg only-wide" role="group" aria-label="Colour by">${COLOR_DIMS.map(dimBtn).join("")}</div>`;
+  const lensDD =
+    `<div class="dd dd-right only-narrow">` +
+    `<button class="ctrl dd-trig" data-action="toggle-menu" data-menu="lens" aria-haspopup="true" aria-expanded="${lensOpen}">` +
+    `${DIM_LABELS[opts.colorDim]} <span class="dd-caret" aria-hidden="true">▾</span></button>` +
+    (lensOpen ? `<div class="dd-pop" role="menu">${COLOR_DIMS.map(dimBtn).join("")}</div>` : "") +
+    `</div>`;
 
   return (
     `<header class="controls">` +
@@ -212,11 +232,18 @@ export function renderControls(opts: {
     `<img class="brand-mark" src="/logo.svg" width="28" height="28" alt="" />` +
     `<span class="brand-name">Tennis<span>Arc</span></span></a>` +
     `<div class="seg tour-seg" role="group" aria-label="Tour">${tours.map(tourBtn).join("")}</div>` +
-    switcher +
-    `<div class="seg lens-seg" role="group" aria-label="Colour by">${COLOR_DIMS.map(dimBtn).join("")}</div>` +
+    switcher + slamDD +
+    lensInline + lensDD +
     `<button class="ctrl theme" data-action="theme" aria-label="Toggle theme">${opts.theme === "dark" ? "☀" : "☾"}</button>` +
+    `<a class="ctrl issues-link" href="https://github.com/tsenoner/TennisArc/issues" target="_blank" rel="noopener noreferrer" aria-label="Report an issue on GitHub">Issues</a>` +
     `</header>`
   );
+}
+
+/** Mobile-only floating button that opens the lens drawer; its label names the active lens. */
+export function renderPanelFab(dim: ColorDim): string {
+  const label = dim === "time" ? "Time on court" : dim === "seed" ? "Seeds" : "Nations";
+  return `<button class="panel-fab" data-action="panel" aria-label="Open ${escapeHtml(label)} panel">${escapeHtml(label)}</button>`;
 }
 
 export function renderLegend(dim: ColorDim): string {
@@ -234,7 +261,8 @@ export function renderLeaderboard(rows: LeaderRow[]): string {
       return (
         `<li class="lb-row">` +
         `<span class="lb-rank">${i + 1}</span>` +
-        `<span class="lb-name">${escapeHtml(r.name)} <span class="lb-ctry">${flagEmoji(r.country)} ${escapeHtml(r.country)}</span></span>` +
+        `<span class="lb-name"><span class="lb-who">${escapeHtml(r.name)}</span>` +
+        `<span class="lb-ctry">${flagEmoji(r.country)} ${escapeHtml(r.country)}</span></span>` +
         `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%"></span></span>` +
         `<span class="lb-time">${formatDuration(r.sec)}${r.provisional ? "*" : ""}</span>` +
         `</li>`

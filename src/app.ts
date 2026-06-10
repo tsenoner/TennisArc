@@ -3,7 +3,7 @@ import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout,
-  renderSeedPanel, renderCountryPanel, renderMatchInsight, roundAbbrev, type ReadoutInfo,
+  renderSeedPanel, renderCountryPanel, renderMatchInsight, roundAbbrev, renderPanelFab, type ReadoutInfo,
 } from "./render";
 import { flagEmoji } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -28,6 +28,8 @@ interface AppState {
   selectedNodeId: string | undefined;
   selectedCountry: string | undefined;
   theme: Theme;
+  openMenu: "slam" | "lens" | undefined;
+  panelOpen: boolean;
 }
 
 function staleLabel(generatedAt: string | undefined, nowMs: number): string {
@@ -45,6 +47,7 @@ export function createApp(root: HTMLElement): void {
   const state: AppState = {
     tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
     colorDim: "time", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, selectedCountry: undefined, theme,
+    openMenu: undefined, panelOpen: false,
   };
   let store: Store | undefined;
 
@@ -89,6 +92,7 @@ export function createApp(root: HTMLElement): void {
   const controlsOpts = () => ({
     tour: state.tour, colorDim: state.colorDim, theme: state.theme,
     index: state.index, year: state.year || undefined, slam: state.slam || undefined,
+    open: state.openMenu,
   });
 
   const draw = () => {
@@ -115,16 +119,23 @@ export function createApp(root: HTMLElement): void {
       state.colorDim === "country"
         ? flagEmoji(snap.players[occ]?.country ?? "")
         : surname(snap.players[occ]?.name ?? occ);
-    const panel = state.selectedMatchId && snap.matches[state.selectedMatchId]
-      ? (() => {
-          const mm = snap.matches[state.selectedMatchId!];
-          const ins = matchInsight(snap, state.selectedMatchId!, time)!;
-          const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
-          return renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
-        })()
-      : state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap), snap.rounds)
-      : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
-      : renderLeaderboard(timeLeaderboard(snap, time));
+    const isMatch = !!(state.selectedMatchId && snap.matches[state.selectedMatchId]);
+    let panel: string;
+    if (isMatch) {
+      const mm = snap.matches[state.selectedMatchId!];
+      const ins = matchInsight(snap, state.selectedMatchId!, time)!;
+      const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
+      panel = renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
+    } else {
+      const lens = state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap), snap.rounds)
+        : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
+        : renderLeaderboard(timeLeaderboard(snap, time));
+      // The lens panel doubles as a mobile bottom drawer; `.open` (state.panelOpen) slides it in,
+      // the scrim dims the bracket behind it. Both are inert on desktop (CSS).
+      const drawer = state.panelOpen ? lens.replace('class="', 'class="open ') : lens;
+      panel = `<div class="lens-scrim${state.panelOpen ? " open" : ""}" data-action="panel" aria-hidden="true"></div>` +
+        drawer + renderPanelFab(state.colorDim);
+    }
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     const defaultId = focusOcc ?? tree.occupant ?? null;
     ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected };
@@ -173,10 +184,18 @@ export function createApp(root: HTMLElement): void {
     if (!el || el.hasAttribute("disabled")) return;
     const a = el.dataset.action;
     const id = el.dataset.id;
-    if (a === "tour" && el.dataset.tour) {
+    if (a === "toggle-menu" && el.dataset.menu) {
+      const m = el.dataset.menu as "slam" | "lens";
+      state.openMenu = state.openMenu === m ? undefined : m;
+      draw();
+    } else if (a === "panel") {
+      state.panelOpen = !state.panelOpen;
+      draw();
+    } else if (a === "tour" && el.dataset.tour) {
       selectForTour(el.dataset.tour as Tour);
     } else if (a === "slam" && el.dataset.slam) {
       state.slam = el.dataset.slam;
+      state.openMenu = undefined;
       state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.selectedCountry = undefined;
       draw(); void load(state.tour, state.year, state.slam);
     } else if (a === "year" && el.dataset.year) {
@@ -186,11 +205,13 @@ export function createApp(root: HTMLElement): void {
         const keep = slots.find((s) => s.entry && s.slam === state.slam);
         state.year = y;
         state.slam = (keep ?? slots.find((s) => s.entry))?.slam ?? state.slam;
+        state.openMenu = undefined;
         state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.selectedCountry = undefined;
         draw(); void load(state.tour, state.year, state.slam);
       }
     } else if (a === "colordim" && el.dataset.dim) {
       state.colorDim = el.dataset.dim as ColorDim;
+      state.openMenu = undefined;
       if (state.colorDim !== "country") state.selectedCountry = undefined;
       state.selectedMatchId = undefined; state.selectedNodeId = undefined;
       draw();
@@ -208,6 +229,7 @@ export function createApp(root: HTMLElement): void {
       } else {
         state.selectedMatchId = el.dataset.match;
         state.selectedNodeId = id;
+        state.panelOpen = false;   // a selected match replaces the lens drawer with the match sheet
       }
       draw();
     } else if (a === "focus" && el.dataset.id) {
@@ -228,10 +250,19 @@ export function createApp(root: HTMLElement): void {
   });
   root.addEventListener("pointerleave", () => updateReadout(null), true);
 
-  // Escape closes the match detail (incl. the mobile bottom sheet), else un-zooms a focused section.
+  // Outside-tap closes an open top-bar dropdown (no-op when nothing is open).
+  document.addEventListener("pointerdown", (e) => {
+    if (!state.openMenu) return;
+    if ((e.target as HTMLElement).closest(".dd")) return;
+    state.openMenu = undefined; draw();
+  });
+
+  // Escape unwinds the most recently opened layer: dropdown → match detail → lens drawer → focused section.
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (state.selectedMatchId) { state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw(); }
+    if (state.openMenu) { state.openMenu = undefined; draw(); }
+    else if (state.selectedMatchId) { state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw(); }
+    else if (state.panelOpen) { state.panelOpen = false; draw(); }
     else if (state.focusId) { state.focusId = undefined; draw(); }
   });
 

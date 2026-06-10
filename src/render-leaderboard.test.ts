@@ -19,6 +19,14 @@ describe("renderLeaderboard", () => {
     expect(html).toContain("width:100%");
   });
 
+  it("puts the name and country on separate spans so the full name gets the row", () => {
+    const html = renderLeaderboard(rows, () => "#e0683c");
+    expect(html).toContain('<span class="lb-who">Carlos Alcaraz</span>');
+    expect(html).toMatch(/<span class="lb-ctry">[^<]*ESP<\/span>/);
+    // country is no longer nested inline after the name on the same span
+    expect(html).not.toMatch(/Carlos Alcaraz <span class="lb-ctry">/);
+  });
+
   it("renders an empty list without throwing", () => {
     expect(renderLeaderboard([]).toString()).toContain("leaderboard");
   });
