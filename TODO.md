@@ -132,14 +132,14 @@ chmod +x ~/TennisArc/scripts/cron-refresh.sh
 
 ---
 
-## UX overhaul — known follow-ups (from the 2026-06-09 final review)
+## UX overhaul — follow-ups (tracked as GitHub issues)
 
-The overhaul (write-once labels, centre readout, 3 lens panels, match insight, multi-slam, birthdates) shipped on `feat/ux-overhaul`. Deferred, non-blocking items the final cross-plan review surfaced:
+The overhaul (write-once labels, centre readout, 3 lens panels, match insight, multi-slam, surface ELO, birthdates) shipped to `main` + production on 2026-06-09. The deferred, non-blocking items the final cross-plan review surfaced are tracked as issues:
 
-- [ ] **Keyboard / screen-reader accessibility for the bracket.** The SVG arcs are pointer-only and the `<svg role="img">` collapses the subtree for assistive tech, so the draw isn't keyboard-navigable. Add Enter/Space activation for `inspect` + an accessible **linear fallback** list of the draw (the original design anticipated this), and give the Country rows + toggle buttons proper `button`/`aria-pressed`/`aria-expanded` semantics. (Control buttons already got `aria-pressed`/`aria-current`.)
-- [ ] **Cross-platform SVG flags.** `src/flags.ts` uses Unicode emoji flags — crisp on macOS/iOS/Android but **rendered as letter-boxes on Windows**. Bundle the `flag-icons` SVG set (ISO alpha-2, tree-shaken to the ~80 nations that appear) for parity. Deliberate v1 deviation from spec §8.
-- [ ] **Country-lens centre readout summary (spec §5).** When a nation is selected on the Country lens, show a nation summary ("🇮🇹 Italy — 1 of 4 in") in the centre instead of the per-player card.
-- [ ] **Guard `inspect` on projected/TBD arcs.** Mid-tournament, clicking an unplayed arc opens a near-empty match insight; skip it (or render a "not played yet" state). Not visible on a completed slam.
-- [ ] **Retire `Player.ageYears`.** Age now comes from `birthdate` → `ageOn`; `ageYears` (Tennis Abstract static age) is unused by the UI. Either drop it from the model + ingest, or use it as the fallback for the ~1–2% of players without a DOB match.
-- [ ] **`slamStatus` "upcoming".** `ingest/manifest.ts` never returns `"upcoming"` (defaults to `"live"`); emit it for a pre-play draw so the switcher can distinguish not-yet-started slams.
-- [ ] Nits: `encodeURI`/escape the SofaScore deep-link URL in `renderMatchInsight`; tidy the `winProbability` non-null assertions in `seedInsights`/`matchInsight` (TS narrowing lost through the `fav`/`oth` indirection).
+- [#5](https://github.com/tsenoner/TennisArc/issues/5) — a11y: keyboard + screen-reader access for the bracket
+- [#6](https://github.com/tsenoner/TennisArc/issues/6) — bundle SVG flags (Windows emoji-flag gap)
+- [#7](https://github.com/tsenoner/TennisArc/issues/7) — country-lens nation summary in the centre readout
+- [#8](https://github.com/tsenoner/TennisArc/issues/8) — guard match insight on projected/TBD arcs
+- [#9](https://github.com/tsenoner/TennisArc/issues/9) — retire `Player.ageYears`
+- [#10](https://github.com/tsenoner/TennisArc/issues/10) — `slamStatus` "upcoming"
+- [#11](https://github.com/tsenoner/TennisArc/issues/11) — small cleanups (deep-link URL escaping, `winProbability` assertions)
