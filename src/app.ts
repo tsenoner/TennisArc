@@ -222,6 +222,13 @@ export function createApp(root: HTMLElement): void {
   });
   root.addEventListener("pointerleave", () => updateReadout(null), true);
 
+  // Escape closes the match detail (incl. the mobile bottom sheet), else un-zooms a focused section.
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (state.selectedMatchId) { state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw(); }
+    else if (state.focusId) { state.focusId = undefined; draw(); }
+  });
+
   draw(); // initial loading state
   void (async () => {
     store = await createStore();

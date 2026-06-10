@@ -84,16 +84,27 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .mi-scrim { display: none; }
 
 @media (max-width: 720px) {
-  /* one scrollable control bar instead of 2–3 wrapped rows — reclaims vertical space */
+  /* one scrollable control bar instead of 2–3 wrapped rows — reclaims vertical space.
+     The right-edge fade is a "scroll for more →" affordance so the lens/theme controls
+     (which sit past the slam switcher) are discoverable rather than silently clipped. */
   .controls { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 6px; padding: 8px 10px;
-    scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent); }
   .controls::-webkit-scrollbar { display: none; }
   .controls > * { flex: 0 0 auto; }
   .brand { margin-right: 2px; }
   .brand-name { display: none; }            /* logo only on phones */
   .ctrl { padding: 6px 9px; }
   .ctrl.theme { margin-left: 0; }           /* stay inline at the end of the scroll row */
-  .slam-switch .ctrl.slam { min-width: 26px; }
+  /* Keep the two core mode-switches (Tour + Lens) on-screen; let the wider slam switcher
+     scroll — its clipped trailing button + the edge fade are the "scroll for more" cue.
+     (Source order is Tour → Slam → Lens, so reorder via flex `order` on mobile only.) */
+  .controls .tour-seg { order: 1; }
+  .controls .lens-seg { order: 2; }
+  .controls .slam-switch { order: 3; }
+  .controls .ctrl.theme { order: 4; }
+  .controls .slam-switch .ctrl.slam { min-width: 26px; }  /* 4 classes → beats base 30px rule */
 
   .stage { flex-direction: column; }
   .sunburst { min-height: 52vh; }
@@ -133,6 +144,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .sunburst { position: relative; }
 .readout { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 158px; text-align: center; pointer-events: none; }
 .readout.filled { padding: 9px 12px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--panel);  /* opaque fallback for browsers without color-mix() */
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   box-shadow: 0 6px 22px rgba(0, 0, 0, .38); }

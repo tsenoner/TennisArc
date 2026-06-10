@@ -122,9 +122,9 @@ export function renderControls(opts: {
     `<a class="brand" href="/" aria-label="TennisArc home">` +
     `<img class="brand-mark" src="/logo.svg" width="28" height="28" alt="" />` +
     `<span class="brand-name">Tennis<span>Arc</span></span></a>` +
-    `<div class="seg" role="group" aria-label="Tour">${tours.map(tourBtn).join("")}</div>` +
+    `<div class="seg tour-seg" role="group" aria-label="Tour">${tours.map(tourBtn).join("")}</div>` +
     switcher +
-    `<div class="seg" role="group" aria-label="Colour by">${COLOR_DIMS.map(dimBtn).join("")}</div>` +
+    `<div class="seg lens-seg" role="group" aria-label="Colour by">${COLOR_DIMS.map(dimBtn).join("")}</div>` +
     `<button class="ctrl theme" data-action="theme" aria-label="Toggle theme">${opts.theme === "dark" ? "☀" : "☾"}</button>` +
     `</header>`
   );
@@ -263,7 +263,7 @@ export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
         : r.alive
         ? `<span class="sp-rd alive">in · ${escapeHtml(label)}</span>`
         : `<span class="sp-rd">out · ${escapeHtml(label)}</span>`;
-      const bolt = r.upset ? ` <span class="sp-bolt" title="lost as the favourite">⚡</span>` : "";
+      const bolt = r.upset ? ` <span class="sp-bolt" role="img" aria-label="upset — lost as the favourite">⚡</span>` : "";
       return (
         `<li class="sp-row${r.alive ? " on" : ""}">` +
         `<span class="sp-seed">${r.seed}</span>` +
