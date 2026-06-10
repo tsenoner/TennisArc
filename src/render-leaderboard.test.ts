@@ -9,7 +9,7 @@ const rows: LeaderRow[] = [
 
 describe("renderLeaderboard", () => {
   it("renders one row per leader with rank, escaped name, bar and formatted time", () => {
-    const html = renderLeaderboard(rows, () => "#e0683c");
+    const html = renderLeaderboard(rows);
     expect((html.match(/class="lb-row"/g) ?? []).length).toBe(2);
     expect(html).toContain("Carlos Alcaraz");
     expect(html).toContain("Jannik &lt;Sinner&gt;"); // escaped, no raw <
@@ -20,6 +20,6 @@ describe("renderLeaderboard", () => {
   });
 
   it("renders an empty list without throwing", () => {
-    expect(renderLeaderboard([], () => "#000")).toContain("leaderboard");
+    expect(renderLeaderboard([]).toString()).toContain("leaderboard");
   });
 });

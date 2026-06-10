@@ -1,7 +1,7 @@
 import { scaleLinear } from "d3-scale";
 import { interpolateRgbBasis } from "d3-interpolate";
 import type { Snapshot } from "./model";
-import type { PlayerTime } from "./state";
+import { cumulativeOnCourt } from "./state";
 
 export type ColorDim = "time" | "seed" | "country";
 export const COLOR_DIMS: ColorDim[] = ["time", "seed", "country"];
@@ -19,26 +19,34 @@ const COUNTRY_HL = "#4ea1ff";
 export const HEAT_STOPS = ["#2f6f8f", "#d9a441", "#e0683c"];
 export const SEED_STOPS = ["#433f5c", "#7c5cc9", "#b794f6"];
 
-export type ColorFn = (playerId: string | null) => string;
+/** The per-arc inputs a colour function reads: who occupies the arc and which ring (depth) it is. */
+export interface ArcColorInput { occupant: string | null; depth: number; }
+export type ColorFn = (arc: ArcColorInput) => string;
 
-export function colorScale(
-  dim: ColorDim, s: Snapshot, time: Map<string, PlayerTime>, selectedCountry?: string,
-): ColorFn {
+export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string): ColorFn {
   if (dim === "time") {
-    const max = Math.max(1, ...[...time.values()].map((v) => v.sec));
-    const t = scaleLinear<number>().domain([0, max]).range([0, 1]).clamp(true);
-    return (id) => (id && time.has(id) ? HEAT(t(time.get(id)!.sec)) : NEUTRAL);
+    // Each arc is coloured by its occupant's cumulative court time *through that ring's round* —
+    // the outer ring (R128) is their first match and the heat builds inward — rather than one
+    // flat per-player total. Ring → round: the outer leaf ring is round 0, the centre the final.
+    const cum = cumulativeOnCourt(s);
+    const numRounds = s.rounds.length;
+    const t = scaleLinear<number>().domain([0, cum.max]).range([0, 1]).clamp(true);
+    return ({ occupant, depth }) => {
+      if (!occupant) return NEUTRAL;
+      const round = Math.max(0, Math.min(numRounds - depth, numRounds - 1));
+      return HEAT(t(cum.through(occupant, round)));
+    };
   }
   if (dim === "seed") {
     const t = scaleLinear<number>().domain([1, 32]).range([1, 0]).clamp(true);
-    return (id) => {
-      const seed = id ? s.players[id]?.seed : null;
+    return ({ occupant }) => {
+      const seed = occupant ? s.players[occupant]?.seed : null;
       return seed != null ? SEED(t(seed)) : NEUTRAL;   // null/undefined seed → neutral (seed 0 never occurs but is treated as valid)
     };
   }
   // country — neutral wheel; the selected nation lights up (flags carry identity)
-  return (id) => {
-    const c = id ? s.players[id]?.country : null;
+  return ({ occupant }) => {
+    const c = occupant ? s.players[occupant]?.country : null;
     if (!c) return NEUTRAL;
     return selectedCountry && c === selectedCountry ? COUNTRY_HL : COUNTRY_MUTED;
   };

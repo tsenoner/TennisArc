@@ -3,7 +3,7 @@ import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout,
-  renderSeedPanel, renderCountryPanel, renderMatchInsight, type ReadoutInfo,
+  renderSeedPanel, renderCountryPanel, renderMatchInsight, roundAbbrev, type ReadoutInfo,
 } from "./render";
 import { flagEmoji } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -102,7 +102,13 @@ export function createApp(root: HTMLElement): void {
     const time = timeOnCourt(snap);
     const tree = buildSunburst(snap);
     const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
-    const color = colorScale(state.colorDim, snap, time, state.selectedCountry);
+    const color = colorScale(state.colorDim, snap, state.selectedCountry);
+    // Round axis (R128 … Final), one per ring, derived from the laid-out arcs so it follows focus/zoom.
+    const ringSeen = new Map<number, { y0: number; y1: number }>();
+    for (const a of arcs) if (a.depth >= 1 && !ringSeen.has(a.depth)) ringSeen.set(a.depth, { y0: a.y0, y1: a.y1 });
+    const rings = [...ringSeen.entries()].map(([depth, r]) => ({
+      y: (r.y0 + r.y1) / 2, label: roundAbbrev(snap.rounds.length - depth, snap.rounds),
+    }));
     const anchors = labelAnchors(tree);
     anchors.delete(tree.id); // champion is named by the centre readout — skip its cramped on-arc label
     const labelText = (occ: string) =>
@@ -118,7 +124,7 @@ export function createApp(root: HTMLElement): void {
         })()
       : state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap), snap.rounds)
       : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
-      : renderLeaderboard(timeLeaderboard(snap, time), color);
+      : renderLeaderboard(timeLeaderboard(snap, time));
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     const defaultId = focusOcc ?? tree.occupant ?? null;
     ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected };
@@ -126,7 +132,7 @@ export function createApp(root: HTMLElement): void {
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText })}` +
+        `<div class="sunburst">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText }, rings)}` +
           renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected)) + `</div>` +
         panel +
       `</div>` +

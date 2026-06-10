@@ -21,13 +21,27 @@ const arcGen = d3arc<LayoutArc>()
   .padRadius(PAD_RADIUS);
 
 export interface SunburstLabels { anchors: Set<string>; text: (occupant: string) => string; }
+/** A round name pinned to a ring's mid-radius, drawn as a faint axis at 12 o'clock. */
+export interface RingLabel { y: number; label: string; }
 
 /** Render the sunburst as a self-contained SVG string (centred), with optional write-once curved labels. */
-export function renderSunburst(arcs: LayoutArc[], color: ColorFn, size: number, labels?: SunburstLabels): string {
+export function renderSunburst(
+  arcs: LayoutArc[], color: ColorFn, size: number, labels?: SunburstLabels, rings?: RingLabel[],
+): string {
   const c = size / 2;
   const defs: string[] = [];
   const texts: string[] = [];
   const pt = (r: number, ang: number) => `${(r * Math.sin(ang)).toFixed(2)},${(-r * Math.cos(ang)).toFixed(2)}`;
+
+  // Faint round axis at 12 o'clock so each ring reads as a round (R128 … Final), following focus/zoom.
+  const ringTexts = (rings ?? [])
+    .map((rg, i) => {
+      const half = Math.min(0.42, 30 / Math.max(rg.y, 1)); // ~30px-wide tab centred on the top
+      const id = `rg${i}`;
+      defs.push(`<path id="${id}" d="M${pt(rg.y, -half)} A${rg.y},${rg.y} 0 0 1 ${pt(rg.y, half)}"></path>`);
+      return `<text class="ring-label" font-size="9"><textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(rg.label)}</textPath></text>`;
+    })
+    .join("");
 
   const paths = arcs
     .map((a) => {
@@ -56,7 +70,7 @@ export function renderSunburst(arcs: LayoutArc[], color: ColorFn, size: number, 
           );
         }
       }
-      return `<path class="${cls}" d="${d}" fill="${color(a.occupant)}" ` +
+      return `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
         `data-action="inspect" data-id="${a.id}" data-match="${a.matchId}" data-occupant="${escapeHtml(a.occupant ?? "")}"></path>`;
     })
     .join("");
@@ -65,7 +79,7 @@ export function renderSunburst(arcs: LayoutArc[], color: ColorFn, size: number, 
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
     `role="img" aria-label="Tournament bracket sunburst">` +
     `<g transform="translate(${c},${c})" data-action="reset">` +
-    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}</g></svg>`
+    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}</g></svg>`
   );
 }
 
@@ -137,7 +151,7 @@ export function renderLegend(dim: ColorDim): string {
   return `<div class="legend"><span class="${grad}" aria-hidden="true"></span><span>${label}</span></div>`;
 }
 
-export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
+export function renderLeaderboard(rows: LeaderRow[]): string {
   const max = Math.max(1, ...rows.map((r) => r.sec));
   const items = rows
     .map((r, i) => {
@@ -146,7 +160,7 @@ export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
         `<li class="lb-row">` +
         `<span class="lb-rank">${i + 1}</span>` +
         `<span class="lb-name">${escapeHtml(r.name)} <span class="lb-ctry">${flagEmoji(r.country)} ${escapeHtml(r.country)}</span></span>` +
-        `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%;background:${color(r.playerId)}"></span></span>` +
+        `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%"></span></span>` +
         `<span class="lb-time">${formatDuration(r.sec)}${r.provisional ? "*" : ""}</span>` +
         `</li>`
       );
@@ -283,7 +297,7 @@ export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
 }
 
 /** Short round label from a player's furthest-reached round index. */
-function roundAbbrev(reached: number, rounds: Round[]): string {
+export function roundAbbrev(reached: number, rounds: Round[]): string {
   if (reached >= rounds.length) return "Champion";
   const name = rounds[reached]?.name ?? `R${reached}`;
   return name

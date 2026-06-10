@@ -215,6 +215,27 @@ describe("seedProgress", () => {
   });
 });
 
+import { cumulativeOnCourt } from "./state";
+
+describe("cumulativeOnCourt", () => {
+  it("accumulates a player's match durations round by round (running total)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3 });
+    const cum = cumulativeOnCourt(s);
+    // p0 plays match 0-0 in round 0 → through(0) is exactly that match's duration
+    expect(cum.through("p0", 0)).toBe(s.matches["0-0"].durationSec ?? 0);
+    // running total is non-decreasing across rounds
+    expect(cum.through("p0", 1)).toBeGreaterThanOrEqual(cum.through("p0", 0));
+    expect(cum.through("p0", 2)).toBeGreaterThanOrEqual(cum.through("p0", 1));
+    // out-of-range round clamps to the final total
+    expect(cum.through("p0", 99)).toBe(cum.through("p0", 2));
+    expect(cum.max).toBeGreaterThan(0);
+  });
+  it("returns 0 for an unknown player", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    expect(cumulativeOnCourt(s).through("nobody", 0)).toBe(0);
+  });
+});
+
 import { countryBreakdown } from "./state";
 
 describe("countryBreakdown", () => {

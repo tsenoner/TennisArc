@@ -151,7 +151,7 @@ export interface PlayerTime {
 }
 
 /** Whether a match's on-court time should be counted, and whether it's provisional. */
-function countsTime(m: Match): { count: boolean; provisional: boolean } {
+export function countsTime(m: Match): { count: boolean; provisional: boolean } {
   if (m.status === "finished" || m.status === "retired") return { count: true, provisional: false };
   if (m.status === "live") return { count: true, provisional: true };
   return { count: false, provisional: false }; // walkover / scheduled / notstarted
@@ -181,6 +181,49 @@ export function timeOnCourt(s: Snapshot): Map<string, PlayerTime> {
     }
   }
   return out;
+}
+
+export interface CumulativeTime {
+  /** Cumulative on-court seconds a player had accrued *through* the given round index (inclusive). */
+  through(playerId: string, round: number): number;
+  max: number; // largest end-of-tournament total, for the colour domain
+}
+
+/**
+ * Running cumulative on-court time per player, by round — for the Time lens, where each ring shows
+ * the time a player had spent *so far* by the time they reached that round (R128 arc = their first
+ * match; deeper arcs add each subsequent match), rather than one flat per-player total.
+ */
+export function cumulativeOnCourt(s: Snapshot): CumulativeTime {
+  const numRounds = s.rounds.length;
+  const prefix = new Map<string, number[]>(); // playerId → per-round seconds (later prefix-summed)
+  const ensure = (pid: string): number[] => {
+    let a = prefix.get(pid);
+    if (!a) { a = new Array(Math.max(1, numRounds)).fill(0); prefix.set(pid, a); }
+    return a;
+  };
+  for (const m of Object.values(s.matches)) {
+    const { count } = countsTime(m);
+    if (!count || m.durationSec == null) continue;
+    if (m.roundIndex < 0 || m.roundIndex >= numRounds) continue;
+    for (const side of ["p1", "p2"] as const) {
+      const pid = m[side];
+      if (pid) ensure(pid)[m.roundIndex] += m.durationSec; // ≤ 1 match per player per round
+    }
+  }
+  let max = 1;
+  for (const arr of prefix.values()) {
+    for (let r = 1; r < arr.length; r++) arr[r] += arr[r - 1]; // in-place prefix sum
+    if (arr[arr.length - 1] > max) max = arr[arr.length - 1];
+  }
+  return {
+    through: (pid, round) => {
+      const arr = prefix.get(pid);
+      if (!arr || !arr.length) return 0;
+      return arr[Math.max(0, Math.min(round, arr.length - 1))];
+    },
+    max,
+  };
 }
 
 export interface LeaderRow {
