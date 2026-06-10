@@ -40,13 +40,24 @@ trap cleanup EXIT
 # 1. Refresh the active slam (a fast no-op between tournaments — no browser launched).
 pnpm ingest
 
-# 2. Carry forward previously-published slams so completed majors persist with no manual freeze:
-#    pull the published `data` branch and copy any per-slam snapshot it holds that we don't already
-#    have locally. The existence check means the freshly-ingested active slam and the committed seed
-#    always win; only genuinely-absent past slams are restored. FETCH_HEAD is reused in step 8.
+# 2. Carry forward previously-published slams so completed majors persist with no manual freeze.
+#    FIRST learn whether a published `data` branch exists, independently of the fetch: this is the
+#    difference between "first publish ever" (safe to create the branch from the seed) and "the
+#    branch is live but we failed to read it" (must NOT force-push a seed-only tree over it and lose
+#    branch-only slams). ls-remote --exit-code: rc 0 = ref exists, 2 = absent, other = unreachable.
+REMOTE_HAS_DATA=0
+rc=0; git ls-remote --exit-code --heads "$REMOTE" data >/dev/null 2>&1 || rc=$?
+if   [ "$rc" = 0 ]; then REMOTE_HAS_DATA=1
+elif [ "$rc" = 2 ]; then REMOTE_HAS_DATA=0
+else echo "cannot reach the remote to check the data branch — aborting (no publish)" >&2; exit 1
+fi
+
+#    Then pull the branch and copy any per-slam snapshot it holds that we don't already have locally.
+#    The existence check means the freshly-ingested active slam and the committed seed always win;
+#    only genuinely-absent past slams are restored. FETCH_HEAD is reused in step 8.
 #    (Avoid `cp -n`: BSD/macOS cp exits non-zero when it skips, which would trip `set -e`.)
 HAVE_PUBLISHED=0
-if git fetch "$REMOTE" data 2>/dev/null; then
+if [ "$REMOTE_HAS_DATA" = 1 ] && git fetch "$REMOTE" data 2>/dev/null; then
   HAVE_PUBLISHED=1
   git archive FETCH_HEAD 2>/dev/null | tar -x -C "$PUB_DIR" 2>/dev/null || true
   shopt -s nullglob
@@ -55,6 +66,13 @@ if git fetch "$REMOTE" data 2>/dev/null; then
     [ -e "$dest" ] || cp "$f" "$dest"
   done
   shopt -u nullglob
+fi
+
+#    Guard the data-loss path: the branch exists but we couldn't fetch it → refuse to publish, since
+#    a force-push now would overwrite slams we were unable to carry forward.
+if [ "$REMOTE_HAS_DATA" = 1 ] && [ "$HAVE_PUBLISHED" = 0 ]; then
+  echo "data branch exists but could not be fetched — refusing to publish (would risk data loss)" >&2
+  exit 1
 fi
 
 # 3. Rebuild the manifest from every per-slam snapshot now on disk (seed + active + carried).
@@ -80,7 +98,16 @@ git worktree add --orphan -b data-pub "$WORKTREE_DIR" >/dev/null
   git commit -q -m "data: refresh $(date -u +%FT%TZ)"
 )
 
-count_snaps() { ls "$1"/atp-[0-9]*-*.json "$1"/wta-[0-9]*-*.json 2>/dev/null | wc -l | tr -d ' '; }
+# Count per-slam snapshots in a dir. Uses a nullglob array, NOT `ls`: under bash 3.2 (the macOS
+# /usr/bin/env bash) an unmatched glob makes `ls` exit 1, which `pipefail` + `set -e` would turn
+# into a whole-script abort on any single-tour / empty dir. `${#files[@]}` is safe under `set -u`.
+count_snaps() {
+  local d="$1"; local -a files
+  shopt -s nullglob
+  files=( "$d"/atp-[0-9]*-*.json "$d"/wta-[0-9]*-*.json )
+  shopt -u nullglob
+  echo "${#files[@]}"
+}
 
 # 7. Safety guard: never publish FEWER snapshots than are already live. With carry-forward the new
 #    tree is always a superset; if it somehow shrank, a bug is afoot — abort rather than wipe data.
