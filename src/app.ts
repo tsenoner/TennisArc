@@ -99,10 +99,19 @@ export function createApp(root: HTMLElement): void {
     for (const n of hlNodes) n.classList.remove("arc-hl");
     hlNodes = [];
     if (!playerId || !sb) { sb?.classList.remove("arc-dim-mode"); return; }
+    // playerId comes from a row's data-occupant, read back DECODED (the browser undoes the escapeHtml
+    // applied when the arc was written). CSS.escape escapes that decoded value for the selector, so the
+    // two escapers act on different layers (HTML serialization vs CSS selector) and need not match byte-for-byte.
     hlNodes = [...root.querySelectorAll(`.sunburst path.arc[data-occupant="${CSS.escape(playerId)}"]`)];
     for (const n of hlNodes) n.classList.add("arc-hl");
     sb.classList.toggle("arc-dim-mode", hlNodes.length > 0);
   };
+
+  // Top-bar dropdown menu helpers (mobile): the trigger button, and the focusable (non-disabled) menu items.
+  const ddTrigger = (m: "slam" | "lens") =>
+    root.querySelector<HTMLElement>(`.dd [data-action="toggle-menu"][data-menu="${m}"]`);
+  const ddItems = () =>
+    [...root.querySelectorAll<HTMLElement>('.dd-pop [role^="menuitem"]:not([disabled])')];
 
   const controlsOpts = () => ({
     tour: state.tour, colorDim: state.colorDim, theme: state.theme,
@@ -200,11 +209,17 @@ export function createApp(root: HTMLElement): void {
     if (!el || el.hasAttribute("disabled")) return;
     const a = el.dataset.action;
     const id = el.dataset.id;
+    const menuBefore = state.openMenu;   // a selection inside an open dropdown should return focus to its trigger
     if (a === "toggle-menu" && el.dataset.menu) {
       const m = el.dataset.menu as "slam" | "lens";
-      state.openMenu = state.openMenu === m ? undefined : m;
+      const willOpen = state.openMenu !== m;
+      state.openMenu = willOpen ? m : undefined;
       draw();
-    } else if (a === "panel") {
+      // Move focus into the just-opened menu (first item) or keep it on the trigger when it closes.
+      if (willOpen) ddItems()[0]?.focus(); else ddTrigger(m)?.focus();
+      return;
+    }
+    if (a === "panel") {
       state.panelOpen = !state.panelOpen;
       draw();
     } else if (a === "tour" && el.dataset.tour) {
@@ -262,6 +277,8 @@ export function createApp(root: HTMLElement): void {
     } else if (a === "reset" || id === "r" || (id && id === state.focusId)) {
       state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw();
     }
+    // Selecting a slam/year/lens item from inside an open dropdown closes it → restore focus to its trigger.
+    if (menuBefore && state.openMenu === undefined) ddTrigger(menuBefore)?.focus();
   });
 
   root.addEventListener("pointermove", (e) => {
@@ -279,10 +296,32 @@ export function createApp(root: HTMLElement): void {
     state.openMenu = undefined; draw();
   });
 
+  // Keyboard support for an open dropdown (ARIA menu pattern): Arrow/Home/End rove between items;
+  // Tab closes the menu and returns focus to its trigger so it isn't lost when the tree re-renders.
+  window.addEventListener("keydown", (e) => {
+    if (!state.openMenu) return;
+    if (e.key === "Tab") {
+      const m = state.openMenu;
+      state.openMenu = undefined; e.preventDefault(); draw(); ddTrigger(m)?.focus();
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") return;
+    const items = ddItems();
+    if (!items.length) return;
+    e.preventDefault();
+    const idx = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      e.key === "Home" ? 0
+      : e.key === "End" ? items.length - 1
+      : e.key === "ArrowDown" ? (idx + 1) % items.length
+      : (idx - 1 + items.length) % items.length;
+    items[next]?.focus();
+  });
+
   // Escape unwinds the most recently opened layer: dropdown → match detail → lens drawer → focused section.
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (state.openMenu) { state.openMenu = undefined; draw(); }
+    if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
     else if (state.selectedMatchId) { state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw(); }
     else if (state.panelOpen) { state.panelOpen = false; draw(); }
     else if (state.focusId) { state.focusId = undefined; draw(); }

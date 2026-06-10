@@ -182,8 +182,13 @@ export function renderControls(opts: {
   const tours: Tour[] = ["ATP", "WTA"];
   const tourBtn = (t: Tour) =>
     `<button class="ctrl${opts.tour === t ? " active" : ""}" data-action="tour" data-tour="${t}" aria-pressed="${opts.tour === t}">${t}</button>`;
-  const dimBtn = (d: ColorDim) =>
-    `<button class="ctrl${opts.colorDim === d ? " active" : ""}" data-action="colordim" data-dim="${d}" aria-pressed="${opts.colorDim === d}">${DIM_LABELS[d]}</button>`;
+  // `menu` switches a button from plain group semantics (aria-pressed / aria-current) to ARIA
+  // menu-item semantics, used when the same control is rendered inside a role="menu" popover.
+  const dimBtn = (d: ColorDim, menu = false) => {
+    const sel = opts.colorDim === d;
+    const a11y = menu ? ` role="menuitemradio" aria-checked="${sel}"` : ` aria-pressed="${sel}"`;
+    return `<button class="ctrl${sel ? " active" : ""}"${a11y} data-action="colordim" data-dim="${d}">${DIM_LABELS[d]}</button>`;
+  };
 
   let switcher = "";          // inline slam switcher (desktop / .only-wide)
   let slamDD = "";            // narrow dropdown wrapping the same year/slam buttons
@@ -192,38 +197,38 @@ export function renderControls(opts: {
     const i = years.indexOf(opts.year);
     const prevY = i >= 0 && i + 1 < years.length ? years[i + 1] : "";
     const nextY = i > 0 ? years[i - 1] : "";
-    const yearStep = (delta: number, target: number | "") =>
-      `<button class="ctrl yr-step" data-action="year" data-year="${target}"${target === "" ? " disabled" : ""} aria-label="${delta < 0 ? "Previous" : "Next"} year">${delta < 0 ? "◀" : "▶"}</button>`;
+    const yearStep = (delta: number, target: number | "", menu = false) =>
+      `<button class="ctrl yr-step"${menu ? ' role="menuitem"' : ""} data-action="year" data-year="${target}"${target === "" ? " disabled" : ""} aria-label="${delta < 0 ? "Previous" : "Next"} year">${delta < 0 ? "◀" : "▶"}</button>`;
     const slamsHere = slamsForYear(opts.index, opts.year, opts.tour);
-    const slots = slamsHere
-      .map((s) => {
-        const on = opts.slam === s.slam ? " active" : "";
-        const off = s.entry ? "" : " disabled";
-        const live = s.entry?.status === "live" ? " live" : "";
-        return `<button data-action="slam" data-slam="${s.slam}" class="ctrl slam${on}${live}"${off ? " disabled" : ""}${on ? ' aria-current="true"' : ""} data-surface="${s.surface}" title="${s.entry ? escapeHtml(s.entry.name) : s.slam + " — not available"}">${s.abbr}</button>`;
-      })
-      .join("");
-    const inner =
-      yearStep(-1, prevY) + `<span class="yr">${opts.year}</span>` + yearStep(1, nextY) + slots;
+    const slamBtn = (s: (typeof slamsHere)[number], menu = false) => {
+      const on = opts.slam === s.slam;
+      const off = s.entry ? "" : " disabled";
+      const live = s.entry?.status === "live" ? " live" : "";
+      const a11y = menu ? ` role="menuitemradio" aria-checked="${on}"` : (on ? ' aria-current="true"' : "");
+      return `<button data-action="slam" data-slam="${s.slam}" class="ctrl slam${on ? " active" : ""}${live}"${off ? " disabled" : ""}${a11y} data-surface="${s.surface}" title="${s.entry ? escapeHtml(s.entry.name) : s.slam + " — not available"}">${s.abbr}</button>`;
+    };
+    const inner = (menu: boolean) =>
+      yearStep(-1, prevY, menu) + `<span class="yr">${opts.year}</span>` + yearStep(1, nextY, menu) +
+      slamsHere.map((s) => slamBtn(s, menu)).join("");
     switcher =
-      `<div class="seg slam-switch only-wide" role="group" aria-label="Grand Slam">` + inner + `</div>`;
+      `<div class="seg slam-switch only-wide" role="group" aria-label="Grand Slam">` + inner(false) + `</div>`;
     const cur = slamsHere.find((s) => s.slam === opts.slam);
     const slamOpen = opts.open === "slam";
     slamDD =
       `<div class="dd only-narrow">` +
       `<button class="ctrl dd-trig" data-action="toggle-menu" data-menu="slam" aria-haspopup="true" aria-expanded="${slamOpen}">` +
       `${opts.year} ${escapeHtml(cur?.abbr ?? "Slam")} <span class="dd-caret" aria-hidden="true">▾</span></button>` +
-      (slamOpen ? `<div class="dd-pop dd-pop-slam" role="menu"><div class="dd-slam">${inner}</div></div>` : "") +
+      (slamOpen ? `<div class="dd-pop dd-pop-slam" role="menu"><div class="dd-slam">${inner(true)}</div></div>` : "") +
       `</div>`;
   }
 
   const lensOpen = opts.open === "lens";
-  const lensInline = `<div class="seg lens-seg only-wide" role="group" aria-label="Colour by">${COLOR_DIMS.map(dimBtn).join("")}</div>`;
+  const lensInline = `<div class="seg lens-seg only-wide" role="group" aria-label="Colour by">${COLOR_DIMS.map((d) => dimBtn(d)).join("")}</div>`;
   const lensDD =
     `<div class="dd dd-right only-narrow">` +
     `<button class="ctrl dd-trig" data-action="toggle-menu" data-menu="lens" aria-haspopup="true" aria-expanded="${lensOpen}">` +
     `${DIM_LABELS[opts.colorDim]} <span class="dd-caret" aria-hidden="true">▾</span></button>` +
-    (lensOpen ? `<div class="dd-pop" role="menu">${COLOR_DIMS.map(dimBtn).join("")}</div>` : "") +
+    (lensOpen ? `<div class="dd-pop" role="menu">${COLOR_DIMS.map((d) => dimBtn(d, true)).join("")}</div>` : "") +
     `</div>`;
 
   return (
