@@ -190,7 +190,7 @@ describe("labelAnchors", () => {
 import { seedProgress } from "./state";
 
 describe("seedProgress", () => {
-  it("lists each seed ordered by ranking, carrying surface ELO, and flags ELO upsets", () => {
+  it("lists the seeds in seed order, carries surface ELO, and flags ELO upsets", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
     // make the round-0 loser the higher-ELO favourite so their loss reads as an upset
     const m = s.matches["0-0"];
@@ -199,23 +199,39 @@ describe("seedProgress", () => {
     s.players[win] = { ...s.players[win], elo: { overall: 1800, hard: 1800, clay: 1800, grass: 1800 } };
     s.players[lose] = { ...s.players[lose], elo: { overall: 2000, hard: 2000, clay: 2000, grass: 2000 } };
     const out = seedProgress(s);
-    expect(out.seedsTotal).toBe(8);       // all 8 in a draw of 8 are seeded
-    expect(out.seedsRemaining).toBe(1);   // only the champion survives a completed draw
+    expect(out.mode).toBe("seed");
+    expect(out.total).toBe(8);       // all 8 in a draw of 8 are seeded
+    expect(out.remaining).toBe(1);   // only the champion survives a completed draw
     expect(out.rows).toHaveLength(8);
-    // ranking-ascending ordering (best-ranked first; ranking ?? Infinity, tie-break by seed)
+    // seed-ascending ordering; the badge rank equals the seed number
     for (let i = 1; i < out.rows.length; i++) {
-      const ra = out.rows[i - 1].ranking ?? Infinity, rb = out.rows[i].ranking ?? Infinity;
-      expect(ra).toBeLessThanOrEqual(rb);
+      expect(out.rows[i].seed!).toBeGreaterThan(out.rows[i - 1].seed!);
     }
-    // each row carries ranking and the surface ELO (clay)
+    expect(out.rows[0]).toMatchObject({ rank: 1, seed: 1 });
+    // each row carries the surface ELO (clay)
     const loser = out.rows.find((r) => r.playerId === lose)!;
-    expect(loser.ranking).not.toBeNull();
     expect(loser.elo).toBe(2000); // clay ELO of the (overridden) favourite
     // the favourite who lost round 0 is out, reached nothing, and is flagged as an upset
     expect(loser).toMatchObject({ alive: false, roundReached: 0, upset: true });
     // the champion is alive and went furthest (log2(8) = 3 rounds)
     const champ = out.rows.find((r) => r.alive)!;
     expect(champ.roundReached).toBe(3);
+  });
+
+  it("elo sort ranks the top 32 by surface ELO (incl. unseeded) with the ELO position as the badge", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 2 });
+    // unseed the last entrant and make it the strongest by clay ELO; the rest descend
+    s.players["p7"] = { ...s.players["p7"], seed: null, elo: { overall: 2500, hard: 2500, clay: 2500, grass: 2500 } };
+    for (let i = 0; i < 7; i++) {
+      const e = 2000 - i * 10;
+      s.players[`p${i}`] = { ...s.players[`p${i}`], elo: { overall: e, hard: e, clay: e, grass: e } };
+    }
+    const out = seedProgress(s, "elo");
+    expect(out.mode).toBe("elo");
+    expect(out.rows[0]).toMatchObject({ rank: 1, playerId: "p7", seed: null }); // strongest is unseeded
+    for (let i = 1; i < out.rows.length; i++) {
+      expect(out.rows[i].elo!).toBeLessThanOrEqual(out.rows[i - 1].elo!); // strictly descending ELO
+    }
   });
 });
 

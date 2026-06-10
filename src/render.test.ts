@@ -113,22 +113,39 @@ const SLAM_ROUNDS = [
 
 describe("renderSeedPanel", () => {
   const prog: SeedProgress = {
-    seedsTotal: 32, seedsRemaining: 1,
+    mode: "seed", total: 32, remaining: 1,
     rows: [
-      { seed: 1, playerId: "a", name: "Sinner", country: "ITA", ranking: 1, elo: 2107.6, roundReached: 7, alive: true, upset: false },
-      { seed: 6, playerId: "b", name: "Medvedev", country: "RUS", ranking: 6, elo: 1980.2, roundReached: 1, alive: false, upset: true },
+      { rank: 1, seed: 1, playerId: "a", name: "Sinner", country: "ITA", elo: 2107.6, roundReached: 7, alive: true, upset: false },
+      { rank: 6, seed: 6, playerId: "b", name: "Medvedev", country: "RUS", elo: 1980.2, roundReached: 1, alive: false, upset: true },
     ],
   };
-  it("shows seeds-in count, the champion, ELO, and a fallen seed's exit round (not the giant-killer)", () => {
+  it("shows the seeds-in count, the champion, ELO, and a fallen seed's exit round (not the giant-killer)", () => {
     const html = renderSeedPanel(prog, SLAM_ROUNDS);
     expect(html).toContain("1 / 32");
+    expect(html).toContain("Seeds still in");
     expect(html).toContain("Sinner");
-    expect(html).toContain("Champion");   // roundReached 7 ≥ rounds.length
+    expect(html).toContain("Champion");        // roundReached 7 ≥ rounds.length
     expect(html).toContain("Medvedev");
-    expect(html).toContain("out · R64");   // fell in the Round of 64
-    expect(html).toContain("⚡");          // upset flag, without naming who beat them
-    expect(html).toContain("2108");        // surface ELO, rounded, shown persistently
+    expect(html).toContain("R64");             // fell in the Round of 64
+    expect(html).not.toContain("out · R64");   // the redundant "out" word is gone
+    expect(html).toContain("⚡");              // upset flag, without naming who beat them
+    expect(html).toContain("2108");            // surface ELO, rounded, shown persistently
     expect(html).toContain('data-occupant="a"'); // seed rows carry their player id for hover-highlight
+    expect(html).toContain('data-action="seed-sort"'); // the Seed | ELO toggle is present
+  });
+
+  it("ELO sort retitles the panel, tags unseeded contenders, and arrows the still-alive", () => {
+    const eloProg: SeedProgress = {
+      mode: "elo", total: 32, remaining: 2,
+      rows: [
+        { rank: 1, seed: null, playerId: "c", name: "Surger", country: "USA", elo: 2010, roundReached: 2, alive: true, upset: false },
+        { rank: 2, seed: 3, playerId: "d", name: "Djokovic", country: "SRB", elo: 1990, roundReached: 1, alive: false, upset: false },
+      ],
+    };
+    const html = renderSeedPanel(eloProg, SLAM_ROUNDS);
+    expect(html).toContain("Top 32 by ELO");
+    expect(html).toContain("unseeded");   // the unseeded ELO #1 is flagged
+    expect(html).toContain("→ R32");      // alive player shows a forward arrow, not "in ·"
   });
 });
 

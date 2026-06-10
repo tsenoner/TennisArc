@@ -68,6 +68,10 @@ describe("renderPanelFab", () => {
     expect(renderPanelFab("seed")).toContain("Seeds");
     expect(renderPanelFab("country")).toContain("Nations");
   });
+  it("reflects the ELO sub-mode of the seed lens", () => {
+    expect(renderPanelFab("seed", "elo")).toContain("ELO");
+    expect(renderPanelFab("seed", "elo")).not.toContain(">Seeds<");
+  });
 });
 
 describe("renderLegend", () => {
@@ -75,6 +79,10 @@ describe("renderLegend", () => {
     for (const dim of ["time", "seed", "country"] as const) {
       expect(renderLegend(dim)).toContain("legend");
     }
+  });
+  it("switches the seed legend wording between seed and ELO sub-modes", () => {
+    expect(renderLegend("seed", "seed")).toContain("unseeded → top seed");
+    expect(renderLegend("seed", "elo")).toContain("weaker → stronger (ELO)");
   });
 });
 

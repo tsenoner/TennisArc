@@ -6,7 +6,7 @@ import type { Tour } from "./model";
 import type { Round, SlamIndex } from "./model";
 import type { Theme } from "./theme";
 import { flagEmoji } from "./flags";
-import type { LeaderRow, SeedProgress, NationRow, InsightSide, MatchInsight } from "./state";
+import type { LeaderRow, SeedProgress, SeedSort, NationRow, InsightSide, MatchInsight } from "./state";
 import { availableYears, slamsForYear } from "./slams";
 
 const PAD_ANGLE = 0.004;   // radians of gap between adjacent arcs
@@ -241,14 +241,18 @@ export function renderControls(opts: {
 }
 
 /** Mobile-only floating button that opens the lens drawer; its label names the active lens. */
-export function renderPanelFab(dim: ColorDim): string {
-  const label = dim === "time" ? "Time on court" : dim === "seed" ? "Seeds" : "Nations";
+export function renderPanelFab(dim: ColorDim, seedSort: SeedSort = "seed"): string {
+  const label = dim === "time" ? "Time on court"
+    : dim === "seed" ? (seedSort === "elo" ? "Top 32 · ELO" : "Seeds")
+    : "Nations";
   return `<button class="panel-fab" data-action="panel" aria-label="Open ${escapeHtml(label)} panel">${escapeHtml(label)}</button>`;
 }
 
-export function renderLegend(dim: ColorDim): string {
+export function renderLegend(dim: ColorDim, seedSort: SeedSort = "seed"): string {
   if (dim === "country") return `<div class="legend">Colour: nationality</div>`;
-  const label = dim === "time" ? "fresh → most court time" : "unseeded → top seed";
+  const label = dim === "time" ? "fresh → most court time"
+    : dim === "seed" && seedSort === "elo" ? "weaker → stronger (ELO)"
+    : "unseeded → top seed";
   const grad = dim === "seed" ? "legend-grad seed" : "legend-grad";
   return `<div class="legend"><span class="${grad}" aria-hidden="true"></span><span>${label}</span></div>`;
 }
@@ -368,34 +372,51 @@ export function renderMatchInsight(ins: MatchInsight, sofaUrl: string | null, no
   );
 }
 
-/** Seed lens panel: every seed and how far they got (deepest run first), not the giant-killers. */
+/**
+ * Seed lens panel. A Seed|ELO toggle reorders the list AND recolours the wheel:
+ * "seed" lists the seeds in seed order; "elo" lists (and lights) the top 32 by surface ELO,
+ * flagging the unseeded contenders the seeding leaves out. How far each got, not the giant-killers.
+ */
 export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
-  const pct = prog.seedsTotal ? Math.round((prog.seedsRemaining / prog.seedsTotal) * 100) : 0;
+  const pct = prog.total ? Math.round((prog.remaining / prog.total) * 100) : 0;
+  const elo = prog.mode === "elo";
+  const toggle =
+    `<div class="seg sp-sort" role="group" aria-label="Rank by">` +
+    `<button class="ctrl${!elo ? " active" : ""}" data-action="seed-sort" data-sort="seed" aria-pressed="${!elo}">Seed</button>` +
+    `<button class="ctrl${elo ? " active" : ""}" data-action="seed-sort" data-sort="elo" aria-pressed="${elo}">ELO</button>` +
+    `</div>`;
+  const title = elo ? "Top 32 by ELO" : "Seeds still in";
+  const sub = elo ? "By surface ELO" : "Seed progress";
   const rows = prog.rows
     .map((r) => {
       const champ = r.roundReached >= rounds.length;
       const label = roundAbbrev(r.roundReached, rounds);
+      // The visible label is intentionally word-free ("→ R16" / "R64"); the aria-label keeps the
+      // in/out distinction for screen readers, since colour alone shouldn't carry that meaning.
       const where = champ
-        ? `<span class="sp-rd champ">🏆 Champion</span>`
+        ? `<span class="sp-rd champ" aria-label="champion">🏆 Champion</span>`
         : r.alive
-        ? `<span class="sp-rd alive">in · ${escapeHtml(label)}</span>`
-        : `<span class="sp-rd">out · ${escapeHtml(label)}</span>`;
-      const bolt = r.upset ? ` <span class="sp-bolt" role="img" aria-label="upset — lost as the favourite">⚡</span>` : "";
-      const elo = r.elo != null ? ` <span class="sp-elo" title="surface ELO">${Math.round(r.elo)}</span>` : "";
+        ? `<span class="sp-rd alive" aria-label="in, reached ${escapeHtml(label)}">→ ${escapeHtml(label)}</span>`
+        : `<span class="sp-rd out" aria-label="out, ${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+      const bolt = r.upset ? `<span class="sp-bolt" role="img" aria-label="upset — lost as the favourite">⚡</span>` : "";
+      const elov = r.elo != null ? `<span class="sp-elo" title="surface ELO">${Math.round(r.elo)}</span>` : "";
+      // In ELO mode, flag the contenders the seeding leaves out (the whole point of the view).
+      const tag = elo && r.seed == null ? `<span class="sp-tag uns" title="not seeded">unseeded</span>` : "";
       return (
         `<li class="sp-row${r.alive ? " on" : ""}" data-seed-row data-occupant="${escapeHtml(r.playerId)}">` +
-        `<span class="sp-seed">${r.seed}</span>` +
-        `<span class="sp-name">${escapeHtml(r.name)}${elo}${bolt}</span>` +
-        where +
+        `<span class="sp-seed">${r.rank}</span>` +
+        `<span class="sp-name"><span class="nm">${escapeHtml(r.name)}</span>${tag}</span>` +
+        `<span class="sp-meta">${elov}${bolt}${where}</span>` +
         `</li>`
       );
     })
     .join("");
   return (
     `<aside class="panel seed-panel">` +
-    `<div class="seeds-in"><div class="seeds-top"><span>Seeds still in</span><b>${prog.seedsRemaining} / ${prog.seedsTotal}</b></div>` +
+    toggle +
+    `<div class="seeds-in"><div class="seeds-top"><span>${title}</span><b>${prog.remaining} / ${prog.total}</b></div>` +
     `<div class="seeds-track"><span style="width:${pct}%"></span></div></div>` +
-    (rows ? `<div class="panel-sub">Seed progress</div><ol class="sp-list">${rows}</ol>` : `<div class="panel-empty">No seeds in this draw</div>`) +
+    (rows ? `<div class="panel-sub">${sub}</div><ol class="sp-list">${rows}</ol>` : `<div class="panel-empty">No data for this draw</div>`) +
     `</aside>`
   );
 }

@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, type PlayerTime } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, type PlayerTime, type SeedSort } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -23,6 +23,7 @@ interface AppState {
   index: SlamIndex | undefined;
   snapshots: Record<string, Snapshot>;
   colorDim: ColorDim;
+  seedSort: SeedSort;
   focusId: string | undefined;
   selectedMatchId: string | undefined;
   selectedNodeId: string | undefined;
@@ -46,7 +47,7 @@ export function createApp(root: HTMLElement): void {
   applyTheme(theme);
   const state: AppState = {
     tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
-    colorDim: "time", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, selectedCountry: undefined, theme,
+    colorDim: "time", seedSort: "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, selectedCountry: undefined, theme,
     openMenu: undefined, panelOpen: false,
   };
   let store: Store | undefined;
@@ -121,7 +122,7 @@ export function createApp(root: HTMLElement): void {
     const time = timeOnCourt(snap);
     const tree = buildSunburst(snap);
     const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
-    const color = colorScale(state.colorDim, snap, state.selectedCountry);
+    const color = colorScale(state.colorDim, snap, state.selectedCountry, state.seedSort);
     // Round axis (R128 … Final), one per ring, derived from the laid-out arcs so it follows focus/zoom.
     const ringSeen = new Map<number, { y0: number; y1: number }>();
     for (const a of arcs) if (a.depth >= 1 && !ringSeen.has(a.depth)) ringSeen.set(a.depth, { y0: a.y0, y1: a.y1 });
@@ -142,14 +143,14 @@ export function createApp(root: HTMLElement): void {
       const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
       panel = renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
     } else {
-      const lens = state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap), snap.rounds)
+      const lens = state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap, state.seedSort), snap.rounds)
         : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
         : renderLeaderboard(timeLeaderboard(snap, time));
       // The lens panel doubles as a mobile bottom drawer; `.open` (state.panelOpen) slides it in,
       // the scrim dims the bracket behind it. Both are inert on desktop (CSS).
       const drawer = state.panelOpen ? lens.replace('class="', 'class="open ') : lens;
       panel = `<div class="lens-scrim${state.panelOpen ? " open" : ""}" data-action="panel" aria-hidden="true"></div>` +
-        drawer + renderPanelFab(state.colorDim);
+        drawer + renderPanelFab(state.colorDim, state.seedSort);
     }
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     const defaultId = focusOcc ?? tree.occupant ?? null;
@@ -162,7 +163,7 @@ export function createApp(root: HTMLElement): void {
           renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected)) + `</div>` +
         panel +
       `</div>` +
-      renderLegend(state.colorDim) +
+      renderLegend(state.colorDim, state.seedSort) +
       `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}</div>`;
   };
 
@@ -229,6 +230,10 @@ export function createApp(root: HTMLElement): void {
       state.openMenu = undefined;
       if (state.colorDim !== "country") state.selectedCountry = undefined;
       state.selectedMatchId = undefined; state.selectedNodeId = undefined;
+      draw();
+    } else if (a === "seed-sort" && el.dataset.sort) {
+      // toggles the seed lens between seed order and ELO order — reorders the panel AND recolours the wheel
+      state.seedSort = el.dataset.sort as SeedSort;
       draw();
     } else if (a === "country" && el.dataset.country) {
       state.selectedCountry = state.selectedCountry === el.dataset.country ? undefined : el.dataset.country;

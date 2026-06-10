@@ -246,22 +246,37 @@ export function eliminatedSet(s: Snapshot): Set<string> {
   return out;
 }
 
+export type SeedSort = "seed" | "elo";
+
 export interface SeedRow {
-  seed: number; playerId: string; name: string; country: string;
-  ranking: number | null; // ATP/WTA ranking
+  rank: number;           // the badge number: seed# (seed sort) or ELO position 1..32 (elo sort)
+  seed: number | null;    // tournament seed (null = unseeded; only reachable under the elo sort)
+  playerId: string; name: string; country: string;
   elo: number | null;     // surface ELO for the slam surface
   roundReached: number;   // deepest round index reached (winner → roundIndex + 1)
   alive: boolean;         // still in the draw
   upset: boolean;         // went out to a lower surface-ELO opponent
 }
-export interface SeedProgress { seedsTotal: number; seedsRemaining: number; rows: SeedRow[]; }
+export interface SeedProgress { mode: SeedSort; total: number; remaining: number; rows: SeedRow[]; }
+
+/** Players ranked by surface ELO, strongest first → pid → 1-based rank. Only players with an ELO. */
+export function eloRank(s: Snapshot): Map<string, number> {
+  const surface = s.tournament.surface;
+  const ranked = Object.values(s.players)
+    .map((p) => ({ id: p.id, e: surfaceElo(p, surface) }))
+    .filter((x): x is { id: string; e: number } => x.e != null)
+    .sort((a, b) => b.e - a.e || a.id.localeCompare(b.id)); // id tie-break → deterministic across snapshots
+  return new Map(ranked.map((x, i) => [x.id, i + 1]));
+}
 
 /**
- * Each seed and how far they got — the seeds' own journeys, not the giant-killers who beat them.
- * Rows run by ranking (best-ranked first); `upset` flags a seed beaten by a lower surface-ELO
- * opponent, so the fall is shown without naming the player who actually won the match.
+ * The draw's strongest 32 and how far each got — by tournament seed, or by surface ELO.
+ * "seed" sort lists the seeds in seed order; "elo" sort lists the top 32 by surface ELO
+ * (which can include unseeded players), strongest first — the same set the wheel lights up.
+ * `upset` flags a player beaten by a lower surface-ELO opponent, so the fall is shown
+ * without naming the giant-killer.
  */
-export function seedProgress(s: Snapshot): SeedProgress {
+export function seedProgress(s: Snapshot, sort: SeedSort = "seed"): SeedProgress {
   const out = eliminatedSet(s);
   const surface = s.tournament.surface;
   const reached = new Map<string, number>();
@@ -281,14 +296,26 @@ export function seedProgress(s: Snapshot): SeedProgress {
     const ew = surfaceElo(w, surface), el = surfaceElo(l, surface);
     if (ew != null && el != null && el > ew) upsetLosers.add(loseId); // loser was the favourite
   }
-  const seeded = Object.values(s.players).filter((p) => p.seed != null);
-  const rows: SeedRow[] = seeded.map((p) => ({
-    seed: p.seed!, playerId: p.id, name: p.name, country: p.country,
-    ranking: p.ranking ?? null, elo: surfaceElo(p, surface),
+
+  let pool: Player[];
+  let badge: (p: Player) => number;
+  if (sort === "elo") {
+    const rank = eloRank(s);
+    pool = Object.values(s.players)
+      .filter((p) => (rank.get(p.id) ?? Infinity) <= 32)
+      .sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+    badge = (p) => rank.get(p.id)!;
+  } else {
+    pool = Object.values(s.players).filter((p) => p.seed != null).sort((a, b) => a.seed! - b.seed!);
+    badge = (p) => p.seed!;
+  }
+
+  const rows: SeedRow[] = pool.map((p) => ({
+    rank: badge(p), seed: p.seed ?? null,
+    playerId: p.id, name: p.name, country: p.country, elo: surfaceElo(p, surface),
     roundReached: reached.get(p.id) ?? 0, alive: !out.has(p.id), upset: upsetLosers.has(p.id),
   }));
-  rows.sort((a, b) => (a.ranking ?? Infinity) - (b.ranking ?? Infinity) || a.seed - b.seed);
-  return { seedsTotal: seeded.length, seedsRemaining: rows.filter((r) => r.alive).length, rows };
+  return { mode: sort, total: rows.length, remaining: rows.filter((r) => r.alive).length, rows };
 }
 
 export interface NationPlayer { id: string; name: string; roundReached: number; alive: boolean; }

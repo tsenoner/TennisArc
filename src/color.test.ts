@@ -42,6 +42,18 @@ describe("colorScale", () => {
     expect(colorScale("seed", s)(arc("p3"))).toMatch(/^(#|rgb)/);
   });
 
+  it("ELO sort colours the top 32 by surface ELO with the same ramp; players with no ELO go neutral", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    // give two players a clay ELO; the rest keep elo:null (outside the top 32 → neutral)
+    s.players["p0"] = { ...s.players["p0"], elo: { overall: 2200, hard: 2200, clay: 2200, grass: 2200 } };
+    s.players["p1"] = { ...s.players["p1"], elo: { overall: 1900, hard: 1900, clay: 1900, grass: 1900 } };
+    const scale = colorScale("seed", s, undefined, "elo");
+    expect(scale(arc("p0"))).not.toBe(scale(arc("p1")));   // strongest ≠ second by ELO
+    expect(scale(arc("p7"))).toBe(scale(arc(null)));        // no ELO → neutral, same as the null fallback
+    const [, g, b] = scale(arc("p0")).match(/\d+/g)!.map(Number);
+    expect(b).toBeGreaterThan(g);                           // still the violet ramp
+  });
+
   it("returns a colour for null in every dimension (neutral fallback)", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     for (const dim of COLOR_DIMS) {

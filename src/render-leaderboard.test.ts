@@ -20,7 +20,7 @@ describe("renderLeaderboard", () => {
   });
 
   it("puts the name and country on separate spans so the full name gets the row", () => {
-    const html = renderLeaderboard(rows, () => "#e0683c");
+    const html = renderLeaderboard(rows);
     expect(html).toContain('<span class="lb-who">Carlos Alcaraz</span>');
     expect(html).toMatch(/<span class="lb-ctry">[^<]*ESP<\/span>/);
     // country is no longer nested inline after the name on the same span
