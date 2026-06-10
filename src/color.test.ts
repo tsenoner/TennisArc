@@ -26,6 +26,20 @@ describe("colorScale", () => {
     expect(red(scale(ids[ids.length - 1]))).toBeGreaterThan(red(scale(ids[0])));
   });
 
+  it("colours the seed lens by seed number with a violet ramp, distinct from the time heat ramp", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    const t = timeOnCourt(s);
+    const scale = colorScale("seed", s, t);
+    // top seed (1) and a lower seed get different colours
+    expect(scale("p0")).not.toBe(scale("p7"));
+    // violet ⇒ blue channel exceeds green (the warm time ramp is the opposite)
+    const [, g, b] = scale("p0").match(/\d+/g)!.map(Number);
+    expect(b).toBeGreaterThan(g);
+    // unseeded → neutral fallback
+    s.players["p3"] = { ...s.players["p3"], seed: null };
+    expect(colorScale("seed", s, t)("p3")).toMatch(/^(#|rgb)/);
+  });
+
   it("returns a colour for null in every dimension (neutral fallback)", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     const t = timeOnCourt(s);

@@ -99,18 +99,34 @@ describe("renderReadout", () => {
 });
 
 import { renderSeedPanel, renderCountryPanel } from "./render";
-import type { SeedInsights, NationRow } from "./state";
+import type { SeedProgress, NationRow } from "./state";
+
+const SLAM_ROUNDS = [
+  { index: 0, name: "Round of 128", size: 128, matchIds: [] },
+  { index: 1, name: "Round of 64", size: 64, matchIds: [] },
+  { index: 2, name: "Round of 32", size: 32, matchIds: [] },
+  { index: 3, name: "Round of 16", size: 16, matchIds: [] },
+  { index: 4, name: "Quarterfinal", size: 8, matchIds: [] },
+  { index: 5, name: "Semifinal", size: 4, matchIds: [] },
+  { index: 6, name: "Final", size: 2, matchIds: [] },
+];
 
 describe("renderSeedPanel", () => {
-  const ins: SeedInsights = {
-    seedsTotal: 32, seedsRemaining: 11,
-    upsets: [{ winnerId: "a", winnerName: "Bublik", loserId: "b", loserName: "Medvedev", loserSeed: 6, roundName: "Round of 16", eloGap: 120 }],
+  const prog: SeedProgress = {
+    seedsTotal: 32, seedsRemaining: 1,
+    rows: [
+      { seed: 1, playerId: "a", name: "Sinner", country: "ITA", roundReached: 7, alive: true, upset: false },
+      { seed: 6, playerId: "b", name: "Medvedev", country: "RUS", roundReached: 1, alive: false, upset: true },
+    ],
   };
-  it("shows seeds-in count and upset rows", () => {
-    const html = renderSeedPanel(ins);
-    expect(html).toContain("11");
-    expect(html).toContain("Bublik");
+  it("shows seeds-in count, the champion, and a fallen seed's exit round (not the giant-killer)", () => {
+    const html = renderSeedPanel(prog, SLAM_ROUNDS);
+    expect(html).toContain("1 / 32");
+    expect(html).toContain("Sinner");
+    expect(html).toContain("Champion");   // roundReached 7 ≥ rounds.length
     expect(html).toContain("Medvedev");
+    expect(html).toContain("out · R64");   // fell in the Round of 64
+    expect(html).toContain("⚡");          // upset flag, without naming who beat them
   });
 });
 

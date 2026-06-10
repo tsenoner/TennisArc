@@ -203,39 +203,46 @@ export function eliminatedSet(s: Snapshot): Set<string> {
   return out;
 }
 
-export interface Upset {
-  winnerId: string; winnerName: string; loserId: string; loserName: string;
-  loserSeed: number | null; roundName: string; eloGap: number; // loser elo − winner elo (>0)
+export interface SeedRow {
+  seed: number; playerId: string; name: string; country: string;
+  roundReached: number;   // deepest round index reached (winner → roundIndex + 1)
+  alive: boolean;         // still in the draw
+  upset: boolean;         // went out to a lower surface-ELO opponent
 }
+export interface SeedProgress { seedsTotal: number; seedsRemaining: number; rows: SeedRow[]; }
 
-export interface SeedInsights { seedsTotal: number; seedsRemaining: number; upsets: Upset[]; }
-
-/** Seeds still alive + biggest upsets (winner was the surface-ELO underdog), strongest first. */
-export function seedInsights(s: Snapshot, limit = 8): SeedInsights {
+/**
+ * Each seed and how far they got — the seeds' own journeys, not the giant-killers who beat them.
+ * Rows run deepest-first (champion → early exits); `upset` flags a seed beaten by a lower surface-ELO
+ * opponent, so the fall is shown without naming the player who actually won the match.
+ */
+export function seedProgress(s: Snapshot): SeedProgress {
   const out = eliminatedSet(s);
-  const seeded = Object.values(s.players).filter((p) => p.seed != null);
   const surface = s.tournament.surface;
-  const upsets: Upset[] = [];
+  const reached = new Map<string, number>();
+  const upsetLosers = new Set<string>();
   for (const m of Object.values(s.matches)) {
+    for (const side of ["p1", "p2"] as const) {
+      const pid = m[side];
+      if (!pid) continue;
+      const r = m.winner === side ? m.roundIndex + 1 : m.roundIndex;
+      if (r > (reached.get(pid) ?? -1)) reached.set(pid, r);
+    }
     if (m.winner == null) continue;
     const winId = m.winner === "p1" ? m.p1 : m.p2;
     const loseId = m.winner === "p1" ? m.p2 : m.p1;
-    if (!winId || !loseId) continue;
-    const w = s.players[winId], l = s.players[loseId];
-    if (!w || !l) continue;
+    const w = winId ? s.players[winId] : null, l = loseId ? s.players[loseId] : null;
+    if (!w || !l || !loseId) continue;
     const ew = surfaceElo(w, surface), el = surfaceElo(l, surface);
-    if (ew == null || el == null || el <= ew) continue; // upset only when winner was the ELO underdog
-    upsets.push({
-      winnerId: winId, winnerName: w.name, loserId: loseId, loserName: l.name,
-      loserSeed: l.seed, roundName: s.rounds[m.roundIndex]?.name ?? "", eloGap: el - ew,
-    });
+    if (ew != null && el != null && el > ew) upsetLosers.add(loseId); // loser was the favourite
   }
-  upsets.sort((a, b) => b.eloGap - a.eloGap);
-  return {
-    seedsTotal: seeded.length,
-    seedsRemaining: seeded.filter((p) => !out.has(p.id)).length,
-    upsets: upsets.slice(0, limit),
-  };
+  const seeded = Object.values(s.players).filter((p) => p.seed != null);
+  const rows: SeedRow[] = seeded.map((p) => ({
+    seed: p.seed!, playerId: p.id, name: p.name, country: p.country,
+    roundReached: reached.get(p.id) ?? 0, alive: !out.has(p.id), upset: upsetLosers.has(p.id),
+  }));
+  rows.sort((a, b) => b.roundReached - a.roundReached || Number(b.alive) - Number(a.alive) || a.seed - b.seed);
+  return { seedsTotal: seeded.length, seedsRemaining: rows.filter((r) => r.alive).length, rows };
 }
 
 export interface NationPlayer { id: string; name: string; roundReached: number; alive: boolean; }

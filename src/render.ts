@@ -6,7 +6,7 @@ import type { Tour } from "./model";
 import type { Round, SlamIndex } from "./model";
 import type { Theme } from "./theme";
 import { flagEmoji } from "./flags";
-import type { LeaderRow, SeedInsights, NationRow, InsightSide, MatchInsight } from "./state";
+import type { LeaderRow, SeedProgress, NationRow, InsightSide, MatchInsight } from "./state";
 import { availableYears, slamsForYear } from "./slams";
 
 const PAD_ANGLE = 0.004;   // radians of gap between adjacent arcs
@@ -132,8 +132,9 @@ export function renderControls(opts: {
 
 export function renderLegend(dim: ColorDim): string {
   if (dim === "country") return `<div class="legend">Colour: nationality</div>`;
-  const label = dim === "time" ? "fresh → most court time" : "lower seed → top seed";
-  return `<div class="legend"><span class="legend-grad" aria-hidden="true"></span><span>${label}</span></div>`;
+  const label = dim === "time" ? "fresh → most court time" : "unseeded → top seed";
+  const grad = dim === "seed" ? "legend-grad seed" : "legend-grad";
+  return `<div class="legend"><span class="${grad}" aria-hidden="true"></span><span>${label}</span></div>`;
 }
 
 export function renderLeaderboard(rows: LeaderRow[], color: ColorFn): string {
@@ -176,7 +177,7 @@ export function renderReadout(info: ReadoutInfo | null): string {
   const time = info.sec > 0 ? `${formatDuration(info.sec)}${info.provisional ? " (live)" : ""} on court` : "";
   const meta2 = [info.roundLabel, time].filter(Boolean).join(" · ");
   return (
-    `<div class="readout${info.projected ? " projected" : ""}">` +
+    `<div class="readout filled${info.projected ? " projected" : ""}">` +
     `<div class="ro-ctry">${flagEmoji(info.country)} ${escapeHtml(info.country)}</div>` +
     `<div class="ro-name">${escapeHtml(info.name)}</div>` +
     (meta1 ? `<div class="ro-meta">${escapeHtml(meta1)}</div>` : "") +
@@ -232,6 +233,9 @@ export function renderMatchInsight(ins: MatchInsight, sofaUrl: string | null, no
   const link = sofaUrl
     ? `<a class="mi-link" href="${sofaUrl}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";
   return (
+    // Scrim is inert on desktop; on phones it dims the bracket behind the bottom-sheet
+    // and tapping it closes the detail (same action as the back button).
+    `<div class="mi-scrim" data-action="close-detail" aria-hidden="true"></div>` +
     `<aside class="panel match-insight" role="dialog" aria-label="Match insight">` +
     `<div class="mi-hd"><button class="mi-back" data-action="close-detail">‹ back</button>` +
     `<span class="mi-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}</span></div>` +
@@ -247,21 +251,33 @@ export function renderMatchInsight(ins: MatchInsight, sofaUrl: string | null, no
   );
 }
 
-export function renderSeedPanel(ins: SeedInsights): string {
-  const pct = ins.seedsTotal ? Math.round((ins.seedsRemaining / ins.seedsTotal) * 100) : 0;
-  const rows = ins.upsets
-    .map((u) =>
-      `<li class="up-row">` +
-      `<span class="up-bolt">⚡</span>` +
-      `<span class="up-m"><b>${escapeHtml(u.winnerName)}</b> <small>d. ${u.loserSeed != null ? `[${u.loserSeed}] ` : ""}${escapeHtml(u.loserName)}</small></span>` +
-      `<span class="up-rd">${escapeHtml(u.roundName)}</span>` +
-      `</li>`)
+/** Seed lens panel: every seed and how far they got (deepest run first), not the giant-killers. */
+export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
+  const pct = prog.seedsTotal ? Math.round((prog.seedsRemaining / prog.seedsTotal) * 100) : 0;
+  const rows = prog.rows
+    .map((r) => {
+      const champ = r.roundReached >= rounds.length;
+      const label = roundAbbrev(r.roundReached, rounds);
+      const where = champ
+        ? `<span class="sp-rd champ">🏆 Champion</span>`
+        : r.alive
+        ? `<span class="sp-rd alive">in · ${escapeHtml(label)}</span>`
+        : `<span class="sp-rd">out · ${escapeHtml(label)}</span>`;
+      const bolt = r.upset ? ` <span class="sp-bolt" title="lost as the favourite">⚡</span>` : "";
+      return (
+        `<li class="sp-row${r.alive ? " on" : ""}">` +
+        `<span class="sp-seed">${r.seed}</span>` +
+        `<span class="sp-name">${escapeHtml(r.name)}${bolt}</span>` +
+        where +
+        `</li>`
+      );
+    })
     .join("");
   return (
     `<aside class="panel seed-panel">` +
-    `<div class="seeds-in"><div class="seeds-top"><span>Seeds still in</span><b>${ins.seedsRemaining} / ${ins.seedsTotal}</b></div>` +
+    `<div class="seeds-in"><div class="seeds-top"><span>Seeds still in</span><b>${prog.seedsRemaining} / ${prog.seedsTotal}</b></div>` +
     `<div class="seeds-track"><span style="width:${pct}%"></span></div></div>` +
-    (rows ? `<div class="panel-sub">Biggest upsets</div><ol class="up-list">${rows}</ol>` : `<div class="panel-empty">No upsets yet</div>`) +
+    (rows ? `<div class="panel-sub">Seed progress</div><ol class="sp-list">${rows}</ol>` : `<div class="panel-empty">No seeds in this draw</div>`) +
     `</aside>`
   );
 }
