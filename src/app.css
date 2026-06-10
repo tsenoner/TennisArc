@@ -132,9 +132,11 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .slam-switch .ctrl.slam[disabled] { opacity: .35; cursor: default; }
 .slam-switch .ctrl.slam.live::after { content: "●"; color: var(--teal); font-size: 8px; vertical-align: super; margin-left: 1px; }
 
-/* write-once arc labels */
-.arc-label { fill: #f4f8fc; font-weight: 700; paint-order: stroke; stroke: rgba(4, 10, 16, .72); stroke-width: 2.4px; pointer-events: none; }
+/* write-once arc labels (dominant-baseline centres the text on its path, not above it) */
+.arc-label { fill: #f4f8fc; font-weight: 700; paint-order: stroke; stroke: rgba(4, 10, 16, .72); stroke-width: 2.4px;
+  dominant-baseline: central; pointer-events: none; }
 :root[data-theme="light"] .arc-label { fill: #0c1218; stroke: rgba(255, 255, 255, .8); }
+.arc-radial { font-weight: 500; stroke-width: 0.9px; }   /* lighter halo on the cramped outer spokes */
 /* round axis (R128 … Final) pinned to 12 o'clock on each ring */
 .ring-label { fill: var(--dim); font-weight: 700; letter-spacing: .03em; paint-order: stroke;
   stroke: var(--bg); stroke-width: 2.6px; pointer-events: none; }

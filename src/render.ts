@@ -49,25 +49,75 @@ export function renderSunburst(
       const cls = a.projected ? "arc projected" : "arc";
       if (labels && !a.projected && a.occupant && labels.anchors.has(a.id)) {
         const label = labels.text(a.occupant);
-        const rc = (a.y0 + a.y1) / 2;
-        const span = a.x1 - a.x0;
-        const fs = Math.min(13, Math.max(8, (a.y1 - a.y0) * 0.42));
-        // gate: only label when the arc's chord can hold the text
-        if (label && rc * span >= label.length * fs * 0.55) {
+        if (label) {
+          const rc = (a.y0 + a.y1) / 2;
+          const span = a.x1 - a.x0;
           const mid = (a.x0 + a.x1) / 2;
-          const rev = mid > Math.PI / 2 && mid < 3 * Math.PI / 2;
+          const radial = a.y1 - a.y0;
+          const idb = a.id.replace(/[^a-z0-9]/gi, "");
           const big = span > Math.PI ? 1 : 0;
-          const pad = Math.min(0.03, span * 0.12);
-          const s0 = a.x0 + pad, s1 = a.x1 - pad;
-          const pid = `lp${a.id.replace(/[^a-z0-9]/gi, "")}`;
-          const dPath = rev
-            ? `M${pt(rc, s1)} A${rc},${rc} 0 ${big} 0 ${pt(rc, s0)}`
-            : `M${pt(rc, s0)} A${rc},${rc} 0 ${big} 1 ${pt(rc, s1)}`;
-          defs.push(`<path id="${pid}" d="${dPath}"></path>`);
-          texts.push(
-            `<text class="arc-label" font-size="${fs.toFixed(1)}">` +
-            `<textPath href="#${pid}" startOffset="50%" text-anchor="middle">${escapeHtml(label)}</textPath></text>`,
-          );
+          const apad = Math.min(0.03, span * 0.12);
+          const s0 = a.x0 + apad, s1 = a.x1 - apad;
+          const chord = rc * (s1 - s0);               // usable tangential length for fitting
+          const revT = mid > Math.PI / 2 && mid < 3 * Math.PI / 2;  // curved flips on the bottom half
+          const revR = mid > Math.PI;                 // radial (spoke) flips on the left half
+          const curved = (r: number, txt: string, f: number, id: string) => {
+            const dPath = revT
+              ? `M${pt(r, s1)} A${r},${r} 0 ${big} 0 ${pt(r, s0)}`
+              : `M${pt(r, s0)} A${r},${r} 0 ${big} 1 ${pt(r, s1)}`;
+            defs.push(`<path id="${id}" d="${dPath}"></path>`);
+            texts.push(
+              `<text class="arc-label" font-size="${f.toFixed(1)}">` +
+              `<textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(txt)}</textPath></text>`,
+            );
+          };
+          const radialAt = (ang: number, txt: string, f: number, id: string) => {
+            const dPath = revR
+              ? `M${pt(a.y1 - 2, ang)} L${pt(a.y0 + 2, ang)}`
+              : `M${pt(a.y0 + 2, ang)} L${pt(a.y1 - 2, ang)}`;
+            defs.push(`<path id="${id}" d="${dPath}"></path>`);
+            texts.push(
+              `<text class="arc-label arc-radial" font-size="${f.toFixed(1)}">` +
+              `<textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(txt)}</textPath></text>`,
+            );
+          };
+          const [l1, l2] = splitTwo(label);
+          if (radial > rc * span) {
+            // RADIAL — text runs OUTWARDS along the ring depth (R128, R64). A ring wide enough for two
+            // columns (R64) gets a SECOND radial row so long names show in full without rotating to a
+            // curve; the thinnest ring (R128) keeps a single spoke.
+            const rf = Math.min(11, Math.max(7.5, radial * 0.24));
+            const rbudget = Math.max(2, Math.floor((radial - 4) / (rf * 0.6)));
+            const colW = rf * 1.05;
+            if (rc * span >= 2 * colW && label.length > rbudget) {
+              const off = (colW * 0.5) / rc;            // angular offset for two side-by-side columns
+              // order columns by which half of the wheel we're on (matches the revR reading flip), so
+              // the first row never lands above the second in the top-left / bottom-right quarters
+              radialAt(revR ? mid + off : mid - off, fitLabel(l1, rbudget), rf, `lr1${idb}`);
+              radialAt(revR ? mid - off : mid + off, fitLabel(l2, rbudget), rf, `lr2${idb}`);
+            } else {
+              radialAt(mid, fitLabel(label, rbudget), rf, `lr${idb}`);
+            }
+          } else {
+            // CURVED — text follows the ring (R32 inward): one line → two lines (≥3 chars) → truncate.
+            const fs = Math.min(13, Math.max(8, radial * 0.42));
+            const budget = Math.floor(chord / (fs * 0.58));
+            const f2 = Math.min(fs, 10);                // slightly smaller so two lines fit narrow rings
+            const budget2 = Math.floor(chord / (f2 * 0.58));
+            const fitFs = chord / (label.length * 0.58); // font size at which the whole name fills one line
+            if (label.length <= budget) {
+              curved(rc, label, fs, `lp${idb}`);        // fits on one line at full size
+            } else if (radial >= 2.3 * f2 && l1.length >= 3 && l2.length >= 3 && l1.length <= budget2 && l2.length <= budget2) {
+              const gap = f2 * 0.62;                     // two curved lines — whole name, no mid-word break
+              const upper = Math.cos(mid) > 0;           // top half → first line on the outer ring
+              curved(upper ? rc + gap : rc - gap, l1, f2, `la${idb}`);
+              curved(upper ? rc - gap : rc + gap, l2, f2, `lb${idb}`);
+            } else if (fitFs >= 8) {
+              curved(rc, label, Math.min(fs, fitFs), `lp${idb}`); // shrink one line to show the full short name ("Halys")
+            } else {
+              curved(rc, fitLabel(label, budget), fs, `lp${idb}`); // truncate — last resort
+            }
+          }
         }
       }
       return `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
@@ -81,6 +131,31 @@ export function renderSunburst(
     `<g transform="translate(${c},${c})" data-action="reset">` +
     `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}</g></svg>`
   );
+}
+
+/** Truncate a label to a character budget with an ellipsis (never empty). */
+function fitLabel(s: string, budget: number): string {
+  if (s.length <= budget) return s;
+  if (budget <= 1) return s.slice(0, 1);
+  return s.slice(0, budget - 1) + "…";
+}
+
+/** Split a name into two lines, preferring a space/hyphen near the middle, else mid-word. */
+function splitTwo(s: string): [string, string] {
+  const mid = s.length / 2;
+  let best = -1, bestDist = Infinity;
+  for (let i = 1; i < s.length - 1; i++) {
+    if (s[i] === " " || s[i] === "-") {
+      const dist = Math.abs(i - mid);
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    }
+  }
+  if (best > 0) {
+    const cut = s[best] === "-" ? best + 1 : best; // keep a hyphen on the first line, drop a space
+    return [s.slice(0, cut).trim(), s.slice(best + 1).trim()];
+  }
+  const m = Math.ceil(s.length / 2);
+  return [s.slice(0, m), s.slice(m)];
 }
 
 /** Escape text that may contain user/player data before embedding in HTML. */
