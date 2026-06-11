@@ -60,7 +60,7 @@ export function createApp(root: HTMLElement): () => void {
   let store: Store | undefined;
 
   // Updated each draw so the (frequent) hover handler can build a readout without a full re-render.
-  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null } | undefined;
+  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; focused: boolean } | undefined;
 
   const surname = (name: string) => name.split(" ").slice(-1)[0] || name;
 
@@ -89,20 +89,24 @@ export function createApp(root: HTMLElement): () => void {
     };
   };
 
+  // The float card blanks (ro-idle) only when it has nothing to add beyond the centre
+  // pill: no hover target, no pinned player, no focused section. Idle is judged from that
+  // INPUT state, never from the resolved player — an active hover on the champion must
+  // show their card like anyone else's, and a focused section must keep its occupant named
+  // (the pill is dropped while zoomed).
+  const roCls = (idle: boolean) => "ro-float" + (idle ? " ro-idle" : "");
   let roCurrent: string | null = null; // who the readout currently shows — skips the 60-120Hz pointermove outerHTML churn
-  // In dual-readout layouts the float card duplicates the centre finalist card when idle
-  // (nothing hovered, nothing pinned) — "ro-idle" lets the CSS hide it then.
-  const floatCls = (resolved: string | null) =>
-    "ro-float" + (!resolved || (resolved === ctx?.champId && ctx?.pinned !== ctx?.champId) ? " ro-idle" : "");
+  let roIdle = false;                  // …and whether it is blanked (same skip must see idle flips)
   const updateReadout = (playerId: string | null) => {
     if (!ctx) return;
     const resolved = playerId ?? ctx.defaultId;
-    if (resolved === roCurrent) return;
+    const idle = !playerId && !ctx.pinned && !ctx.focused;
+    if (resolved === roCurrent && idle === roIdle) return;
     const el = root.querySelector(".readout.ro-float");
     if (!el) return;
-    roCurrent = resolved;
+    roCurrent = resolved; roIdle = idle;
     const info = buildReadout(ctx.snap, ctx.time, resolved, ctx.champId, ctx.champProjected);
-    el.outerHTML = renderReadout(info, floatCls(resolved));
+    el.outerHTML = renderReadout(info, roCls(idle));
   };
 
   // Highlight every sunburst arc a player occupies (their path through the draw) without re-rendering.
@@ -194,15 +198,16 @@ export function createApp(root: HTMLElement): () => void {
     // a pinned player owns the readout (hover still previews others; leave restores the pin)
     const pinned = state.pinnedId && snap.players[state.pinnedId] ? state.pinnedId : null;
     const defaultId = pinned ?? focusOcc ?? tree.occupant ?? null;
-    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned };
-    roCurrent = defaultId; // the markup below renders the float readout for defaultId
+    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, focused: !!state.focusId };
+    const floatIdle = !pinned && !state.focusId;
+    roCurrent = defaultId; roIdle = floatIdle; // the markup below renders the float readout for defaultId
 
     // The finalist holds the chart centre as a minimal flag + surname pill; their full
     // card appears in the float readout on hover, like anyone else's. A zoomed section
     // drops the pill — it would cover the focused node's own centre label.
     const champ = !state.focusId && tree.occupant ? snap.players[tree.occupant] : undefined;
     const centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
-    const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), floatCls(defaultId));
+    const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
 
     root.innerHTML =
       renderControls(controlsOpts()) +
@@ -349,7 +354,8 @@ export function createApp(root: HTMLElement): () => void {
           state.pinnedId = occ;
         } else {
           // desktop (hover already previews the path): one click pins the player AND
-          // opens that arc's match insight — unpin via background click, Esc, or hub
+          // opens that arc's match insight — unpin via background click or Esc (the
+          // centre hub is the final's own arc, so clicking it inspects the final)
           if (occ) state.pinnedId = occ;
           state.selectedMatchId = el.dataset.match;
           state.selectedNodeId = id;

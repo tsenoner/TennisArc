@@ -280,3 +280,33 @@ describe("finalist pill + corner readout", () => {
     expect(root.querySelector(".side .leaderboard")).not.toBeNull();
   });
 });
+
+describe("float card never hides what the user is pointing at (idle = input state)", () => {
+  it("shows the finalist's card when their own arc is hovered", async () => {
+    const root = await mountApp();
+    const disc = root.querySelector<HTMLElement>('path.arc[data-id="r"]')!;
+    disc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(root.querySelector(".ro-float.ro-idle")).toBeNull();
+    expect(root.querySelector(".ro-float .ro-name")).not.toBeNull();
+  });
+
+  it("previews the finalist over a pinned card instead of blanking it", async () => {
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!); // pin someone
+    const disc = root.querySelector<HTMLElement>('path.arc[data-id="r"]')!;
+    disc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(root.querySelector(".ro-float.ro-idle")).toBeNull(); // champion preview, not a blank
+    root.dispatchEvent(new Event("pointerleave"));
+    expect(root.querySelector(".ro-float.ro-idle")).toBeNull(); // pinned card returns
+  });
+
+  it("keeps the focused section's occupant named (the pill is dropped while zoomed)", async () => {
+    const root = await mountApp();
+    click(pickArc(root));                                              // pin + open insight
+    click(root.querySelector<HTMLElement>('[data-action="focus"]')!);  // zoom to that section
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // close insight
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // unpin
+    expect(root.querySelector(".center-id")).toBeNull();        // pill dropped while zoomed
+    expect(root.querySelector(".ro-float.ro-idle")).toBeNull(); // card stays, naming the occupant
+  });
+});

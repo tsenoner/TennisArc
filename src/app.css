@@ -186,11 +186,17 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   font-size: 12px; font-weight: 700; pointer-events: none; }
 .center-id.projected span { font-style: italic; }
 
-/* the float card waits at the chart's top-left corner on desktop; idle (nothing hovered,
-   nothing pinned) it would only duplicate the finalist pill, so it blanks out */
-@media (min-width: 721px) {
-  .ro-float { top: 10px; left: 10px; transform: none; }
-  .ro-float.ro-idle { visibility: hidden; }
+/* the float card waits at the chart's top-left corner; idle (nothing hovered, pinned, or
+   focused) it would only duplicate the finalist pill, so it blanks out */
+.ro-float { top: 10px; left: 10px; transform: none; }
+.ro-float.ro-idle { visibility: hidden; }
+/* narrow windows: the corner would sit on the wheel itself, so the card docks as a strip
+   above the chart instead (visibility still blanks it idle — the box holds the row's
+   height so the chart never jumps; phones refine the strip further in the block below) */
+@media (max-width: 960px) {
+  .ro-float { position: static; order: -1; width: auto; min-height: 40px;
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
+    column-gap: 8px; margin: 0 0 4px; text-align: left; }
 }
 
 /* lens panels share the leaderboard column */
@@ -279,6 +285,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .readout.filled { padding: 6px 10px; }
   .readout .ro-ctry, .readout .ro-meta, .readout .ro-elo { margin-top: 0; font-size: 10.5px; }
   .readout .ro-name { font-size: 14px; margin-top: 0; }
+  /* phones keep the idle strip visible — it names the finalist, exactly as before */
+  .readout.ro-idle { visibility: visible; }
 
   /* the legend caption shares the bottom row with the fixed FAB pill — reserve the FAB's
      width and compact the ramp/caption so the longest label still fits on one line */

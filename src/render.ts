@@ -348,10 +348,10 @@ export interface ReadoutInfo {
   age: number | null; birthday: string; birthdayNear: boolean;
 }
 
-/** The always-legible centre card naming the hovered/focused player.
- *  `cls` distinguishes the two instances in dual-readout layouts: "ro-center" (the
- *  finalist, fixed at the chart centre) and "ro-float" (hovered/pinned, at the
- *  layout's spot — append "ro-idle" when it would just duplicate the centre card). */
+/** The legible frosted card naming the hovered/pinned/focused player. The app renders one
+ *  instance with cls "ro-float": the chart's top-left corner card on desktop, the docked
+ *  strip above the chart on narrow viewports. Append "ro-idle" when it would only
+ *  duplicate the centre finalist pill (desktop blanks it then). */
 export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
   const c = cls ? ` ${cls}` : "";
   if (!info) return `<div class="readout${c}" aria-hidden="true"></div>`;
@@ -374,12 +374,13 @@ export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
   );
 }
 
-/** Minimal finalist identity (flag + surname) pinned to the chart centre on phones,
- *  where the docked readout strip names whoever is pinned and the finalist would
- *  otherwise vanish. Pointer-events pass through to the centre disc beneath. */
+/** Minimal finalist identity (flag + surname) holding the chart centre on every viewport
+ *  — the constant anchor while the float readout names whoever is hovered/pinned (and the
+ *  champion's only name when the readout idles or shows someone else, so it stays in the
+ *  accessibility tree). Pointer-events pass through to the centre disc beneath. */
 export function renderCenterId(iso3: string, name: string, projected: boolean): string {
   if (!name) return "";
-  return `<div class="center-id${projected ? " projected" : ""}" aria-hidden="true">` +
+  return `<div class="center-id${projected ? " projected" : ""}">` +
     `${flagImg(iso3, 12)}<span>${escapeHtml(name)}</span></div>`;
 }
 
