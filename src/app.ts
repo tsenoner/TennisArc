@@ -198,8 +198,9 @@ export function createApp(root: HTMLElement): () => void {
     roCurrent = defaultId; // the markup below renders the float readout for defaultId
 
     // The finalist holds the chart centre as a minimal flag + surname pill; their full
-    // card appears in the float readout on hover, like anyone else's.
-    const champ = tree.occupant ? snap.players[tree.occupant] : undefined;
+    // card appears in the float readout on hover, like anyone else's. A zoomed section
+    // drops the pill — it would cover the focused node's own centre label.
+    const champ = !state.focusId && tree.occupant ? snap.players[tree.occupant] : undefined;
     const centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
     const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), floatCls(defaultId));
 
