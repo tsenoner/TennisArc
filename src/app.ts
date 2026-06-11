@@ -5,7 +5,7 @@ import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout,
   renderSeedPanel, renderCountryPanel, renderMatchInsight, roundAbbrev, renderPanelFab, type ReadoutInfo,
 } from "./render";
-import { flagEmoji, flagAssetUrl } from "./flags";
+import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { createStore, type Store } from "./store";
 import { fetchSnapshot, fetchIndex } from "./api";
@@ -142,10 +142,12 @@ export function createApp(root: HTMLElement): void {
     anchors.delete(tree.id); // champion is named by the centre readout — skip its cramped on-arc label
     const labelText = (occ: string) =>
       state.colorDim === "country"
-        ? flagEmoji(snap.players[occ]?.country ?? "") // text fallback for codes without a bundled SVG
+        // Unmapped nations have no bundled SVG: show the visible ISO code, never an emoji —
+        // WebKit won't paint colour emoji on an SVG textPath (iOS), so it would just vanish.
+        ? (snap.players[occ]?.country ?? "")
         : surname(snap.players[occ]?.name ?? occ);
     // Country lens labels are bundled SVG flags drawn as <image> — emoji on a textPath
-    // never paint in WebKit (iOS) and letter-box on Windows (#6).
+    // never paint in WebKit (iOS) and letter-box on Windows (#6); null image → ISO code text.
     const labelImage = state.colorDim === "country"
       ? (occ: string) => flagAssetUrl(snap.players[occ]?.country ?? "")
       : undefined;

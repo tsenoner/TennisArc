@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { iso3to2, flagEmoji, flagAssetUrl } from "./flags";
+import { iso3to2, flagEmoji, flagAssetUrl, ISO3_TO_2 } from "./flags";
 import { FLAG_URLS } from "./flag-assets.gen";
 
 describe("iso3to2", () => {
@@ -28,11 +28,12 @@ describe("flagAssetUrl", () => {
     expect(flagAssetUrl("???")).toBeNull();
   });
   it("ships an asset for EVERY code in the ISO3→2 map (regenerate with scripts/gen-flag-assets.mjs)", () => {
-    // exercise every mapped iso3: each must resolve to a bundled url, never the emoji fallback
-    for (const iso3 of ["ESP", "FRA", "ITA", "DEU", "GER", "GBR", "USA", "SRB", "RUS", "CHE", "SUI", "AUT", "AUS", "ARG", "BRA", "CAN", "CHN", "JPN", "KAZ", "GRC", "NOR", "DNK", "DEN", "SWE", "NLD", "NED", "BEL", "POL", "CZE", "SVK", "HRV", "CRO", "BGR", "BUL", "HUN", "ROU", "PRT", "POR", "FIN", "UKR", "BLR", "GEO", "CHL", "COL", "PER", "URY", "PRY", "ECU", "BOL", "VEN", "MEX", "IND", "KOR", "TWN", "TPE", "THA", "HKG", "ISR", "TUR", "EGY", "TUN", "MAR", "ZAF", "RSA", "NZL", "MDA", "BIH", "SVN", "SLO", "EST", "LVA", "LTU", "CYP", "LUX", "MCO", "SMR", "SAU", "UZB", "LBN", "JOR"]) {
-      expect(flagAssetUrl(iso3), `missing flag asset for ${iso3}`).toBeTruthy();
+    // derive straight from the live map: adding a code without rerunning the generator
+    // leaves it unresolved here and fails CI — no hand-maintained list to drift out of sync
+    for (const iso3 of Object.keys(ISO3_TO_2)) {
+      expect(flagAssetUrl(iso3), `missing flag asset for ${iso3} — run scripts/gen-flag-assets.mjs`).toBeTruthy();
     }
-    // and the generated module carries exactly the distinct iso2 codes (no strays)
-    expect(Object.keys(FLAG_URLS).length).toBe(70);
+    // and the generated module carries exactly the map's distinct iso2 codes — no strays
+    expect(Object.keys(FLAG_URLS).length).toBe(new Set(Object.values(ISO3_TO_2)).size);
   });
 });

@@ -73,6 +73,8 @@ export function renderSunburst(
           const mid = (a.x0 + a.x1) / 2;
           const chord = rc * (a.x1 - a.x0);
           const fh = Math.min((a.y1 - a.y0) * 0.62, 16, chord * 0.6);
+          // sub-5px arcs draw no flag and intentionally no text fallback either: a code
+          // that small is as illegible as the flag, so the arc stays clean rather than crammed.
           if (fh >= 5) {
             const fw = (fh * 4) / 3;
             const fx = rc * Math.sin(mid), fy = -rc * Math.cos(mid);

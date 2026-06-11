@@ -3,7 +3,9 @@ import { FLAG_URLS } from "./flag-assets.gen";
 // ISO 3166-1 alpha-3 → alpha-2 for nations that appear in Grand Slam draws.
 // A few IOC aliases (SUI, GER, NED, DEN, CRO, BUL, SLO, RSA) are included because
 // some feeds use IOC rather than ISO codes. Unknown codes fall back to a white flag.
-const ISO3_TO_2: Record<string, string> = {
+// Exported so flags.test.ts derives its coverage check from this live map — adding a
+// code here without rerunning scripts/gen-flag-assets.mjs then fails CI.
+export const ISO3_TO_2: Record<string, string> = {
   ESP: "ES", FRA: "FR", ITA: "IT", DEU: "DE", GER: "DE", GBR: "GB", USA: "US",
   SRB: "RS", RUS: "RU", CHE: "CH", SUI: "CH", AUT: "AT", AUS: "AU", ARG: "AR",
   BRA: "BR", CAN: "CA", CHN: "CN", JPN: "JP", KAZ: "KZ", GRC: "GR", NOR: "NO",
