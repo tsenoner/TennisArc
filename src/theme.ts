@@ -19,4 +19,8 @@ export function saveTheme(t: Theme, storage: Setter = localStorage): void {
 
 export function applyTheme(t: Theme, el: HTMLElement = document.documentElement): void {
   el.dataset.theme = t;
+  // Browser/PWA chrome follows --bg (a static manifest theme_color can't track the toggle).
+  el.ownerDocument
+    ?.querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", t === "light" ? "#f6f4ef" : "#0d1014");
 }

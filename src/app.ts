@@ -131,7 +131,7 @@ export function createApp(root: HTMLElement): void {
     const time = timeOnCourt(snap);
     const tree = buildSunburst(snap);
     const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
-    const color = colorScale(state.colorDim, snap, state.selectedCountry, state.seedSort);
+    const color = colorScale(state.colorDim, snap, state.selectedCountry, state.seedSort, state.theme);
     // Round axis (R128 … Final), one per ring, derived from the laid-out arcs so it follows focus/zoom.
     const ringSeen = new Map<number, { y0: number; y1: number }>();
     for (const a of arcs) if (a.depth >= 1 && !ringSeen.has(a.depth)) ringSeen.set(a.depth, { y0: a.y0, y1: a.y1 });
