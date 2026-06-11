@@ -414,7 +414,9 @@ export function matchInsight(s: Snapshot, matchId: string, time: Map<string, Pla
     const favSide = p1.elo >= p2.elo ? "p1" : "p2";
     const fav = favSide === "p1" ? p1 : p2;
     const oth = favSide === "p1" ? p2 : p1;
-    eloLine = `${surface}-ELO favoured ${fav.name} ${Math.round(winProbability(fav.elo!, oth.elo!) * 100)}%`;
+    const pct = Math.round(winProbability(fav.elo!, oth.elo!) * 100);
+    const diff = Math.round(fav.elo! - oth.elo!);
+    eloLine = `${surface}-ELO favoured ${fav.name} ${pct}% (+${diff})`;
     if (m.winner && m.winner !== favSide) { upset = true; badges.push("Upset"); }
   }
   if (m.winner && m.score && m.score.length) {

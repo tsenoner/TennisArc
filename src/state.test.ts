@@ -315,6 +315,7 @@ describe("matchInsight", () => {
     expect(ins.badges).toContain("From a set down");
     expect(ins.badges.some((b) => /tiebreak/.test(b))).toBe(true);
     expect(ins.eloLine).toMatch(/ELO favoured/);
+    expect(ins.eloLine).toMatch(/\(\+200\)$/); // 2000 vs 1800 favourite gap
     expect(ins.p1.elo).not.toBeNull();
   });
 });

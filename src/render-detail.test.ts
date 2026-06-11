@@ -14,7 +14,7 @@ const base: MatchInsight = {
   p1: { id: "a", name: "Carlos Alcaraz", country: "ESP", seed: 2, ranking: 2, elo: 2106, roundReached: 7, sec: 22320, age: 22, birthday: "5 May", birthdayNear: true },
   p2: { id: "b", name: "Jannik Sinner", country: "ITA", seed: 1, ranking: 1, elo: 2215, roundReached: 6, sec: 19000, age: 24, birthday: "16 Aug", birthdayNear: false },
   badges: ["Upset", "From a set down", "1 tiebreak", "Marathon"], upset: true,
-  eloLine: "Clay-ELO favoured Jannik Sinner 65%",
+  eloLine: "Clay-ELO favoured Jannik Sinner 65% (+109)",
   aces: [9, 12], doubleFaults: [3, 2],
 };
 
