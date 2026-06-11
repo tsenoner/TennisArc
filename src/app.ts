@@ -284,8 +284,9 @@ export function createApp(root: HTMLElement): void {
   root.addEventListener("pointermove", (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-occupant]");
     updateReadout(el?.dataset.occupant || null);
-    // hovering a seed row lights that seed's path through the sunburst (the centre card names them too)
-    highlightPath(el?.hasAttribute("data-seed-row") ? el.dataset.occupant || null : null);
+    // hovering a panel row (seed, time leaderboard, country expand) lights that player's path
+    // through the sunburst (the centre card names them too)
+    highlightPath(el?.hasAttribute("data-hl-path") ? el.dataset.occupant || null : null);
   });
   root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(null); }, true);
 

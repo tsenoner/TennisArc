@@ -130,7 +130,7 @@ describe("renderSeedPanel", () => {
     expect(html).not.toContain("out · R64");   // the redundant "out" word is gone
     expect(html).toContain("⚡");              // upset flag, without naming who beat them
     expect(html).toContain("2108");            // surface ELO, rounded, shown persistently
-    expect(html).toContain('data-occupant="a"'); // seed rows carry their player id for hover-highlight
+    expect(html).toContain('data-hl-path data-occupant="a"'); // seed rows carry their player id for hover-highlight
     expect(html).toContain('data-action="seed-sort"'); // the Seed | ELO toggle is present
   });
 
@@ -168,5 +168,6 @@ describe("renderCountryPanel", () => {
     expect(html).toContain('data-action="country"');
     expect(html).toContain('data-country="ITA"');
     expect(html).toContain("Sinner"); // expanded because ITA is selected
+    expect(html).toContain('data-hl-path data-occupant="x"'); // expanded player hover-highlights their path
   });
 });

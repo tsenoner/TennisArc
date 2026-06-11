@@ -268,7 +268,7 @@ export function renderLeaderboard(rows: LeaderRow[]): string {
     .map((r, i) => {
       const w = Math.round((r.sec / max) * 100);
       return (
-        `<li class="lb-row">` +
+        `<li class="lb-row" data-hl-path data-occupant="${escapeHtml(r.playerId)}">` +
         `<span class="lb-rank">${i + 1}</span>` +
         `<span class="lb-name"><span class="lb-who">${escapeHtml(r.name)}</span>` +
         `<span class="lb-ctry">${flagEmoji(r.country)} ${escapeHtml(r.country)}</span></span>` +
@@ -408,7 +408,7 @@ export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
       // In ELO mode, flag the contenders the seeding leaves out (the whole point of the view).
       const tag = elo && r.seed == null ? `<span class="sp-tag uns" title="not seeded">unseeded</span>` : "";
       return (
-        `<li class="sp-row${r.alive ? " on" : ""}" data-seed-row data-occupant="${escapeHtml(r.playerId)}">` +
+        `<li class="sp-row${r.alive ? " on" : ""}" data-hl-path data-occupant="${escapeHtml(r.playerId)}">` +
         `<span class="sp-seed">${r.rank}</span>` +
         `<span class="sp-name"><span class="nm">${escapeHtml(r.name)}</span>${tag}</span>` +
         `<span class="sp-meta">${elov}${bolt}${where}</span>` +
@@ -449,7 +449,7 @@ export function renderCountryPanel(rows: NationRow[], selected: string | undefin
       if (!on) return head;
       const expand = r.players
         .map((p) =>
-          `<div class="ct-pl"><b>${escapeHtml(p.name)}</b>` +
+          `<div class="ct-pl" data-hl-path data-occupant="${escapeHtml(p.id)}"><b>${escapeHtml(p.name)}</b>` +
           `<span class="ct-rd${p.alive ? " alive" : ""}">${p.alive ? "in · " : ""}${roundAbbrev(p.roundReached, rounds)}</span></div>`)
         .join("");
       return head + `<li class="ct-expand">${expand}</li>`;

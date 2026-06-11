@@ -19,6 +19,13 @@ describe("renderLeaderboard", () => {
     expect(html).toContain("width:100%");
   });
 
+  it("marks each row for hover path-highlight with the player id", () => {
+    const html = renderLeaderboard(rows);
+    expect((html.match(/data-hl-path/g) ?? []).length).toBe(2);
+    expect(html).toContain('data-occupant="a"');
+    expect(html).toContain('data-occupant="b"');
+  });
+
   it("puts the name and country on separate spans so the full name gets the row", () => {
     const html = renderLeaderboard(rows);
     expect(html).toContain('<span class="lb-who">Carlos Alcaraz</span>');
