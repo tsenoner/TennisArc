@@ -3,7 +3,12 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-  build: { target: "es2020" },
+  build: {
+    target: "es2020",
+    // keep the bundled flag SVGs as individual precached files instead of base64
+    // data-URIs in the JS bundle (most are tiny and would otherwise inline)
+    assetsInlineLimit: (filePath) => (filePath.includes("flag-icons") ? false : undefined),
+  },
   plugins: [
     VitePWA({
       registerType: "autoUpdate",

@@ -61,6 +61,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .sunburst svg { width: 100%; height: 100%; display: block; }
 .arc { cursor: pointer; stroke: var(--bg); stroke-width: 0.5; }
 .arc.projected { opacity: 0.45; }
+/* bundled SVG flags: hairline ring so white-heavy flags (JPN, POL) don't melt into panels */
+.flag { display: inline-block; vertical-align: -1.5px; border-radius: 2px;
+  box-shadow: 0 0 0 0.5px var(--line); }
+.arc-flag { pointer-events: none; }   /* taps fall through to the arc beneath, like labels */
 
 .leaderboard { width: 280px; max-width: 38vw; overflow-y: auto; background: var(--panel);
   border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }

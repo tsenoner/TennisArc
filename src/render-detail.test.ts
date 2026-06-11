@@ -23,7 +23,7 @@ describe("renderMatchInsight", () => {
     const html = renderMatchInsight(base, "https://www.sofascore.com/tennis/match/x/abc", "r", rounds);
     expect(html).toContain("Carlos Alcaraz");
     expect(html).toContain("Jannik Sinner");
-    expect(html).toContain("🇪🇸");
+    expect(html).toMatch(/<span class="mi-fl"><img class="flag" src="[^"]*es[^"]*\.svg"/); // bundled SVG, not emoji
     expect(html).toContain("Final");
     expect(html).toContain("7<sup>5</sup>-6"); // set-2 tiebreak on winner side
     expect(html).toContain("Upset");
