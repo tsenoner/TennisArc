@@ -240,7 +240,10 @@ export function renderControls(opts: {
     switcher + slamDD +
     lensInline + lensDD +
     `<button class="ctrl theme" data-action="theme" aria-label="Toggle theme">${opts.theme === "dark" ? "☀" : "☾"}</button>` +
-    `<a class="ctrl issues-link" href="https://github.com/tsenoner/TennisArc/issues" target="_blank" rel="noopener noreferrer" aria-label="Report an issue on GitHub">Issues</a>` +
+    // Octicon "issue-opened"; the text label hides on phones (icon-only) to free header width
+    `<a class="ctrl issues-link" href="https://github.com/tsenoner/TennisArc/issues" target="_blank" rel="noopener noreferrer" aria-label="Report an issue on GitHub">` +
+    `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>` +
+    `<span class="issues-label">Issues</span></a>` +
     `</header>`
   );
 }
@@ -262,6 +265,17 @@ export function renderLegend(dim: ColorDim, seedSort: SeedSort = "seed"): string
   return `<div class="legend"><span class="${grad}" aria-hidden="true"></span><span>${label}</span></div>`;
 }
 
+/** Mobile bottom-sheet chrome shared by every lens panel: a grip pill that toggles
+ *  peek/expanded height, and an explicit close. Display: none on desktop. */
+export function sheetBar(): string {
+  return (
+    `<div class="sheet-bar">` +
+    `<button class="sheet-grip" data-action="panel-expand" aria-label="Expand or collapse panel"><span></span></button>` +
+    `<button class="sheet-close" data-action="panel" aria-label="Close panel">✕</button>` +
+    `</div>`
+  );
+}
+
 export function renderLeaderboard(rows: LeaderRow[]): string {
   const max = Math.max(1, ...rows.map((r) => r.sec));
   const items = rows
@@ -278,7 +292,7 @@ export function renderLeaderboard(rows: LeaderRow[]): string {
       );
     })
     .join("");
-  return `<aside class="leaderboard"><h2>Most time on court</h2><ol class="lb-list">${items}</ol></aside>`;
+  return `<aside class="leaderboard">${sheetBar()}<h2>Most time on court</h2><ol class="lb-list">${items}</ol></aside>`;
 }
 
 export interface ReadoutInfo {
@@ -418,6 +432,7 @@ export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
     .join("");
   return (
     `<aside class="panel seed-panel">` +
+    sheetBar() +
     toggle +
     `<div class="seeds-in"><div class="seeds-top"><span>${title}</span><b>${prog.remaining} / ${prog.total}</b></div>` +
     `<div class="seeds-track"><span style="width:${pct}%"></span></div></div>` +
@@ -455,5 +470,5 @@ export function renderCountryPanel(rows: NationRow[], selected: string | undefin
       return head + `<li class="ct-expand">${expand}</li>`;
     })
     .join("");
-  return `<aside class="panel country-panel"><div class="panel-sub">Nations — still in</div><ol class="ct-list">${items}</ol></aside>`;
+  return `<aside class="panel country-panel">${sheetBar()}<div class="panel-sub">Nations — still in</div><ol class="ct-list">${items}</ol></aside>`;
 }
