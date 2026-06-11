@@ -57,8 +57,13 @@ fi
 #    (Avoid `cp -n`: BSD/macOS cp exits non-zero when it skips, which would trip `set -e`.)
 HAVE_PUBLISHED=0
 if [ "$REMOTE_HAS_DATA" = 1 ] && git fetch "$REMOTE" data 2>/dev/null; then
+  #  Extraction must succeed: an empty PUB_DIR would make count_snaps return 0 below, which
+  #  silently disarms the shrink guard and lets a force-push wipe every branch-only slam.
+  if ! git archive FETCH_HEAD | tar -x -C "$PUB_DIR"; then
+    echo "could not extract the published data branch — refusing to publish (would risk data loss)" >&2
+    exit 1
+  fi
   HAVE_PUBLISHED=1
-  git archive FETCH_HEAD 2>/dev/null | tar -x -C "$PUB_DIR" 2>/dev/null || true
   shopt -s nullglob
   for f in "$PUB_DIR"/slams/[0-9]*/atp-*.json "$PUB_DIR"/slams/[0-9]*/wta-*.json; do
     dest="public/data/${f#"$PUB_DIR"/}"
