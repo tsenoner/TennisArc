@@ -5,7 +5,7 @@ import { COLOR_DIMS, type ColorDim } from "./color";
 import type { Tour } from "./model";
 import type { Round, SlamIndex } from "./model";
 import type { Theme } from "./theme";
-import { flagEmoji } from "./flags";
+import { flagEmoji, flagAssetUrl } from "./flags";
 import type { LeaderRow, SeedProgress, SeedSort, NationRow, InsightSide, MatchInsight } from "./state";
 import { availableYears, slamsForYear } from "./slams";
 
@@ -20,7 +20,24 @@ const arcGen = d3arc<LayoutArc>()
   .padAngle(PAD_ANGLE)
   .padRadius(PAD_RADIUS);
 
-export interface SunburstLabels { anchors: Set<string>; text: (occupant: string) => string; }
+export interface SunburstLabels {
+  anchors: Set<string>;
+  text: (occupant: string) => string;
+  /** When set (Country lens), arcs draw this bundled SVG flag as an <image> at the arc
+   *  centroid instead of a textPath label — WebKit never paints colour emoji on a
+   *  textPath, and Windows has no flag emoji at all (#6). Null falls back to text. */
+  image?: (occupant: string) => string | null;
+}
+
+/** Inline flag <img> from the bundled flag-icons set (identical on every platform);
+ *  falls back to the emoji pair for codes outside the asset set. flag-icons are 4:3.
+ *  Pass `alt` where no country text sits beside the flag (e.g. match insight) —
+ *  everywhere else the adjacent ISO code carries the meaning and alt stays empty. */
+export function flagImg(iso3: string, h: number, alt = ""): string {
+  const url = flagAssetUrl(iso3);
+  if (!url) return flagEmoji(iso3);
+  return `<img class="flag" src="${escapeHtml(url)}" width="${((h * 4) / 3).toFixed(1)}" height="${h}" alt="${escapeHtml(alt)}" />`;
+}
 /** A round name pinned to a ring's mid-radius, drawn as a faint axis at 12 o'clock. */
 export interface RingLabel { y: number; label: string; }
 
@@ -48,6 +65,28 @@ export function renderSunburst(
       const d = arcGen(a) ?? "";
       const cls = a.projected ? "arc projected" : "arc";
       if (labels && !a.projected && a.occupant && labels.anchors.has(a.id)) {
+        // Country lens: a flag image at the arc centroid, rotated tangentially like the
+        // curved labels (flipped on the bottom half so it never hangs upside-down).
+        const imgUrl = labels.image?.(a.occupant) ?? null;
+        if (imgUrl) {
+          const rc = (a.y0 + a.y1) / 2;
+          const mid = (a.x0 + a.x1) / 2;
+          const chord = rc * (a.x1 - a.x0);
+          const fh = Math.min((a.y1 - a.y0) * 0.62, 16, chord * 0.6);
+          // sub-5px arcs draw no flag and intentionally no text fallback either: a code
+          // that small is as illegible as the flag, so the arc stays clean rather than crammed.
+          if (fh >= 5) {
+            const fw = (fh * 4) / 3;
+            const fx = rc * Math.sin(mid), fy = -rc * Math.cos(mid);
+            const flip = mid > Math.PI / 2 && mid < (3 * Math.PI) / 2 ? 180 : 0;
+            const deg = (mid * 180) / Math.PI - 90 + flip;
+            texts.push(
+              `<image class="arc-flag" href="${escapeHtml(imgUrl)}" x="${(fx - fw / 2).toFixed(1)}" y="${(fy - fh / 2).toFixed(1)}" ` +
+              `width="${fw.toFixed(1)}" height="${fh.toFixed(1)}" ` +
+              `transform="rotate(${deg.toFixed(1)} ${fx.toFixed(1)} ${fy.toFixed(1)})"></image>`,
+            );
+          }
+        } else {
         const label = labels.text(a.occupant);
         if (label) {
           const rc = (a.y0 + a.y1) / 2;
@@ -119,6 +158,7 @@ export function renderSunburst(
             }
           }
         }
+        } // end image/text branch
       }
       return `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
         `data-action="inspect" data-id="${a.id}" data-match="${a.matchId}" data-occupant="${escapeHtml(a.occupant ?? "")}"></path>`;
@@ -271,7 +311,7 @@ export function renderLeaderboard(rows: LeaderRow[]): string {
         `<li class="lb-row" data-hl-path data-occupant="${escapeHtml(r.playerId)}">` +
         `<span class="lb-rank">${i + 1}</span>` +
         `<span class="lb-name"><span class="lb-who">${escapeHtml(r.name)}</span>` +
-        `<span class="lb-ctry">${flagEmoji(r.country)} ${escapeHtml(r.country)}</span></span>` +
+        `<span class="lb-ctry">${flagImg(r.country, 10)} ${escapeHtml(r.country)}</span></span>` +
         `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%"></span></span>` +
         `<span class="lb-time">${formatDuration(r.sec)}${r.provisional ? "*" : ""}</span>` +
         `</li>`
@@ -304,7 +344,7 @@ export function renderReadout(info: ReadoutInfo | null): string {
   const meta2 = [info.roundLabel, time].filter(Boolean).join(" · ");
   return (
     `<div class="readout filled${info.projected ? " projected" : ""}">` +
-    `<div class="ro-ctry">${flagEmoji(info.country)} ${escapeHtml(info.country)}</div>` +
+    `<div class="ro-ctry">${flagImg(info.country, 11)} ${escapeHtml(info.country)}</div>` +
     `<div class="ro-name">${escapeHtml(info.name)}</div>` +
     (meta1 ? `<div class="ro-meta">${escapeHtml(meta1)}</div>` : "") +
     (info.eloLabel ? `<div class="ro-elo">${escapeHtml(info.eloLabel)}</div>` : "") +
@@ -333,7 +373,7 @@ function insightPlayer(side: InsightSide, win: boolean, rounds: Round[]): string
   const bd = side.age != null ? ` · ${side.age}y${side.birthdayNear ? ` 🎂 ${escapeHtml(side.birthday)}` : ""}` : "";
   return (
     `<div class="mi-pl${win ? " mi-win" : ""}">` +
-    `<span class="mi-fl">${flagEmoji(side.country)}</span>` +
+    `<span class="mi-fl">${flagImg(side.country, 14, side.country)}</span>` +
     `<span class="mi-who"><b>${escapeHtml(side.name)}</b>${win ? ' <span class="mi-chk">✓</span>' : ""}` +
     `<small>${escapeHtml(tag)} · ${escapeHtml(path)}${bd}</small></span></div>`
   );
@@ -443,7 +483,7 @@ export function renderCountryPanel(rows: NationRow[], selected: string | undefin
       const on = selected === r.country;
       const head =
         `<li class="ct-row${on ? " on" : ""}" data-action="country" data-country="${escapeHtml(r.country)}">` +
-        `<span class="ct-flag">${flagEmoji(r.country)}</span>` +
+        `<span class="ct-flag">${flagImg(r.country, 13)}</span>` +
         `<span class="ct-name">${escapeHtml(r.country)}</span>` +
         `<span class="ct-cnt"><b>${r.stillIn}</b>/${r.entrants}</span></li>`;
       if (!on) return head;

@@ -73,6 +73,18 @@ describe("renderSunburst labels", () => {
     const proj = { ...bigArc, projected: true };
     expect(renderSunburst([proj], color, 700, labels)).not.toContain("<textPath");
   });
+
+  it("draws a rotated flag <image> instead of a textPath when an image url is provided (Country lens)", () => {
+    const svg = renderSunburst([bigArc], color, 700, { ...labels, image: () => "/flags/it.svg" });
+    expect(svg).toMatch(/<image class="arc-flag" href="\/flags\/it\.svg"[^>]*transform="rotate\(/);
+    expect(svg).not.toContain("<textPath"); // the image replaces the text label
+  });
+
+  it("falls back to the text label when the image fn returns null (unmapped country)", () => {
+    const svg = renderSunburst([bigArc], color, 700, { ...labels, image: () => null });
+    expect(svg).toContain("<textPath");
+    expect(svg).not.toContain("arc-flag");
+  });
 });
 
 import { renderReadout, type ReadoutInfo } from "./render";
@@ -164,7 +176,7 @@ describe("renderCountryPanel", () => {
       { index: 6, name: "Final", size: 2, matchIds: [] },
     ];
     const html = renderCountryPanel(rows, "ITA", rounds);
-    expect(html).toContain("🇮🇹");
+    expect(html).toMatch(/<span class="ct-flag"><img class="flag" src="[^"]*it[^"]*\.svg"/); // bundled SVG, not emoji
     expect(html).toContain('data-action="country"');
     expect(html).toContain('data-country="ITA"');
     expect(html).toContain("Sinner"); // expanded because ITA is selected

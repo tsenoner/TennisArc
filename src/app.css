@@ -61,6 +61,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .sunburst svg { width: 100%; height: 100%; display: block; }
 .arc { cursor: pointer; stroke: var(--bg); stroke-width: 0.5; }
 .arc.projected { opacity: 0.45; }
+/* bundled SVG flags: hairline ring so white-heavy flags (JPN, POL) don't melt into panels */
+.flag { display: inline-block; vertical-align: -1.5px; border-radius: 2px;
+  box-shadow: 0 0 0 0.5px var(--line); }
+.arc-flag { pointer-events: none; }   /* taps fall through to the arc beneath, like labels */
 
 .leaderboard { width: 280px; max-width: 38vw; overflow-y: auto; background: var(--panel);
   border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
@@ -93,7 +97,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .mi-mu { display: grid; gap: 6px; }
 .mi-pl { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; background: var(--inset); }
 .mi-pl.mi-win { box-shadow: inset 2px 0 0 var(--teal); }
-.mi-fl { font-size: 17px; }
+.mi-fl { font-size: 17px; } /* sizes only the emoji fallback; the bundled <img> is sized inline */
 .mi-who b { font-size: 13.5px; } .mi-who small { display: block; color: var(--dim); font-size: 11px; }
 .mi-chk { color: var(--teal); }
 .mi-score { text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: 1px; }
@@ -239,7 +243,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .ct-row { display: grid; grid-template-columns: 20px 1fr auto; gap: 9px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--hairline); font-size: 13px; cursor: pointer; border-radius: 6px; }
 .ct-row:hover { background: var(--hover); }
 .ct-row.on { background: color-mix(in srgb, var(--country) 14%, transparent); box-shadow: inset 2px 0 0 var(--country); }
-.ct-flag { font-size: 15px; }
+.ct-flag { font-size: 15px; } /* sizes only the emoji fallback; the bundled <img> is sized inline */
 .ct-cnt { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 12px; }
 .ct-cnt b { color: var(--country); }
 .ct-expand { list-style: none; padding: 2px 4px 8px 30px; border-bottom: 1px solid var(--hairline); }

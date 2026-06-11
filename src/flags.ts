@@ -1,7 +1,11 @@
+import { FLAG_URLS } from "./flag-assets.gen";
+
 // ISO 3166-1 alpha-3 → alpha-2 for nations that appear in Grand Slam draws.
 // A few IOC aliases (SUI, GER, NED, DEN, CRO, BUL, SLO, RSA) are included because
 // some feeds use IOC rather than ISO codes. Unknown codes fall back to a white flag.
-const ISO3_TO_2: Record<string, string> = {
+// Exported so flags.test.ts derives its coverage check from this live map — adding a
+// code here without rerunning scripts/gen-flag-assets.mjs then fails CI.
+export const ISO3_TO_2: Record<string, string> = {
   ESP: "ES", FRA: "FR", ITA: "IT", DEU: "DE", GER: "DE", GBR: "GB", USA: "US",
   SRB: "RS", RUS: "RU", CHE: "CH", SUI: "CH", AUT: "AT", AUS: "AU", ARG: "AR",
   BRA: "BR", CAN: "CA", CHN: "CN", JPN: "JP", KAZ: "KZ", GRC: "GR", NOR: "NO",
@@ -21,9 +25,18 @@ export function iso3to2(code: string): string | null {
   return ISO3_TO_2[code.toUpperCase()] ?? null;
 }
 
-/** A country's flag emoji (regional-indicator pair), or 🏳 when the code is unknown. */
+/** A country's flag emoji (regional-indicator pair), or 🏳 when the code is unknown.
+ *  Fallback only: emoji letter-box on Windows (#6) and WebKit won't paint them on SVG
+ *  textPath at all, so anything user-facing should prefer the bundled SVGs below. */
 export function flagEmoji(iso3: string): string {
   const a2 = iso3to2(iso3);
   if (!a2) return "🏳";
   return String.fromCodePoint(...[...a2].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+/** URL of the bundled flag-icons SVG for a country, or null for unmapped codes.
+ *  Renders identically on every platform (unlike emoji). */
+export function flagAssetUrl(iso3: string): string | null {
+  const a2 = iso3to2(iso3);
+  return a2 ? FLAG_URLS[a2] ?? null : null;
 }
