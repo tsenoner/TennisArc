@@ -1,13 +1,13 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { resolve, sep } from "node:path";
 import type { AvailableSlam, SlamIndex, Snapshot } from "../src/model";
 import { availableSlamOf } from "./manifest";
 
 const OUT_DIR = resolve(process.cwd(), "public/data");
 
-// Per-slam snapshots are named "{tour}-{year}-{slam}.json". The active aliases
-// (atp.json / wta.json) and the manifest (index.json) are deliberately excluded.
-const SNAP_RE = /^(atp|wta)-\d{4}-[a-z0-9-]+\.json$/;
+// Per-slam snapshots live at "slams/{year}/{tour}-{slam}.json". The manifest (index.json)
+// and any legacy flat-layout leftovers at the root are deliberately excluded.
+const SNAP_RE = /^slams\/\d{4}\/(atp|wta)-[a-z0-9-]+\.json$/;
 
 /**
  * Rebuild the manifest from every per-slam snapshot on disk — no network, no scrape.
@@ -16,7 +16,10 @@ const SNAP_RE = /^(atp|wta)-\d{4}-[a-z0-9-]+\.json$/;
  * deterministic (re-running on the same files yields a byte-identical index).
  */
 export async function reindex(dir = OUT_DIR): Promise<SlamIndex> {
-  const files = (await readdir(dir)).filter((f) => SNAP_RE.test(f)).sort();
+  const files = (await readdir(dir, { recursive: true }))
+    .map((f) => f.split(sep).join("/"))
+    .filter((f) => SNAP_RE.test(f))
+    .sort();
   const entries: AvailableSlam[] = [];
   for (const f of files) {
     const snap = JSON.parse(await readFile(resolve(dir, f), "utf8")) as Snapshot;
@@ -33,7 +36,7 @@ export async function reindex(dir = OUT_DIR): Promise<SlamIndex> {
 async function main(): Promise<void> {
   const index = await reindex();
   await writeFile(resolve(OUT_DIR, "index.json"), JSON.stringify(index));
-  console.log(`reindex: ${index.slams.length} slams → ${index.slams.map((s) => `${s.tour}/${s.slam}`).join(", ")}`);
+  console.log(`reindex: ${index.slams.length} slams → ${index.slams.map((s) => `${s.tour}/${s.year}/${s.slam}`).join(", ")}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

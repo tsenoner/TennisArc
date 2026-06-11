@@ -8,22 +8,25 @@ Built with **Vite + TypeScript (vanilla DOM) + vite-plugin-pwa**; data ingested 
 
 ```bash
 pnpm install
-pnpm dev          # http://localhost:5173  (fetches /data/{atp,wta}.json)
+pnpm dev          # http://localhost:5173  (serves the committed /data seed)
 pnpm test         # vitest (TZ=UTC pinned)
 pnpm typecheck    # tsc --noEmit
 pnpm build        # tsc --noEmit && vite build → dist/
 pnpm preview      # serve dist/ (exercises the service worker)
 ```
 
-The app reads `public/data/{atp,wta}.json` (committed real Roland Garros 2026 seed data) and works fully offline once installed (service-worker precache + IndexedDB cache).
+The app reads the committed seed under `public/data/` — `index.json` (manifest) plus one snapshot per slam at `slams/{year}/{tour}-{slam}.json` — and works fully offline once installed (service-worker precache + IndexedDB cache). A permanent rewrite in `vercel.json` maps the pre-reorg flat paths (`/data/{tour}-{year}-{slam}.json`) onto the nested layout so clients running a not-yet-updated service worker never 404.
 
 ## Data ingestion
 
 ```bash
-pnpm ingest       # headless Chromium → SofaScore → public/data/{atp,wta}.json
+pnpm ingest       # headless Chromium → SofaScore → public/data/slams/{year}/{tour}-{slam}.json
+pnpm reindex      # rebuild public/data/index.json from the snapshots on disk (no network)
 ```
 
 `ingest/` only fetches while a Slam is actually in progress (`activeSlam()` in `ingest/config.ts` — the slam whose active window `[from, to)` contains now). Between tournaments the bracket is frozen, so the ingest exits immediately *before* launching a browser and pushes nothing; the `data` branch keeps the last Slam's final state. When a window is open it pulls the SofaScore `cuptrees` bracket + per-match detail/stats from a Cloudflare-cleared browser context, normalizes to the `Snapshot` model (`src/model.ts`), and writes static JSON. It auto-switches to the next Slam when that slam's draw is released (no edit needed), and keeps the previous one until the new full draw is available. Force a specific slam regardless of the window with `SLAM=wimbledon pnpm ingest`. Update the per-slam `from`/`to` dates + ids in `config.ts` when rolling to a new year.
+
+Backfill past editions with `BACKFILL_YEARS=2024,2025 pnpm ingest` (add `BACKFILL_SLAMS=wimbledon` to restrict the slams). Past seasons keep `elo: null` — Tennis Abstract only publishes current ratings, which would be anachronistic on a historical draw. `scripts/probe-history.ts` reports how far back SofaScore has usable draws per slam/tour.
 
 ### Refreshing data
 
@@ -32,7 +35,7 @@ SofaScore's API blocks datacenter IPs (Cloudflare 403), so **GitHub-hosted Actio
 To refresh from a residential connection (your machine), run:
 
 ```bash
-scripts/publish-data.sh   # pnpm ingest → force-push the `data` branch (files at root)
+scripts/publish-data.sh   # pnpm ingest → force-push the `data` branch (index.json + slams/ tree)
 ```
 
 Schedule it via `launchd`/`cron` while your machine is online. The deployed app reads the `data` branch when `VITE_DATA_BASE_URL` is set, and always falls back to the committed same-origin seed in `public/data/`.

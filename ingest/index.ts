@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, snapshotFilename } from "../src/model";
+import { dirname, resolve } from "node:path";
+import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
 import { DRAW_SIZE, SLAMS, activeSlam, type SlamConfig } from "./config";
 import { openContext, fetchTournament, resolveSeasonId } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
@@ -27,12 +27,18 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
       if (!e?.detail) continue;
       snap.matches[match.id] = enrichMatch(match, e.detail as any, (e.stats as any) ?? null, snap.players, nowSec);
     }
-    try {
-      const elo = await fetchElo(tour);
-      const { matched, unmatched } = applyElo(snap.players, elo);
-      console.log(`${cfg.slam} ${tour}: ELO matched ${matched}/${Object.keys(snap.players).length} (${unmatched.length} unmatched)`);
-    } catch (err) {
-      console.warn(`${cfg.slam} ${tour}: ELO enrichment skipped (keeping elo=null):`, err);
+    // Tennis Abstract publishes *current* ratings only — stamping them onto a past year's
+    // snapshot would be anachronistic, so historical backfills keep elo=null.
+    if (cfg.year === new Date().getUTCFullYear()) {
+      try {
+        const elo = await fetchElo(tour);
+        const { matched, unmatched } = applyElo(snap.players, elo);
+        console.log(`${cfg.slam} ${tour}: ELO matched ${matched}/${Object.keys(snap.players).length} (${unmatched.length} unmatched)`);
+      } catch (err) {
+        console.warn(`${cfg.slam} ${tour}: ELO enrichment skipped (keeping elo=null):`, err);
+      }
+    } else {
+      console.log(`${cfg.slam} ${tour}: past season — ELO left null (only current ratings exist)`);
     }
     try {
       const dob = await fetchPlayers(tour);
@@ -60,16 +66,17 @@ async function loadIndex(): Promise<SlamIndex> {
   }
 }
 
-/** Ingest both tours for one slam config; write per-slam files (+ active alias); return manifest entries. */
-async function publishSlam(cfg: SlamConfig, isoNow: string, nowSec: number, writeAlias: boolean): Promise<AvailableSlam[]> {
+/** Ingest both tours for one slam config; write per-slam files; return manifest entries. */
+async function publishSlam(cfg: SlamConfig, isoNow: string, nowSec: number): Promise<AvailableSlam[]> {
   const entries: AvailableSlam[] = [];
   for (const tour of ["ATP", "WTA"] as Tour[]) {
     try {
       const snap = await ingestTour(cfg, tour, isoNow, nowSec);
-      await writeFile(resolve(OUT_DIR, snapshotFilename(tour, cfg.year, cfg.slam)), JSON.stringify(snap));
-      if (writeAlias) await writeFile(resolve(OUT_DIR, `${tour.toLowerCase()}.json`), JSON.stringify(snap));
+      const file = resolve(OUT_DIR, snapshotPath(tour, cfg.year, cfg.slam));
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, JSON.stringify(snap));
       const played = Object.values(snap.matches).filter((m) => m.status !== "scheduled" && m.status !== "notstarted").length;
-      console.log(`wrote ${snapshotFilename(tour, cfg.year, cfg.slam)}: ${Object.keys(snap.matches).length} matches (${played} played)`);
+      console.log(`wrote ${snapshotPath(tour, cfg.year, cfg.slam)}: ${Object.keys(snap.matches).length} matches (${played} played)`);
       entries.push(availableSlamOf(snap));
     } catch (err) {
       console.error(`ingest ${cfg.slam} ${tour} failed (keeping last-good):`, err);
@@ -88,7 +95,7 @@ async function main(): Promise<void> {
     for (const { year, slam } of backfill) {
       const cfg = { ...SLAMS[slam], year };
       console.log(`backfill: ${slam} (${year})`);
-      entries = entries.concat(await publishSlam(cfg, isoNow, nowSec, false));
+      entries = entries.concat(await publishSlam(cfg, isoNow, nowSec));
     }
     const idx = await loadIndex();
     const merged: SlamIndex = { schemaVersion: 2, generatedAt: isoNow, slams: mergeIndex(idx.slams, entries) };
@@ -107,7 +114,7 @@ async function main(): Promise<void> {
   console.log(`tracking slam: ${cfg.slam} (${cfg.year})`);
   await mkdir(OUT_DIR, { recursive: true });
 
-  const entries = await publishSlam(cfg, isoNow, nowSec, true);
+  const entries = await publishSlam(cfg, isoNow, nowSec);
   if (entries.length === 0) { console.error("ingest failed for all tours"); process.exitCode = 1; return; }
 
   const idx = await loadIndex();

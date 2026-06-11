@@ -4,8 +4,7 @@
 #
 # Data layout (public/data/, all copied to the orphan `data` branch each run):
 #   index.json                          — manifest of available slams (rebuilt by `pnpm reindex`)
-#   {tour}-{year}-{slam}.json           — one snapshot per slam (e.g. atp-2026-roland-garros.json)
-#   {atp,wta}.json                      — alias of the *active* slam (legacy; current app fallback)
+#   slams/{year}/{tour}-{slam}.json     — one snapshot per slam (e.g. slams/2026/atp-roland-garros.json)
 #
 # Auto-persist: completed slams stay live with NO manual freeze. Each run carries forward the
 # already-published `data` branch (step 2) and rebuilds the manifest from every snapshot on disk
@@ -58,11 +57,29 @@ fi
 #    (Avoid `cp -n`: BSD/macOS cp exits non-zero when it skips, which would trip `set -e`.)
 HAVE_PUBLISHED=0
 if [ "$REMOTE_HAS_DATA" = 1 ] && git fetch "$REMOTE" data 2>/dev/null; then
+  #  Extraction must succeed: an empty PUB_DIR would make count_snaps return 0 below, which
+  #  silently disarms the shrink guard and lets a force-push wipe every branch-only slam.
+  if ! git archive FETCH_HEAD | tar -x -C "$PUB_DIR"; then
+    echo "could not extract the published data branch — refusing to publish (would risk data loss)" >&2
+    exit 1
+  fi
   HAVE_PUBLISHED=1
-  git archive FETCH_HEAD 2>/dev/null | tar -x -C "$PUB_DIR" 2>/dev/null || true
   shopt -s nullglob
+  for f in "$PUB_DIR"/slams/[0-9]*/atp-*.json "$PUB_DIR"/slams/[0-9]*/wta-*.json; do
+    dest="public/data/${f#"$PUB_DIR"/}"
+    mkdir -p "$(dirname "$dest")"
+    [ -e "$dest" ] || cp "$f" "$dest"
+  done
+  #  Legacy flat layout ({tour}-{year}-{slam}.json at the branch root, pre-2026-06 reorg):
+  #  normalize into slams/{year}/ so the first publish after the reorg migrates the branch.
   for f in "$PUB_DIR"/atp-[0-9]*-*.json "$PUB_DIR"/wta-[0-9]*-*.json; do
-    dest="public/data/$(basename "$f")"
+    base="$(basename "$f" .json)"   # e.g. atp-2026-roland-garros
+    tour="${base%%-*}"
+    rest="${base#*-}"
+    year="${rest%%-*}"
+    slam="${rest#*-}"
+    dest="public/data/slams/$year/$tour-$slam.json"
+    mkdir -p "$(dirname "$dest")"
     [ -e "$dest" ] || cp "$f" "$dest"
   done
   shopt -u nullglob
@@ -79,7 +96,8 @@ fi
 pnpm reindex
 
 # 4. Snapshot the full data set before touching branches.
-cp "$REPO_ROOT"/public/data/*.json "$STAGING/"
+cp "$REPO_ROOT"/public/data/index.json "$STAGING/"
+[ -d "$REPO_ROOT"/public/data/slams ] && cp -R "$REPO_ROOT"/public/data/slams "$STAGING/slams"
 
 # 5. Set up a git identity if none is configured (needed for the commit under launchd/cron).
 git config --get user.name  >/dev/null 2>&1 || git config user.name  "tennisarc-bot"
@@ -91,20 +109,23 @@ git branch -D data-pub >/dev/null 2>&1 || true
 git worktree add --orphan -b data-pub "$WORKTREE_DIR" >/dev/null
 (
   cd "$WORKTREE_DIR"
-  cp "$STAGING"/*.json .
+  cp -R "$STAGING"/. .
   # Tell Vercel never to build the data branch (it has no app) — prevents failing preview deploys.
   printf '%s\n' '{"git":{"deploymentEnabled":false}}' > vercel.json
   git add -A
   git commit -q -m "data: refresh $(date -u +%FT%TZ)"
 )
 
-# Count per-slam snapshots in a dir. Uses a nullglob array, NOT `ls`: under bash 3.2 (the macOS
-# /usr/bin/env bash) an unmatched glob makes `ls` exit 1, which `pipefail` + `set -e` would turn
-# into a whole-script abort on any single-tour / empty dir. `${#files[@]}` is safe under `set -u`.
+# Count per-slam snapshots in a dir, in BOTH layouts (slams/{year}/ plus legacy flat root, so the
+# migration publish compares against the pre-reorg branch correctly). Uses a nullglob array, NOT
+# `ls`: under bash 3.2 (the macOS /usr/bin/env bash) an unmatched glob makes `ls` exit 1, which
+# `pipefail` + `set -e` would turn into a whole-script abort on any single-tour / empty dir.
+# `${#files[@]}` is safe under `set -u`.
 count_snaps() {
   local d="$1"; local -a files
   shopt -s nullglob
-  files=( "$d"/atp-[0-9]*-*.json "$d"/wta-[0-9]*-*.json )
+  files=( "$d"/slams/[0-9]*/atp-*.json "$d"/slams/[0-9]*/wta-*.json \
+          "$d"/atp-[0-9]*-*.json "$d"/wta-[0-9]*-*.json )
   shopt -u nullglob
   echo "${#files[@]}"
 }

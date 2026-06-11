@@ -2,9 +2,11 @@
 
 ## Data refresh → move off the Mac to an always-on residential runner
 
-The SofaScore ingest must run from a **residential IP** — datacenter IPs (GitHub Actions, Cloudflare Workers/Pages) get a Cloudflare `403`, even with a real headless browser. For now `scripts/publish-data.sh` runs on the Mac via a `launchd` agent (`~/Library/LaunchAgents/com.tennisarc.refresh.plist`, every 1800s), which only refreshes while the Mac is awake and logged in.
+The SofaScore ingest must run from a **residential IP** — datacenter IPs (GitHub Actions, Cloudflare Workers/Pages) get a Cloudflare `403`, even with a real headless browser. For now it runs on the Mac via a `launchd` agent (`~/Library/LaunchAgents/com.tennisarc.refresh.plist`, every 1800s), which only refreshes while the Mac is awake and logged in.
 
-The fix is a cheap always-on box on the home network. **Nothing in the app or the repo changes** — the Pi runs the exact same `scripts/publish-data.sh`, force-pushes the same `data` branch, and the live site keeps reading `VITE_DATA_BASE_URL` as it does today. This is purely a swap of *where the cron lives*.
+Since 2026-06-11 the agent runs `~/Library/Application Support/TennisArc/run-refresh.sh` (a snapshot of `scripts/refresh-runner.sh` — re-copy if that file changes), which syncs a **dedicated clone** at `~/Library/Application Support/TennisArc/refresh` to `origin/main` and publishes from there. The dev checkout is never touched by the cron, and merges to `main` take effect on the next cycle with no manual `git pull`.
+
+The remaining fix is a cheap always-on box on the home network. **Nothing in the app or the repo changes** — the Pi installs the same `scripts/refresh-runner.sh` (systemd instead of launchd), force-pushes the same `data` branch, and the live site keeps reading `VITE_DATA_BASE_URL` as it does today. This is purely a swap of *where the cron lives*.
 
 - [ ] Acquire hardware (Raspberry Pi 4/5, see below).
 - [ ] Provision OS + clone repo + install deps (runbook below).
@@ -52,7 +54,7 @@ pnpm exec playwright install --with-deps chromium
 ```
 > **ARM gotcha:** `--with-deps` shells out to `apt` and may warn that Raspberry Pi OS isn't a recognized distro. If the bundled Chromium then fails to launch, fall back to the distro browser: `sudo apt install -y chromium`, then in `ingest/sofascore.ts` change the launch to
 > `chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH })`
-> and export `CHROMIUM_PATH=/usr/bin/chromium` in the service env (step 4). Test before wiring the timer: `pnpm ingest` should write `public/data/atp.json` + `wta.json`.
+> and export `CHROMIUM_PATH=/usr/bin/chromium` in the service env (step 4). Test before wiring the timer: `SLAM=wimbledon pnpm ingest` should write `public/data/slams/{year}/atp-wimbledon.json` + `wta-wimbledon.json`.
 
 **4. Schedule it — systemd timer (recommended; mirrors the Mac launchd agent)**
 

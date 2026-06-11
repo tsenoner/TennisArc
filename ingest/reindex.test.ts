@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { reindex } from "./reindex";
@@ -22,25 +22,34 @@ let dir: string;
 beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "reindex-")); });
 afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
 
+async function writeSnap(dir: string, year: number, file: string, s: Snapshot): Promise<void> {
+  await mkdir(resolve(dir, "slams", String(year)), { recursive: true });
+  await writeFile(resolve(dir, "slams", String(year), file), JSON.stringify(s));
+}
+
 describe("reindex", () => {
-  it("builds the manifest from per-slam snapshots, ignoring aliases and index", async () => {
-    await writeFile(resolve(dir, "atp-2026-roland-garros.json"), JSON.stringify(snap("ATP", 2026, "roland-garros", "Roland Garros", "Clay", "2026-06-09T00:00:00.000Z")));
-    await writeFile(resolve(dir, "wta-2026-australian-open.json"), JSON.stringify(snap("WTA", 2026, "australian-open", "Australian Open", "Hard", "2026-02-01T00:00:00.000Z")));
-    // noise that must be excluded:
-    await writeFile(resolve(dir, "atp.json"), JSON.stringify(snap("ATP", 2026, "roland-garros", "Roland Garros", "Clay", "2026-06-09T00:00:00.000Z")));
+  it("builds the manifest from slams/{year}/ snapshots, ignoring root-level files", async () => {
+    await writeSnap(dir, 2026, "atp-roland-garros.json", snap("ATP", 2026, "roland-garros", "Roland Garros", "Clay", "2026-06-09T00:00:00.000Z"));
+    await writeSnap(dir, 2026, "wta-australian-open.json", snap("WTA", 2026, "australian-open", "Australian Open", "Hard", "2026-02-01T00:00:00.000Z"));
+    await writeSnap(dir, 2025, "atp-wimbledon.json", snap("ATP", 2025, "wimbledon", "Wimbledon", "Grass", "2025-07-14T00:00:00.000Z"));
+    // noise that must be excluded: the manifest itself and legacy flat-layout leftovers
     await writeFile(resolve(dir, "index.json"), "{}");
+    await writeFile(resolve(dir, "atp-2026-roland-garros.json"), JSON.stringify(snap("ATP", 2026, "roland-garros", "Roland Garros", "Clay", "2026-06-09T00:00:00.000Z")));
+    await writeFile(resolve(dir, "atp.json"), JSON.stringify(snap("ATP", 2026, "roland-garros", "Roland Garros", "Clay", "2026-06-09T00:00:00.000Z")));
 
     const idx = await reindex(dir);
-    expect(idx.slams).toHaveLength(2);
+    expect(idx.slams).toHaveLength(3);
     // canonical order (matches mergeIndex): newest year, then slam alpha, then tour
-    expect(idx.slams.map((s) => `${s.tour}/${s.slam}`)).toEqual(["WTA/australian-open", "ATP/roland-garros"]);
+    expect(idx.slams.map((s) => `${s.tour}/${s.year}/${s.slam}`)).toEqual([
+      "WTA/2026/australian-open", "ATP/2026/roland-garros", "ATP/2025/wimbledon",
+    ]);
     // newest snapshot stamp wins, deterministically
     expect(idx.generatedAt).toBe("2026-06-09T00:00:00.000Z");
     expect(idx.slams[1]).toMatchObject({ tour: "ATP", year: 2026, slam: "roland-garros", status: "complete", drawSize: 128 });
   });
 
   it("is deterministic — same files yield a byte-identical manifest", async () => {
-    await writeFile(resolve(dir, "atp-2026-roland-garros.json"), JSON.stringify(snap("ATP", 2026, "roland-garros", "Roland Garros", "Clay", "2026-06-09T00:00:00.000Z")));
+    await writeSnap(dir, 2026, "atp-roland-garros.json", snap("ATP", 2026, "roland-garros", "Roland Garros", "Clay", "2026-06-09T00:00:00.000Z"));
     expect(JSON.stringify(await reindex(dir))).toBe(JSON.stringify(await reindex(dir)));
   });
 });

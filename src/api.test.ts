@@ -10,7 +10,7 @@ describe("fetchSnapshot", () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => snap } as Response));
     vi.stubGlobal("fetch", fetchMock);
     expect(await fetchSnapshot("WTA", 2026, "roland-garros", undefined)).toEqual(snap);
-    expect(fetchMock).toHaveBeenCalledWith("/data/wta-2026-roland-garros.json", { cache: "no-cache" });
+    expect(fetchMock).toHaveBeenCalledWith("/data/slams/2026/wta-roland-garros.json", { cache: "no-cache" });
   });
 
   it("prefers the external base URL (trailing slash trimmed)", async () => {
@@ -18,7 +18,7 @@ describe("fetchSnapshot", () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => snap } as Response));
     vi.stubGlobal("fetch", fetchMock);
     expect(await fetchSnapshot("ATP", 2025, "wimbledon", "https://cdn.example/")).toEqual(snap);
-    expect(fetchMock).toHaveBeenCalledWith("https://cdn.example/atp-2025-wimbledon.json", { cache: "no-cache" });
+    expect(fetchMock).toHaveBeenCalledWith("https://cdn.example/slams/2025/atp-wimbledon.json", { cache: "no-cache" });
   });
 
   it("falls back to the same-origin seed when the external URL fails", async () => {
@@ -29,7 +29,7 @@ describe("fetchSnapshot", () => {
         : ({ ok: true, json: async () => seed } as Response));
     vi.stubGlobal("fetch", fetchMock);
     expect(await fetchSnapshot("ATP", 2026, "us-open", "https://cdn.example")).toEqual(seed);
-    expect(fetchMock).toHaveBeenCalledWith("/data/atp-2026-us-open.json", { cache: "no-cache" });
+    expect(fetchMock).toHaveBeenCalledWith("/data/slams/2026/atp-us-open.json", { cache: "no-cache" });
   });
 
   it("returns null when both fail", async () => {
