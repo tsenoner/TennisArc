@@ -15,7 +15,7 @@ pnpm build        # tsc --noEmit && vite build → dist/
 pnpm preview      # serve dist/ (exercises the service worker)
 ```
 
-The app reads the committed seed under `public/data/` — `index.json` (manifest) plus one snapshot per slam at `slams/{year}/{tour}-{slam}.json` — and works fully offline once installed (service-worker precache + IndexedDB cache).
+The app reads the committed seed under `public/data/` — `index.json` (manifest) plus one snapshot per slam at `slams/{year}/{tour}-{slam}.json` — and works fully offline once installed (service-worker precache + IndexedDB cache). A permanent rewrite in `vercel.json` maps the pre-reorg flat paths (`/data/{tour}-{year}-{slam}.json`) onto the nested layout so clients running a not-yet-updated service worker never 404.
 
 ## Data ingestion
 

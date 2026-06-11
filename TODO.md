@@ -1,12 +1,5 @@
 # TODO
 
-## Remove the flat-layout transition copies after Wimbledon 2026 starts
-
-`public/data/{tour}-2026-{slam}.json` are byte-copies of the `slams/2026/` snapshots, kept only so
-already-deployed clients (old service worker fetching the pre-reorg flat paths) keep rendering until
-their SW auto-updates. They are invisible to `pnpm reindex` and never reach the `data` branch.
-Once Wimbledon 2026 is underway (every active client will have refreshed by then), `git rm` them.
-
 ## Data refresh → move off the Mac to an always-on residential runner
 
 The SofaScore ingest must run from a **residential IP** — datacenter IPs (GitHub Actions, Cloudflare Workers/Pages) get a Cloudflare `403`, even with a real headless browser. For now it runs on the Mac via a `launchd` agent (`~/Library/LaunchAgents/com.tennisarc.refresh.plist`, every 1800s), which only refreshes while the Mac is awake and logged in.
