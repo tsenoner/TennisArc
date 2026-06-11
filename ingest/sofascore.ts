@@ -41,6 +41,9 @@ export async function openContext(): Promise<{ browser: Browser; page: Page }> {
 async function waitForToken(page: Page): Promise<void> {
   const t0 = Date.now();
   while (!pageToken.has(page) && Date.now() - t0 < TOKEN_WAIT_MS) await page.waitForTimeout(250);
+  if (!pageToken.has(page)) {
+    console.warn(`sofascore: x-requested-with token not seen within ${TOKEN_WAIT_MS}ms — requests will omit it and likely 403`);
+  }
 }
 
 /** GET a SofaScore API path from inside the page. Retries 403/429 (Cloudflare challenge /
