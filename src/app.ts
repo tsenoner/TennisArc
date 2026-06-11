@@ -239,18 +239,22 @@ export function createApp(root: HTMLElement): void {
 
   root.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
+    const el = t.closest<HTMLElement>("[data-action]");
     // A panel row (seed / leaderboard / country player) pins that player's path — the only
     // path-highlight trigger that works on touch, and a sticky one on desktop. Tap again to unpin.
+    // A [data-action] DESCENDANT of the row (e.g. a future control) takes precedence over pinning;
+    // row.contains(el) gates that to descendants, so an actionable ancestor never suppresses the pin.
     const row = t.closest<HTMLElement>("[data-hl-path]");
-    if (row?.dataset.occupant) {
+    if (row?.dataset.occupant && !(el && el !== row && row.contains(el))) {
       state.pinnedId = state.pinnedId === row.dataset.occupant ? undefined : row.dataset.occupant;
       if (state.pinnedId) state.panelExpanded = false; // drop the sheet to peek so the lit path is visible
       draw();
       return;
     }
-    const el = t.closest<HTMLElement>("[data-action]");
     if (!el) {
-      // a bare tap on the chart background releases a pinned path
+      // A tap on the chart with no [data-action] target releases a pinned path. This complements the
+      // reset <g> (which also clears the pin): that fires on the wheel's hub/gaps, this on truly-empty
+      // SVG regions where the event target is the <svg> root rather than the reset group.
       if (state.pinnedId && t.closest(".sunburst")) { state.pinnedId = undefined; draw(); }
       return;
     }
@@ -308,7 +312,8 @@ export function createApp(root: HTMLElement): void {
       state.theme = nextTheme(state.theme); applyTheme(state.theme); saveTheme(state.theme); draw();
     } else if (a === "inspect" && el.dataset.match) {
       if (state.colorDim === "country") {
-        // on the Country lens, clicking an arc selects that player's nation (highlight)
+        // On the Country lens an arc tap selects that player's nation (no arc pin here) — touch
+        // users still pin a single player's path by tapping their row in the expanded nation list.
         const s = state.snapshots[snapKey(state.tour, state.year, state.slam)];
         const c = s?.players[el.dataset.occupant ?? ""]?.country;
         if (c) state.selectedCountry = state.selectedCountry === c ? undefined : c;
