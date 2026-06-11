@@ -158,7 +158,7 @@ export function createApp(root: HTMLElement): () => void {
       y: (r.y0 + r.y1) / 2, label: roundAbbrev(snap.rounds.length - depth, snap.rounds),
     }));
     const anchors = labelAnchors(tree);
-    anchors.delete(tree.id); // champion is named by the centre readout — skip its cramped on-arc label
+    anchors.delete(tree.id); // champion is named by the centre pill — skip its cramped on-arc label
     const labelText = (occ: string) =>
       state.colorDim === "country"
         // Unmapped nations have no bundled SVG: show the visible ISO code, never an emoji —

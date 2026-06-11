@@ -154,8 +154,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 /* faded + dashed projections (extends existing .arc.projected opacity) */
 .arc.projected { stroke: var(--dim); stroke-width: .8px; stroke-dasharray: 3 2; }
 
-/* centre readout overlay — a legible frosted card so the (champion / hovered) name
-   never washes out against the arcs behind it, on phone and desktop alike */
+/* readout card — a legible frosted card naming the hovered/pinned player; on desktop it
+   waits at the chart's top-left corner (the finalist pill holds the centre), on phones it
+   docks as a strip above the chart (media block below) */
 .sunburst { position: relative; }
 /* hover-to-highlight a player's path: dim every other arc, light theirs (opacity contrast only —
    no accent stroke, so the highlight reads the same under every lens colouring) */
