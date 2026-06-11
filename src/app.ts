@@ -2,7 +2,7 @@ import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, 
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
-  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout,
+  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
   renderSeedPanel, renderCountryPanel, renderMatchInsight, roundAbbrev, renderPanelFab, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
@@ -60,7 +60,7 @@ export function createApp(root: HTMLElement): () => void {
   let store: Store | undefined;
 
   // Updated each draw so the (frequent) hover handler can build a readout without a full re-render.
-  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean } | undefined;
+  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null } | undefined;
 
   const surname = (name: string) => name.split(" ").slice(-1)[0] || name;
 
@@ -90,15 +90,19 @@ export function createApp(root: HTMLElement): () => void {
   };
 
   let roCurrent: string | null = null; // who the readout currently shows — skips the 60-120Hz pointermove outerHTML churn
+  // In dual-readout layouts the float card duplicates the centre finalist card when idle
+  // (nothing hovered, nothing pinned) — "ro-idle" lets the CSS hide it then.
+  const floatCls = (resolved: string | null) =>
+    "ro-float" + (!resolved || (resolved === ctx?.champId && ctx?.pinned !== ctx?.champId) ? " ro-idle" : "");
   const updateReadout = (playerId: string | null) => {
     if (!ctx) return;
     const resolved = playerId ?? ctx.defaultId;
     if (resolved === roCurrent) return;
-    const el = root.querySelector(".readout");
+    const el = root.querySelector(".readout.ro-float");
     if (!el) return;
     roCurrent = resolved;
     const info = buildReadout(ctx.snap, ctx.time, resolved, ctx.champId, ctx.champProjected);
-    el.outerHTML = renderReadout(info);
+    el.outerHTML = renderReadout(info, floatCls(resolved));
   };
 
   // Highlight every sunburst arc a player occupies (their path through the draw) without re-rendering.
@@ -167,38 +171,44 @@ export function createApp(root: HTMLElement): () => void {
       ? (occ: string) => flagAssetUrl(snap.players[occ]?.country ?? "")
       : undefined;
     const isMatch = !!(state.selectedMatchId && snap.matches[state.selectedMatchId]);
-    let panel: string;
+    const lens = state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap, state.seedSort), snap.rounds)
+      : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
+      : renderLeaderboard(timeLeaderboard(snap, time));
+    // The lens panel doubles as a mobile bottom drawer; `.open` (state.panelOpen) slides it in
+    // at peek height, `.expanded` makes it tall. The scrim dims the bracket only when expanded —
+    // at peek the chart above stays visible AND tappable. All inert on desktop (CSS).
+    const drawer = state.panelOpen
+      ? lens.replace('class="', `class="open${state.panelExpanded ? " expanded" : ""} `)
+      : lens;
+    let panel = `<div class="lens-scrim${state.panelOpen && state.panelExpanded ? " open" : ""}" data-action="panel" aria-hidden="true"></div>` +
+      drawer + (state.panelOpen || isMatch ? "" : renderPanelFab(state.colorDim, state.seedSort));
+    // A selected match stacks its insight card below the lens panel in the side column
+    // (desktop); on phones it rises as its own bottom sheet over the (closed) drawer.
     if (isMatch) {
       const mm = snap.matches[state.selectedMatchId!];
       const ins = matchInsight(snap, state.selectedMatchId!, time)!;
       const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
-      panel = renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
-    } else {
-      const lens = state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap, state.seedSort), snap.rounds)
-        : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
-        : renderLeaderboard(timeLeaderboard(snap, time));
-      // The lens panel doubles as a mobile bottom drawer; `.open` (state.panelOpen) slides it in
-      // at peek height, `.expanded` makes it tall. The scrim dims the bracket only when expanded —
-      // at peek the chart above stays visible AND tappable. All inert on desktop (CSS).
-      const drawer = state.panelOpen
-        ? lens.replace('class="', `class="open${state.panelExpanded ? " expanded" : ""} `)
-        : lens;
-      panel = `<div class="lens-scrim${state.panelOpen && state.panelExpanded ? " open" : ""}" data-action="panel" aria-hidden="true"></div>` +
-        drawer + (state.panelOpen ? "" : renderPanelFab(state.colorDim, state.seedSort));
+      panel += renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
     }
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     // a pinned player owns the readout (hover still previews others; leave restores the pin)
     const pinned = state.pinnedId && snap.players[state.pinnedId] ? state.pinnedId : null;
     const defaultId = pinned ?? focusOcc ?? tree.occupant ?? null;
-    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected };
-    roCurrent = defaultId; // the markup below renders the readout for defaultId
+    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned };
+    roCurrent = defaultId; // the markup below renders the float readout for defaultId
+
+    // The finalist holds the chart centre as a minimal flag + surname pill; their full
+    // card appears in the float readout on hover, like anyone else's.
+    const champ = tree.occupant ? snap.players[tree.occupant] : undefined;
+    const centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
+    const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), floatCls(defaultId));
 
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings)}` +
-          renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected)) + `</div>` +
-        panel +
+        `<div class="sunburst"><div class="chart">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings)}` +
+          centerId + `</div>` + roFloat + `</div>` +
+        `<div class="side">${panel}</div>` +
       `</div>` +
       renderLegend(state.colorDim, state.seedSort) +
       `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}</div>`;
@@ -337,9 +347,12 @@ export function createApp(root: HTMLElement): () => void {
           // (readout, lit path); a second tap on the same player opens the match sheet
           state.pinnedId = occ;
         } else {
+          // desktop (hover already previews the path): one click pins the player AND
+          // opens that arc's match insight — unpin via background click, Esc, or hub
+          if (occ) state.pinnedId = occ;
           state.selectedMatchId = el.dataset.match;
           state.selectedNodeId = id;
-          state.panelOpen = false;   // a selected match replaces the lens drawer with the match sheet
+          state.panelOpen = false;   // on phones a selected match supersedes the lens drawer
         }
       }
       draw();
@@ -360,9 +373,9 @@ export function createApp(root: HTMLElement): () => void {
   root.addEventListener("pointermove", (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-occupant]");
     updateReadout(el?.dataset.occupant || null);
-    // hovering a panel row (seed, time leaderboard, country expand) lights that player's path
-    // through the sunburst (the centre card names them too); off-row, a pinned path stays lit
-    highlightPath(el?.hasAttribute("data-hl-path") ? el.dataset.occupant || null : state.pinnedId ?? null);
+    // hovering an arc or a panel row previews that player's path through the sunburst
+    // (the float card names them too); off-target, a pinned path stays lit
+    highlightPath(el?.dataset.occupant || state.pinnedId || null);
   }, { signal });
   root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(state.pinnedId ?? null); }, { capture: true, signal });
 

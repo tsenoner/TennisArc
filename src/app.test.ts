@@ -153,13 +153,13 @@ describe("tap-to-pin vs match sheet on arcs", () => {
     expect(root.querySelector(".match-insight")).not.toBeNull();
   });
 
-  it("desktop: a click with no preceding touch opens the match sheet immediately", async () => {
+  it("desktop: a click with no preceding touch pins the player AND opens the match sheet", async () => {
     const root = await mountApp();
     const arc = pickArc(root);
 
     click(arc);
     expect(root.querySelector(".match-insight")).not.toBeNull();
-    expect(pinnedRows(root).length).toBe(0);
+    expect(litArcs(root).length).toBeGreaterThan(0); // hover previews; the click makes it stick
   });
 });
 
