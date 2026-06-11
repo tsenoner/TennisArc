@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
-import { snapshotFilename } from "./model";
+import { snapshotPath } from "./model";
 
 describe("synthetic fixture", () => {
   it("builds a balanced single-elim draw of the requested size", () => {
@@ -22,10 +22,10 @@ describe("synthetic fixture", () => {
   });
 });
 
-describe("snapshotFilename", () => {
-  it("encodes tour (lowercased), year and slam", () => {
-    expect(snapshotFilename("ATP", 2026, "roland-garros")).toBe("atp-2026-roland-garros.json");
-    expect(snapshotFilename("WTA", 2025, "wimbledon")).toBe("wta-2025-wimbledon.json");
+describe("snapshotPath", () => {
+  it("nests by year under slams/, tour lowercased", () => {
+    expect(snapshotPath("ATP", 2026, "roland-garros")).toBe("slams/2026/atp-roland-garros.json");
+    expect(snapshotPath("WTA", 2025, "wimbledon")).toBe("slams/2025/wta-wimbledon.json");
   });
 });
 

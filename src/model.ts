@@ -90,7 +90,7 @@ export interface SlamIndex {
   slams: AvailableSlam[];
 }
 
-/** Canonical per-slam snapshot filename, shared by ingest (writer) and app (reader). */
-export function snapshotFilename(tour: Tour, year: number, slam: string): string {
-  return `${tour.toLowerCase()}-${year}-${slam}.json`;
+/** Canonical per-slam snapshot path under the data root, shared by ingest (writer) and app (reader). */
+export function snapshotPath(tour: Tour, year: number, slam: string): string {
+  return `slams/${year}/${tour.toLowerCase()}-${slam}.json`;
 }

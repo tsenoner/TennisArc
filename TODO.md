@@ -52,7 +52,7 @@ pnpm exec playwright install --with-deps chromium
 ```
 > **ARM gotcha:** `--with-deps` shells out to `apt` and may warn that Raspberry Pi OS isn't a recognized distro. If the bundled Chromium then fails to launch, fall back to the distro browser: `sudo apt install -y chromium`, then in `ingest/sofascore.ts` change the launch to
 > `chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH })`
-> and export `CHROMIUM_PATH=/usr/bin/chromium` in the service env (step 4). Test before wiring the timer: `pnpm ingest` should write `public/data/atp.json` + `wta.json`.
+> and export `CHROMIUM_PATH=/usr/bin/chromium` in the service env (step 4). Test before wiring the timer: `SLAM=wimbledon pnpm ingest` should write `public/data/slams/{year}/atp-wimbledon.json` + `wta-wimbledon.json`.
 
 **4. Schedule it — systemd timer (recommended; mirrors the Mac launchd agent)**
 

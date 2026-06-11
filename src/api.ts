@@ -1,4 +1,4 @@
-import { type Snapshot, type SlamIndex, type Tour, snapshotFilename } from "./model";
+import { type Snapshot, type SlamIndex, type Tour, snapshotPath } from "./model";
 
 const BASE = (import.meta as any).env?.VITE_DATA_BASE_URL as string | undefined;
 const trim = (u: string): string => u.replace(/\/+$/, "");
@@ -34,5 +34,5 @@ export function fetchIndex(baseUrl: string | undefined = BASE): Promise<SlamInde
 export function fetchSnapshot(
   tour: Tour, year: number, slam: string, baseUrl: string | undefined = BASE,
 ): Promise<Snapshot | null> {
-  return fetchData<Snapshot>(snapshotFilename(tour, year, slam), validSnapshot, baseUrl);
+  return fetchData<Snapshot>(snapshotPath(tour, year, slam), validSnapshot, baseUrl);
 }
