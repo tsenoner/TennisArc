@@ -15,10 +15,13 @@
   color-scheme: light;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+/* app-shell scroll lock: the page itself never scrolls (only panels do), and
+   overscroll-behavior stops iOS rubber-banding the body when a drawer chains its scroll */
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
+  background: var(--bg); color: var(--text);
   font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   touch-action: manipulation; }
-#app { height: 100%; display: flex; flex-direction: column; }
+#app { height: 100%; height: 100dvh; display: flex; flex-direction: column; }
 
 .controls { display: flex; gap: 10px; align-items: center; padding: 10px 14px;
   border-bottom: 1px solid var(--line); flex-wrap: wrap; }
@@ -33,12 +36,12 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .seg .ctrl + .ctrl { border-left: 1px solid var(--line); }
 .ctrl.active { background: var(--accent); color: #fff; }
 .ctrl.theme { margin-left: auto; border: 1px solid var(--line); border-radius: 9px; }
-.issues-link { border: 1px solid var(--line); border-radius: 9px; text-decoration: none; display: inline-flex; align-items: center; }
+.issues-link { border: 1px solid var(--line); border-radius: 9px; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
 
 /* mobile-only top-bar dropdowns (slam / lens) — hidden on desktop, the inline segments show instead */
 .only-narrow { display: none; }
 .dd { position: relative; }
-.dd-trig { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 9px; }
+.dd-trig { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 9px; white-space: nowrap; }
 .dd-caret { font-size: 10px; color: var(--dim); }
 .dd-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px;
@@ -52,13 +55,15 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .dd-slam .ctrl.slam { min-width: 38px; }
 
 /* mobile lens drawer chrome — inert on desktop */
-.panel-fab, .lens-scrim { display: none; }
+.panel-fab, .lens-scrim, .sheet-bar { display: none; }
 
 .stage { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 10px 14px; }
 /* lens cards hug their content instead of stretching to the full stage height */
 .stage > .leaderboard, .stage > .panel { align-self: flex-start; max-height: 100%; }
 .sunburst { flex: 1; min-width: 0; }
-.sunburst svg { width: 100%; height: 100%; display: block; }
+/* touch-action: none — a finger dragged across the bracket explores it (pointermove
+   readout/highlight) instead of grabbing the page; the shell never scrolls anyway */
+.sunburst svg { width: 100%; height: 100%; display: block; touch-action: none; }
 .arc { cursor: pointer; stroke: var(--bg); stroke-width: 0.5; }
 .arc.projected { opacity: 0.45; }
 /* bundled SVG flags: hairline ring so white-heavy flags (JPN, POL) don't melt into panels */
@@ -121,46 +126,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 
 /* match-insight scrim: inert on desktop; a tap-to-dismiss dimmer on phones (see media query) */
 .mi-scrim { display: none; }
-
-@media (max-width: 720px) {
-  /* The bar now holds only the tour seg + two compact dropdowns + theme + Issues — it all
-     fits on one row, so no horizontal scroll machinery is needed. */
-  .controls { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; }
-  .brand { margin-right: 2px; }
-  .brand-name { display: none; }            /* logo only on phones */
-  .ctrl { padding: 6px 9px; }
-  .only-wide { display: none; }             /* inline slam/lens segments → replaced by dropdowns */
-  .only-narrow { display: inline-flex; }    /* show the slam/lens dropdowns */
-
-  .stage { flex-direction: column; }
-  .sunburst { min-height: 52vh; }
-
-  /* lens panel becomes a bottom drawer opened by the FAB; sits BELOW the match sheet (z 38/39 < 40/41) */
-  .panel-fab { display: inline-flex; position: fixed; right: 14px; z-index: 37;
-    bottom: calc(14px + env(safe-area-inset-bottom)); align-items: center; gap: 6px;
-    padding: 11px 16px; border: 1px solid var(--line); border-radius: 999px;
-    background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600;
-    cursor: pointer; box-shadow: 0 6px 22px rgba(0, 0, 0, .38); }
-  .lens-scrim.open { display: block; position: fixed; inset: 0; z-index: 38; background: rgba(4, 8, 12, .55); }
-  /* every lens panel (leaderboard/seed/country) is a bottom drawer — but NOT the match sheet,
-     which has its own fixed positioning + higher z-band below. */
-  .stage > .leaderboard, .stage > .panel:not(.match-insight) {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
-    width: auto; max-width: none; max-height: 76vh; align-self: auto; overflow-y: auto;
-    margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
-    padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
-    box-shadow: 0 -12px 40px rgba(0, 0, 0, .5);
-    transform: translateY(100%); transition: transform .22s ease-out; }
-  .stage > .leaderboard.open, .stage > .panel:not(.match-insight).open { transform: translateY(0); }
-
-  /* tapping a player → match detail as a bottom sheet over the bracket (was off-screen below) */
-  .mi-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(4, 8, 12, .55); }
-  .stage .match-insight { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
-    width: auto; max-width: none; max-height: 80vh; overflow-y: auto;
-    margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
-    padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
-    box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); animation: mi-rise .22s ease-out; }
-}
 
 @keyframes mi-rise { from { transform: translateY(14%); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
 
@@ -226,6 +191,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   padding: 0 5px; border-radius: 5px; background: color-mix(in srgb, var(--seed) 20%, transparent);
   color: var(--seed); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
 [data-hl-path] { cursor: pointer; }
+/* tap/click-pinned row: its player's path stays lit until unpinned (tap again, tap the
+   chart background, or Esc) — the only way touch users can see a path at all */
+[data-hl-path].row-pinned { background: var(--hover); border-radius: 6px;
+  box-shadow: inset 2px 0 0 var(--accent); }
 .sp-name { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .sp-name .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--dim);
@@ -251,3 +220,80 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .ct-pl b { color: var(--text); font-weight: 600; }
 .ct-rd { font-size: 10.5px; text-transform: uppercase; }
 .ct-rd.alive { color: var(--teal); }
+
+/* ============ phones (≤720px) ============
+   This block stays at the END of the file on purpose: many overrides below share the
+   specificity of their base rules (.readout, .legend, …) and win the cascade by order. */
+@media (max-width: 720px) {
+  /* Width budget at 393px (iPhone 15): logo 28 + tour seg ~85 + slam dd ~78 + lens dd ~60
+     + theme 32 + icon-only Issues ~32 + 5×6px gaps + 20px padding ≈ 365px — real slack now,
+     so nothing wraps or clips. The tour seg must never absorb a deficit (it clipped "WTA"
+     to "WT" before), hence flex-shrink: 0 everywhere that matters. */
+  .controls { flex-wrap: nowrap; gap: 6px; padding: 8px 10px;
+    padding-top: calc(8px + env(safe-area-inset-top)); } /* clear the Dynamic Island when installed */
+  .brand { margin-right: 2px; }
+  .brand-name { display: none; }            /* logo only on phones */
+  .ctrl { padding: 6px 9px; }
+  .tour-seg { flex-shrink: 0; }
+  .issues-label { display: none; }          /* icon-only Issues link on phones */
+  .only-wide { display: none; }             /* inline slam/lens segments → replaced by dropdowns */
+  .only-narrow { display: inline-flex; }    /* show the slam/lens dropdowns */
+
+  .stage { flex-direction: column; }
+  /* the readout docks as a strip above the chart (see .readout below); the svg flexes
+     into whatever height remains — no vh floor, so the shell can never overflow */
+  .sunburst { display: flex; flex-direction: column; min-height: 0; }
+  .sunburst svg { flex: 1; min-height: 0; height: auto; }
+
+  /* centre readout → top info strip: a 158px card centred on a ~365px chart hides the
+     F/SF/QF/R16 rings outright, so on phones the card leaves the chart entirely */
+  .readout { position: static; order: -1; transform: none; width: auto; min-height: 40px;
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
+    column-gap: 8px; row-gap: 0; text-align: left; margin: 0 0 4px; }
+  .readout.filled { padding: 6px 10px; }
+  .readout .ro-ctry, .readout .ro-meta, .readout .ro-elo { margin-top: 0; font-size: 10.5px; }
+  .readout .ro-name { font-size: 14px; margin-top: 0; }
+
+  /* the legend caption shares the bottom row with the fixed FAB pill — reserve the FAB's
+     width and compact the ramp/caption so the longest label still fits on one line */
+  .legend { padding-right: 140px; font-size: 11px; }
+  .legend-grad { width: 90px; }
+
+  /* lens panel becomes a bottom drawer opened by the FAB; sits BELOW the match sheet (z 38/39 < 40/41).
+     It opens at PEEK height (chart stays visible above it, no scrim) and expands via the grip;
+     only the expanded state dims the bracket behind it. */
+  .panel-fab { display: inline-flex; position: fixed; right: 14px; z-index: 37;
+    bottom: calc(14px + env(safe-area-inset-bottom)); align-items: center; gap: 6px;
+    padding: 11px 16px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; box-shadow: 0 6px 22px rgba(0, 0, 0, .38); }
+  .lens-scrim.open { display: block; position: fixed; inset: 0; z-index: 38; background: rgba(4, 8, 12, .55); }
+  /* every lens panel (leaderboard/seed/country) is a bottom drawer — but NOT the match sheet,
+     which has its own fixed positioning + higher z-band below. */
+  .stage > .leaderboard, .stage > .panel:not(.match-insight) {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
+    width: auto; max-width: none; max-height: 40dvh; align-self: auto;
+    overflow-y: auto; overscroll-behavior: contain;
+    margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, .5);
+    transform: translateY(100%); transition: transform .22s ease-out, max-height .22s ease-out; }
+  .stage > .leaderboard.open, .stage > .panel:not(.match-insight).open { transform: translateY(0); }
+  .stage > .leaderboard.expanded, .stage > .panel:not(.match-insight).expanded { max-height: 78dvh; }
+
+  /* bottom-sheet chrome: grip pill toggles peek/expanded, ✕ closes */
+  .sheet-bar { display: flex; align-items: center; }
+  .sheet-grip { flex: 1; background: none; border: 0; padding: 4px 0 10px; cursor: pointer; }
+  .sheet-grip span { display: block; width: 42px; height: 4px; border-radius: 2px;
+    background: var(--line); margin: 0 auto; }
+  .sheet-close { background: none; border: 0; color: var(--dim); font: inherit; font-size: 14px;
+    padding: 0 4px 8px 12px; cursor: pointer; }
+
+  /* tapping a player → match detail as a bottom sheet over the bracket (was off-screen below) */
+  .mi-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(4, 8, 12, .55); }
+  .stage .match-insight { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
+    width: auto; max-width: none; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
+    margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); animation: mi-rise .22s ease-out; }
+}

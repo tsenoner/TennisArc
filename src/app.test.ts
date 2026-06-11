@@ -1,0 +1,241 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { makeSyntheticSnapshot } from "./fixtures/synthetic";
+import type { SlamIndex } from "./model";
+
+// In-memory store so the bootstrap never touches IndexedDB (absent in jsdom).
+vi.mock("./store", () => ({
+  createStore: async () => {
+    let index: SlamIndex | null = null;
+    const snaps = new Map<string, unknown>();
+    return {
+      getSnapshot: async (t: string, y: number, s: string) => snaps.get(`${t}:${y}:${s}`) ?? null,
+      setSnapshot: async (t: string, y: number, s: string, v: unknown) => { snaps.set(`${t}:${y}:${s}`, v); },
+      getIndex: async () => index,
+      setIndex: async (i: SlamIndex) => { index = i; },
+    };
+  },
+}));
+
+import { createApp } from "./app";
+
+const SNAP = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3 });
+// the single ATP slam the synthetic snapshot describes, so the bootstrap selects it
+const INDEX: SlamIndex = {
+  schemaVersion: 1,
+  generatedAt: "2026-06-07T00:00:00.000Z",
+  slams: [{
+    tour: "ATP", year: 2026, slam: "roland-garros", name: "Roland Garros",
+    surface: "Clay", status: "complete", generatedAt: "2026-06-07T00:00:00.000Z", drawSize: 8,
+  }],
+};
+
+/** This jsdom build exposes no localStorage (Node's experimental global shadows it); theme.ts
+ *  reads it at mount, so install a fresh in-memory Storage shim on every test. */
+function installStorage(): void {
+  const store = new Map<string, string>();
+  const ls: Storage = {
+    getItem: (k) => (store.has(k) ? store.get(k)! : null),
+    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: (k) => { store.delete(k); },
+    clear: () => { store.clear(); },
+    key: (i) => [...store.keys()][i] ?? null,
+    get length() { return store.size; },
+  };
+  for (const target of [globalThis, window] as Array<Record<string, unknown>>) {
+    Object.defineProperty(target, "localStorage", { value: ls, configurable: true, writable: true });
+  }
+}
+
+beforeEach(() => {
+  installStorage();
+  // jsdom ships no CSS.escape; highlightPath needs it. It only escapes for use INSIDE a quoted
+  // attribute selector (`[data-occupant="…"]`), so backslash-escaping any non-identifier char is
+  // sufficient here — production relies on the browser's spec-correct native CSS.escape.
+  if (!(globalThis as { CSS?: { escape?: unknown } }).CSS?.escape) {
+    (globalThis as unknown as { CSS: { escape(s: string): string } }).CSS = {
+      escape: (s: string) => String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`),
+    };
+  }
+  globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+    const u = String(url);
+    const body = u.includes("index.json") ? INDEX : u.includes("roland-garros") ? SNAP : null;
+    return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+  }) as typeof fetch;
+});
+
+// Dispose every app mounted during a test (createApp returns a disposer that detaches its
+// window/document/root listeners), so no handler leaks across mounts; then reset shared globals.
+const mounted: Array<() => void> = [];
+afterEach(() => {
+  for (const dispose of mounted) dispose();
+  mounted.length = 0;
+  document.body.innerHTML = "";
+  delete document.documentElement.dataset.theme;
+});
+
+function click(el: Element): void {
+  el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+}
+function touch(el: Element): void {
+  el.dispatchEvent(new Event("touchstart", { bubbles: true }));
+}
+/** An occupied, match-bearing arc (skips empty/projected arcs and the reset hub). */
+function pickArc(root: HTMLElement): HTMLElement {
+  return [...root.querySelectorAll<HTMLElement>(".sunburst path.arc[data-occupant][data-match]")]
+    .find((a) => a.dataset.occupant && SNAP.matches[a.dataset.match ?? ""])!;
+}
+const pinnedRows = (root: HTMLElement) => root.querySelectorAll(".row-pinned");
+const litArcs = (root: HTMLElement) => root.querySelectorAll(".sunburst path.arc-hl");
+
+/** Mount the app and wait for the bracket (async bootstrap: fetch index → snapshot → draw). */
+async function mountApp(): Promise<HTMLElement> {
+  document.body.innerHTML = `<div id="app"></div>`;
+  const root = document.getElementById("app")!;
+  mounted.push(createApp(root));
+  await vi.waitFor(() => {
+    if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not rendered yet");
+  }, { timeout: 2000 });
+  return root;
+}
+
+describe("click handler — pin vs nested action precedence", () => {
+  it("lets a [data-action] nested inside a pin row win over pinning", async () => {
+    const root = await mountApp();
+    expect(document.documentElement.dataset.theme).toBe("dark");
+
+    // A future interactive control inside a leaderboard row must not be swallowed by pin-on-row.
+    const row = root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!;
+    const btn = document.createElement("button");
+    btn.setAttribute("data-action", "theme");
+    row.appendChild(btn);
+
+    click(btn);
+
+    // the nested action ran (theme toggled) and no pin was set
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(root.querySelector(".row-pinned")).toBeNull();
+    expect(root.querySelector(".sunburst path.arc-hl")).toBeNull();
+  });
+});
+
+describe("tap-to-pin on panel rows", () => {
+  it("pins a leaderboard row's player (lit path + readout) and unpins on a second tap", async () => {
+    const root = await mountApp();
+    const lbRow = root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!;
+    const occ = lbRow.dataset.occupant!;
+    const name = lbRow.querySelector(".lb-who")!.textContent!;
+
+    click(lbRow);
+    const pinned = root.querySelector<HTMLElement>(`[data-hl-path][data-occupant="${occ}"]`)!;
+    expect(pinned.classList.contains("row-pinned")).toBe(true);
+    expect(litArcs(root).length).toBeGreaterThan(0);
+    expect(root.querySelector(".readout .ro-name")!.textContent).toBe(name);
+
+    click(root.querySelector<HTMLElement>(`[data-hl-path][data-occupant="${occ}"]`)!);
+    expect(pinnedRows(root).length).toBe(0);
+    expect(litArcs(root).length).toBe(0);
+  });
+});
+
+describe("tap-to-pin vs match sheet on arcs", () => {
+  it("touch: first tap pins the player, second tap opens the match sheet", async () => {
+    const root = await mountApp();
+    const arc = pickArc(root);
+    const occ = arc.dataset.occupant!, match = arc.dataset.match!;
+
+    touch(arc); click(arc);
+    expect(litArcs(root).length).toBeGreaterThan(0);          // pinned path lit
+    expect(root.querySelector(".match-insight")).toBeNull();  // sheet NOT opened on the first tap
+
+    const same = root.querySelector<HTMLElement>(`.sunburst path.arc[data-occupant="${occ}"][data-match="${match}"]`)!;
+    touch(same); click(same);
+    expect(root.querySelector(".match-insight")).not.toBeNull();
+  });
+
+  it("desktop: a click with no preceding touch opens the match sheet immediately", async () => {
+    const root = await mountApp();
+    const arc = pickArc(root);
+
+    click(arc);
+    expect(root.querySelector(".match-insight")).not.toBeNull();
+    expect(pinnedRows(root).length).toBe(0);
+  });
+});
+
+describe("pin lifecycle", () => {
+  it("a tour/slam switch (resetSelection) clears the pin", async () => {
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!);
+    expect(litArcs(root).length).toBeGreaterThan(0);
+
+    click(root.querySelector<HTMLElement>('[data-action="tour"][data-tour="ATP"]')!);
+    expect(pinnedRows(root).length).toBe(0);
+    expect(litArcs(root).length).toBe(0);
+  });
+
+  it("Escape releases a pinned path", async () => {
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!);
+    expect(litArcs(root).length).toBeGreaterThan(0);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(pinnedRows(root).length).toBe(0);
+    expect(litArcs(root).length).toBe(0);
+  });
+});
+
+describe("mobile bottom-sheet invariant", () => {
+  it("a closed drawer always reopens at peek, never expanded", async () => {
+    const root = await mountApp();
+    const panel = () => root.querySelector(".leaderboard")!;
+
+    click(root.querySelector<HTMLElement>(".panel-fab")!);           // open (peek)
+    expect(panel().classList.contains("open")).toBe(true);
+    click(root.querySelector<HTMLElement>(".sheet-grip")!);          // expand
+    expect(panel().classList.contains("expanded")).toBe(true);
+    expect(root.querySelector(".lens-scrim")!.classList.contains("open")).toBe(true);
+    click(root.querySelector<HTMLElement>(".sheet-close")!);         // close
+
+    click(root.querySelector<HTMLElement>(".panel-fab")!);           // reopen
+    expect(panel().classList.contains("open")).toBe(true);
+    expect(panel().classList.contains("expanded")).toBe(false);      // back at peek
+    expect(root.querySelector(".lens-scrim")!.classList.contains("open")).toBe(false);
+  });
+});
+
+describe("country lens — nation select vs player pin", () => {
+  it("a nation header selects the country; an expanded player pins", async () => {
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>('[data-action="colordim"][data-dim="country"]')!);
+
+    // tapping the nation header selects (expands) it — it must NOT pin a player
+    click(root.querySelector<HTMLElement>(".country-panel .ct-row")!);
+    expect(root.querySelector(".country-panel .ct-row.on")).not.toBeNull();
+    expect(pinnedRows(root).length).toBe(0);
+
+    // tapping an expanded player pins their path
+    click(root.querySelector<HTMLElement>(".country-panel .ct-pl[data-hl-path][data-occupant]")!);
+    expect(pinnedRows(root).length).toBeGreaterThan(0);
+    expect(litArcs(root).length).toBeGreaterThan(0);
+  });
+});
+
+describe("createApp lifecycle", () => {
+  it("dispose() detaches the app's window/document listeners", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.getElementById("app")!;
+    const dispose = createApp(root);
+    await vi.waitFor(() => {
+      if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not rendered yet");
+    }, { timeout: 2000 });
+
+    click(root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!);
+    expect(litArcs(root).length).toBeGreaterThan(0);   // pinned
+
+    dispose();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    // a disposed app's window-keydown handler must not fire — the pin stays lit
+    expect(litArcs(root).length).toBeGreaterThan(0);
+  });
+});

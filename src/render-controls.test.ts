@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { escapeHtml, formatDuration, renderControls, renderLegend, renderPanelFab } from "./render";
+import { escapeHtml, formatDuration, renderControls, renderLegend, renderPanelFab, sheetBar, renderLeaderboard, renderSeedPanel, renderCountryPanel } from "./render";
 import type { SlamIndex } from "./model";
 
 describe("formatDuration", () => {
@@ -82,6 +82,21 @@ describe("renderControls", () => {
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toMatch(/issues-link[\s\S]*<\/header>/);   // it is the last child of the header
+    // icon + hideable text label: phones show the icon only (CSS hides .issues-label),
+    // so the link must stay labelled for a11y and carry both pieces
+    expect(html).toMatch(/issues-link[^>]*aria-label="[^"]+"/);
+    expect(html).toMatch(/issues-link[\s\S]*<svg[\s\S]*issues-label/);
+  });
+});
+
+describe("sheetBar", () => {
+  it("gives every lens panel the mobile sheet chrome (grip + close)", () => {
+    expect(sheetBar()).toContain('data-action="panel-expand"');
+    expect(sheetBar()).toContain('data-action="panel"');
+    // all three lens panels carry it so the bottom drawer is always controllable by touch
+    expect(renderLeaderboard([])).toContain("sheet-bar");
+    expect(renderSeedPanel({ total: 0, remaining: 0, mode: "seed", rows: [] }, [])).toContain("sheet-bar");
+    expect(renderCountryPanel([], undefined, [])).toContain("sheet-bar");
   });
 });
 
