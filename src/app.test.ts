@@ -64,11 +64,12 @@ beforeEach(() => {
   }) as typeof fetch;
 });
 
-// createApp attaches window/document listeners with no teardown hook (a known lifecycle gap —
-// see follow-up note), so stale handlers from a prior mount outlive their detached root. They are
-// harmless to current assertions (they redraw into detached trees), but reset shared globals each
-// test so a future global-state assertion can't be polluted by a leaked handler.
+// Dispose every app mounted during a test (createApp returns a disposer that detaches its
+// window/document/root listeners), so no handler leaks across mounts; then reset shared globals.
+const mounted: Array<() => void> = [];
 afterEach(() => {
+  for (const dispose of mounted) dispose();
+  mounted.length = 0;
   document.body.innerHTML = "";
   delete document.documentElement.dataset.theme;
 });
@@ -91,7 +92,7 @@ const litArcs = (root: HTMLElement) => root.querySelectorAll(".sunburst path.arc
 async function mountApp(): Promise<HTMLElement> {
   document.body.innerHTML = `<div id="app"></div>`;
   const root = document.getElementById("app")!;
-  createApp(root);
+  mounted.push(createApp(root));
   await vi.waitFor(() => {
     if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not rendered yet");
   }, { timeout: 2000 });
@@ -216,6 +217,25 @@ describe("country lens — nation select vs player pin", () => {
     // tapping an expanded player pins their path
     click(root.querySelector<HTMLElement>(".country-panel .ct-pl[data-hl-path][data-occupant]")!);
     expect(pinnedRows(root).length).toBeGreaterThan(0);
+    expect(litArcs(root).length).toBeGreaterThan(0);
+  });
+});
+
+describe("createApp lifecycle", () => {
+  it("dispose() detaches the app's window/document listeners", async () => {
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.getElementById("app")!;
+    const dispose = createApp(root);
+    await vi.waitFor(() => {
+      if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not rendered yet");
+    }, { timeout: 2000 });
+
+    click(root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!);
+    expect(litArcs(root).length).toBeGreaterThan(0);   // pinned
+
+    dispose();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    // a disposed app's window-keydown handler must not fire — the pin stays lit
     expect(litArcs(root).length).toBeGreaterThan(0);
   });
 });

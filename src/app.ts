@@ -44,7 +44,12 @@ function staleLabel(generatedAt: string | undefined, nowMs: number): string {
   return `updated ${Math.round(ageMin / 60)}h ago`;
 }
 
-export function createApp(root: HTMLElement): void {
+export function createApp(root: HTMLElement): () => void {
+  // createApp owns listeners on window/document (and root) that outlive any single render.
+  // Every addEventListener below passes this signal, so the returned dispose() detaches them
+  // all in one call — no leak when the app is unmounted (e.g. across test mounts).
+  const ac = new AbortController();
+  const { signal } = ac;
   const theme = loadTheme();
   applyTheme(theme);
   const state: AppState = {
@@ -235,7 +240,7 @@ export function createApp(root: HTMLElement): void {
   // Tap/click detection: clicks within 800ms of a touchstart came from a finger, so the
   // arc tap can pin-first instead of opening the match sheet immediately (no hover on touch).
   let lastTouchTs = 0;
-  root.addEventListener("touchstart", () => { lastTouchTs = Date.now(); }, { passive: true, capture: true });
+  root.addEventListener("touchstart", () => { lastTouchTs = Date.now(); }, { passive: true, capture: true, signal });
 
   root.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
@@ -343,7 +348,7 @@ export function createApp(root: HTMLElement): void {
     }
     // Selecting a slam/year/lens item from inside an open dropdown closes it → restore focus to its trigger.
     if (menuBefore && state.openMenu === undefined) ddTrigger(menuBefore)?.focus();
-  });
+  }, { signal });
 
   root.addEventListener("pointermove", (e) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-occupant]");
@@ -351,15 +356,15 @@ export function createApp(root: HTMLElement): void {
     // hovering a panel row (seed, time leaderboard, country expand) lights that player's path
     // through the sunburst (the centre card names them too); off-row, a pinned path stays lit
     highlightPath(el?.hasAttribute("data-hl-path") ? el.dataset.occupant || null : state.pinnedId ?? null);
-  });
-  root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(state.pinnedId ?? null); }, true);
+  }, { signal });
+  root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(state.pinnedId ?? null); }, { capture: true, signal });
 
   // Outside-tap closes an open top-bar dropdown (no-op when nothing is open).
   document.addEventListener("pointerdown", (e) => {
     if (!state.openMenu) return;
     if ((e.target as HTMLElement).closest(".dd")) return;
     state.openMenu = undefined; draw();
-  });
+  }, { signal });
 
   // Keyboard support for an open dropdown (ARIA menu pattern): Arrow/Home/End rove between items;
   // Tab closes the menu and returns focus to its trigger so it isn't lost when the tree re-renders.
@@ -381,7 +386,7 @@ export function createApp(root: HTMLElement): void {
       : e.key === "ArrowDown" ? (idx + 1) % items.length
       : (idx - 1 + items.length) % items.length;
     items[next]?.focus();
-  });
+  }, { signal });
 
   // Escape unwinds the most recently opened layer: dropdown → match detail → lens drawer → pinned path → focused section.
   window.addEventListener("keydown", (e) => {
@@ -391,7 +396,7 @@ export function createApp(root: HTMLElement): void {
     else if (state.panelOpen) { state.panelOpen = false; draw(); }
     else if (state.pinnedId) { state.pinnedId = undefined; draw(); }
     else if (state.focusId) { state.focusId = undefined; draw(); }
-  });
+  }, { signal });
 
   draw(); // initial loading state
   void (async () => {
@@ -414,4 +419,6 @@ export function createApp(root: HTMLElement): void {
       if (otherSel) void load(other, otherSel.year, otherSel.slam);
     }
   })();
+
+  return () => ac.abort();
 }
