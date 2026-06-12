@@ -196,7 +196,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 @media (max-width: 960px) {
   .ro-float { position: static; order: -1; width: auto; min-height: 40px;
     display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
-    column-gap: 8px; margin: 0 0 4px; text-align: left; }
+    column-gap: 8px; row-gap: 0; margin: 0 0 4px; text-align: left; }
 }
 
 /* lens panels share the leaderboard column */
@@ -277,15 +277,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .sunburst { display: flex; flex-direction: column; min-height: 0; }
   .sunburst svg { flex: 1; min-height: 0; height: auto; }
 
-  /* centre readout → top info strip: a 158px card centred on a ~365px chart hides the
-     F/SF/QF/R16 rings outright, so on phones the card leaves the chart entirely */
-  .readout { position: static; order: -1; transform: none; width: auto; min-height: 40px;
-    display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
-    column-gap: 8px; row-gap: 0; text-align: left; margin: 0 0 4px; }
+  /* phone refinements to the strip the ≤960 block already lays out — a 158px card centred on
+     a ~365px chart would bury the F/SF/QF/R16 rings, so the readout leaves the wheel entirely;
+     here it only gets tighter padding/fonts for the small viewport */
   .readout.filled { padding: 6px 10px; }
   .readout .ro-ctry, .readout .ro-meta, .readout .ro-elo { margin-top: 0; font-size: 10.5px; }
   .readout .ro-name { font-size: 14px; margin-top: 0; }
-  /* phones keep the idle strip visible — it names the finalist, exactly as before */
+  /* …and the idle strip stays visible (it names the finalist as before); desktop blanks the
+     idle card because it would only echo the centre pill, but the phone strip IS that readout */
   .readout.ro-idle { visibility: visible; }
 
   /* the legend caption shares the bottom row with the fixed FAB pill — reserve the FAB's
