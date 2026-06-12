@@ -3,7 +3,7 @@ import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
-  renderCenterSection, renderCrumbs,
+  renderCenterSection, renderCrumbs, renderQuarterFocusButtons,
   renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
@@ -123,14 +123,19 @@ export function createApp(root: HTMLElement): () => void {
     if (playerId === hlCurrent) return;
     hlCurrent = playerId;
     const sb = root.querySelector<HTMLElement>(".sunburst");
-    for (const n of hlNodes) n.classList.remove("arc-hl");
+    for (const n of hlNodes) n.classList.remove("arc-hl", "q-hl");
     hlNodes = [];
     if (!playerId || !sb) { sb?.classList.remove("arc-dim-mode"); return; }
     // playerId comes from a row's data-occupant, read back DECODED (the browser undoes the escapeHtml
     // applied when the arc was written). CSS.escape escapes that decoded value for the selector, so the
     // two escapers act on different layers (HTML serialization vs CSS selector) and need not match byte-for-byte.
-    hlNodes = [...root.querySelectorAll(`.sunburst path.arc[data-occupant="${CSS.escape(playerId)}"]`)];
-    for (const n of hlNodes) n.classList.add("arc-hl");
+    // The lit player's quarter-owner corner label keeps full opacity too (.q-hl): dim-mode
+    // fades all four corners with the arcs, but on touch every arc tap pins — without this
+    // the lit player's own corner would sit dimmed for most of an interactive session.
+    hlNodes = [...root.querySelectorAll(
+      `.sunburst path.arc[data-occupant="${CSS.escape(playerId)}"], .sunburst .q-owner[data-occupant="${CSS.escape(playerId)}"]`,
+    )];
+    for (const n of hlNodes) n.classList.add(n.classList.contains("q-owner") ? "q-hl" : "arc-hl");
     sb.classList.toggle("arc-dim-mode", hlNodes.length > 0);
   };
 
@@ -253,7 +258,11 @@ export function createApp(root: HTMLElement): () => void {
       // ⊕ Zoom targets the selected node's own SECTION — itself when it has children, a
       // leaf's parent match otherwise (resolved decision 2); setFocus maps the root to a no-op.
       const zoomId = arcs.some((x) => x.id.startsWith(`${nodeId}.`)) ? nodeId : nodeId.split(".").slice(0, -1).join(".");
-      strip = renderMatchStrip(ins, zoomId, { expanded: state.detailExpanded, focused: !!state.focusId }) +
+      // "Reset zoom" only when the view already sits AT this match's section — focused
+      // anywhere else the button keeps "⊕ Zoom" and drills in (a setFocus level change;
+      // inTree validates against the full snapshot tree, so sections outside the focused
+      // subtree resolve too). focusId === zoomId is exactly the re-tap-zoom end state.
+      strip = renderMatchStrip(ins, zoomId, { expanded: state.detailExpanded, focused: state.focusId === zoomId }) +
         (state.detailExpanded ? renderMatchDetail(ins, u, snap.rounds) : "");
     }
     const focusArc = state.focusId ? arcs.find((a) => a.id === state.focusId) : undefined;
@@ -300,11 +309,15 @@ export function createApp(root: HTMLElement): () => void {
     // carries the .zoomed class (k > 1, toggled in applyView) — display: none on desktop.
     const zoomChip = `<button class="zoom-reset" data-action="zoom-reset" aria-label="Reset zoom">⤺ 1×</button>`;
 
+    // .chart carries tabindex="-1": a programmatic landing spot for keyboard focus after the
+    // strip's ✕ removes the element that held it (never tab-reachable, no visible ring).
+    // The sr-only quarter buttons are the keyboard/SR twins of the SVG corner handles —
+    // the svg is role="img", so nothing inside it is reachable or announced.
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst">${crumbs}${strip}<div class="chart">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings, qLabels)}` +
-          centerId + `</div>` + zoomChip + roFloat + `</div>` +
+        `<div class="sunburst">${crumbs}${strip}<div class="chart" tabindex="-1">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings, qLabels)}` +
+          centerId + `</div>` + (qLabels ? renderQuarterFocusButtons(qLabels) : "") + zoomChip + roFloat + `</div>` +
         `<div class="side">${panel}</div>` +
       `</div>` +
       renderLegend(state.colorDim, state.seedSort) +
@@ -416,8 +429,9 @@ export function createApp(root: HTMLElement): () => void {
 
   root.addEventListener("click", (e) => {
     // A pinch's synthetic click (the browser fires one from the first finger even when the
-    // fingers never travelled) must not pin/inspect/reset. The flag is sticky until the
-    // next fresh pointerdown, so it swallows exactly the gesture's own click and no other.
+    // fingers never travelled) must not pin/inspect/reset. The flag disarms at the next
+    // fresh pointerdown OR 500ms after the gesture ends (endPointer) — whichever comes
+    // first — so it swallows the gesture's own click but never a later keyboard/AT click.
     if (pinched) { pinched = false; return; }
     const t = e.target as HTMLElement;
     const el = t.closest<HTMLElement>("[data-action]");
@@ -530,13 +544,19 @@ export function createApp(root: HTMLElement): () => void {
     } else if (a === "detail-expand") {
       state.detailExpanded = !state.detailExpanded;
       draw();
-      // The innerHTML swap dropped the keyboard focus: move it into the just-opened tier
-      // (its ✕ — the sheet's close on phones), or back to the strip's toggle on collapse.
-      if (state.detailExpanded) root.querySelector<HTMLElement>(".mi-detail .sheet-close")?.focus();
-      else root.querySelector<HTMLElement>('.match-strip [data-action="detail-expand"]')?.focus();
+      // The innerHTML swap dropped the keyboard focus: move it into the just-opened tier —
+      // its ✕ when actually visible (the phone sheet; offsetParent is null under
+      // display:none), else the region itself (desktop hides .sheet-bar, and a focus()
+      // on a hidden ✕ silently no-ops to <body>) — or back to the strip's toggle on collapse.
+      if (state.detailExpanded) {
+        const x = root.querySelector<HTMLElement>(".mi-detail .sheet-close");
+        (x?.offsetParent ? x : root.querySelector<HTMLElement>(".mi-detail"))?.focus();
+      } else root.querySelector<HTMLElement>('.match-strip [data-action="detail-expand"]')?.focus();
     } else if (a === "close-detail") {
       closeMatch();
       draw();
+      // the ✕ that held keyboard focus left with the strip — land on the chart region
+      root.querySelector<HTMLElement>(".chart")?.focus();
     } else if (a === "zoom-reset") {
       // the phone chip drops the magnifier alone — ephemeral view, no app state moved, no draw()
       view = IDENTITY; applyView();
@@ -594,6 +614,11 @@ export function createApp(root: HTMLElement): () => void {
       gestureStart = undefined;
       if (drawPending) { drawPending = false; draw(); } // the refresh deferred mid-gesture
     }
+    // Time-bound the click suppression: browsers usually synthesize NO click after a
+    // two-finger touch, so a flag left sticky would swallow the next pointer-LESS click
+    // (keyboard Enter/Space, an AT-dispatched click). Cover the synthetic-click window,
+    // never outlive it; the pointerdown disarm still handles the fast-retap case.
+    if (pointers.size === 0 && pinched) setTimeout(() => { pinched = false; }, 500);
   };
   window.addEventListener("pointerup", endPointer, { signal });
   window.addEventListener("pointercancel", endPointer, { signal });
@@ -646,13 +671,24 @@ export function createApp(root: HTMLElement): () => void {
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
-    else if (state.detailExpanded) { state.detailExpanded = false; draw(); }
+    else if (state.detailExpanded) {
+      state.detailExpanded = false; draw();
+      // mirror the click-collapse restoration: keyboard focus returns to the strip's toggle
+      root.querySelector<HTMLElement>('.match-strip [data-action="detail-expand"]')?.focus();
+    }
     else if (state.selectedMatchId) { closeMatch(); draw(); }
     else if (state.panelOpen) { state.panelOpen = false; draw(); }
     else if (state.pinnedId) { state.pinnedId = undefined; draw(); }
     else if (view.k > 1) { view = IDENTITY; applyView(); } // ephemeral view — nothing to redraw
     else if (state.focusId) { setFocus(undefined); draw(); }
   }, { signal });
+
+  // Deep-link restore is deliberately NOT implemented, so a pre-existing #focus hash (a
+  // reloaded or shared URL) would lie about the unfocused first render — and worse, leave
+  // a stale entry whose hash/{f} state a later clear()'s history.back() would land on,
+  // silently re-entering focus (and putting a second back-press outside the app). Scrub
+  // it IN PLACE before the first draw so every session starts on one honest entry.
+  if (location.hash || history.state) history.replaceState(null, "", location.pathname + location.search);
 
   draw(); // initial loading state
   void (async () => {

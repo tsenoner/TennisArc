@@ -40,16 +40,20 @@ describe("layout", () => {
   it("focus rescales the focused subtree to fill the full radius", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 1 });
     const root = buildSunburst(s);
-    const quarter = root.children[0].children[0]; // depth-2 section
-    expect(quarter).toBeDefined();
-    const arcs = layout(root, 342, quarter.id);
-    const focused = arcs.find((a) => a.id === quarter.id)!;
-    expect(focused.y0).toBeCloseTo(0, 6);
-    // the deepest descendants reach the full radius, not 1 - fy0/radius of it
-    expect(Math.max(...arcs.map((a) => a.y1))).toBeCloseTo(342, 6);
-    // rings stay uniform: every depth band has the same thickness
-    const thicknesses = [...new Set(arcs.map((a) => (a.y1 - a.y0).toFixed(6)))];
-    expect(thicknesses).toHaveLength(1);
+    // exercise both a half (r.0) and a quarter (r.0.0) focus
+    for (const focus of [root.children[0], root.children[0].children[0]]) {
+      expect(focus).toBeDefined();
+      const arcs = layout(root, 342, focus.id);
+      const focused = arcs.find((a) => a.id === focus.id)!;
+      expect(focused.y0).toBeCloseTo(0, 6);
+      // the deepest descendants reach the full radius, not 1 - fy0/radius of it…
+      expect(Math.max(...arcs.map((a) => a.y1))).toBeCloseTo(342, 6);
+      // …and NEVER overshoot it — float error in ky must not leak past the rim (strict bound)
+      for (const a of arcs) expect(a.y1).toBeLessThanOrEqual(342);
+      // rings stay uniform: every depth band has the same thickness
+      const thicknesses = [...new Set(arcs.map((a) => (a.y1 - a.y0).toFixed(6)))];
+      expect(thicknesses).toHaveLength(1);
+    }
   });
 
   it("unfocused layout is unchanged by the rescale (ky = 1 when fy0 = 0)", () => {

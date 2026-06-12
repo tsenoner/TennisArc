@@ -36,9 +36,11 @@ export function layout(root: SunNode, radius: number, focusId?: string): LayoutA
     .map((n) => {
       const x0 = Math.max(0, Math.min(TAU, (n.x0 - fx0) * kx));
       const x1 = Math.max(0, Math.min(TAU, (n.x1 - fx0) * kx));
-      // shift radii so the focused node's inner edge → 0; ancestors clamp to 0 and are dropped by the filter
+      // shift radii so the focused node's inner edge → 0; ancestors clamp to 0 and are dropped by the filter.
+      // y1 is also ceiled at the radius: float error in ky could push the outermost ring a few ulps past
+      // the rim (y0 needs no ceiling — the filter drops any y0 >= y1 arc).
       const y0 = Math.max(0, (n.y0 - fy0) * ky);
-      const y1 = Math.max(0, (n.y1 - fy0) * ky);
+      const y1 = Math.min(radius, Math.max(0, (n.y1 - fy0) * ky));
       return {
         id: n.data.id, matchId: n.data.matchId, occupant: n.data.occupant,
         projected: n.data.projected, depth: n.depth, x0, x1, y0, y1,

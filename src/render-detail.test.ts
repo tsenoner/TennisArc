@@ -92,6 +92,10 @@ describe("renderMatchDetail", () => {
 
   it("carries the bottom-sheet chrome, all collapsing only the tier (detail-expand)", () => {
     const html = renderMatchDetail(base, null, rounds);
+    // a disclosure REGION, not a (false) modal dialog — desktop renders it in-flow and the
+    // phone sheet has no focus containment; tabindex -1 = programmatic focus target on expand
+    expect(html).toContain('<aside class="mi-detail" role="region" aria-label="Match details" tabindex="-1">');
+    expect(html).not.toContain('role="dialog"');
     expect(html).toContain('class="mi-scrim" data-action="detail-expand"');
     expect(html).toContain('class="sheet-grip" data-action="detail-expand"');
     expect(html).toContain('class="sheet-close" data-action="detail-expand"');

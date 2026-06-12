@@ -71,6 +71,10 @@ const Q_PAD_X = 14;                    // text column inset from the box edge
 const Q_NAME_PAD = 44, Q_CAP_PAD = 28; // name / caption baseline insets from the edge
 const Q_FLAG_W = 10, Q_FLAG_H = 7.5;   // flag-icons are 4:3
 
+const quarterCap = (q: QuarterLabel, i: number) => `Q${i + 1}${q.seed != null ? ` · seed ${q.seed}` : ""}`;
+const quarterAria = (q: QuarterLabel, i: number) =>
+  q.playerId ? `${q.surname}'s quarter · ${quarterCap(q, i)}${q.out ? " · out" : ""}` : `Quarter ${i + 1}`;
+
 /** The four tappable quarter-owner corner labels — quiet cartographic annotations, not
  *  buttons: surname (the .ring-label halo recipe via CSS), a "Q1 · seed 1" caption, and a
  *  flag <image> (NEVER emoji — WebKit won't paint them on SVG text). data-action="focus"
@@ -88,8 +92,10 @@ function quarterCorners(quarters: QuarterLabel[], c: number): string {
       const tx = sx * (c - Q_PAD_X);
       const nameY = sy * (c - Q_NAME_PAD);
       const capY = sy * (c - Q_CAP_PAD);      // always nearer the edge than the name
-      const cap = `Q${i + 1}${q.seed != null ? ` · seed ${q.seed}` : ""}`;
-      const aria = q.playerId ? `${q.surname}'s quarter · ${cap}${q.out ? " · out" : ""}` : `Quarter ${i + 1}`;
+      const cap = quarterCap(q, i);
+      // NOTE: the svg root is role="img", which makes this aria-label PRESENTATIONAL to AT —
+      // the .sr-only q-owner-btn twins (renderQuarterFocusButtons) carry the real a11y.
+      const aria = quarterAria(q, i);
       const name = q.surname
         ? `<text class="q-name${q.surname.length > 16 ? " q-name-sm" : ""}" x="${tx}" y="${nameY}"${anchor}>${escapeHtml(q.surname)}</text>`
         : "";
@@ -109,6 +115,19 @@ function quarterCorners(quarters: QuarterLabel[], c: number): string {
         `</g>`
       );
     })
+    .join("");
+}
+
+/** Visually-hidden HTML twins of the corner handles. The chart svg is role="img", so
+ *  everything inside it — including the .q-owner groups and their aria-labels — is
+ *  presentational to AT and unreachable by keyboard; without these, focus mode had NO
+ *  keyboard entry at all. The .sr-only buttons ride the same data-action="focus"
+ *  delegation (zero new JS) and the app renders them beside the chart whenever the
+ *  corner labels show (i.e. never while already focused). */
+export function renderQuarterFocusButtons(quarters: QuarterLabel[]): string {
+  return quarters.slice(0, 4)
+    .map((q, i) =>
+      `<button class="sr-only q-owner-btn" data-action="focus" data-id="${escapeHtml(q.nodeId)}">${escapeHtml(quarterAria(q, i))}</button>`)
     .join("");
 }
 
@@ -553,8 +572,10 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
   const live = ins.status === "live"
     ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
-  // While ANY section is focused it flips to "Reset zoom" — an empty data-id routed through
-  // the same focus branch (setFocus(undefined)), never the nuclear reset: pin + match survive.
+  // Only when the view already sits AT this match's own section does it flip to "Reset
+  // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
+  // never the nuclear reset: pin + match survive. Focused anywhere ELSE it stays "⊕ Zoom"
+  // so the strip can still drill into the selected match's section.
   const zoom = opts.focused
     ? `<button class="ms-zoom" data-action="focus" data-id="">Reset zoom</button>`
     : `<button class="ms-zoom" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Zoom</button>`;
@@ -589,7 +610,11 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
     // Scrim is inert on desktop; on phones it dims the bracket behind the bottom sheet
     // and tapping it collapses the detail tier (the strip and selection survive).
     `<div class="mi-scrim" data-action="detail-expand" aria-hidden="true"></div>` +
-    `<aside class="mi-detail" role="dialog" aria-label="Match details">` +
+    // role="region", NOT dialog: on desktop this is an in-flow disclosure, and the phone
+    // sheet has no focus containment — claiming a modal dialog would be dishonest to AT.
+    // tabindex="-1" makes the region itself the programmatic focus target on expand
+    // (desktop hides .sheet-bar, so focusing its ✕ there would silently no-op to <body>).
+    `<aside class="mi-detail" role="region" aria-label="Match details" tabindex="-1">` +
     `<div class="sheet-bar"><button class="sheet-grip" data-action="detail-expand" aria-label="Collapse details"><span></span></button>` +
     `<button class="sheet-close" data-action="detail-expand" aria-label="Close details">✕</button></div>` +
     `<div class="mi-mu">${insightPlayer(ins.p1, ins.winner === "p1", rounds)}` +

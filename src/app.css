@@ -65,6 +65,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .side > .leaderboard, .side > .panel { width: auto; max-width: none; min-height: 0; }
 .sunburst { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .chart { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
+/* programmatic keyboard-focus landing spot (tabindex="-1") after the strip's ✕ removes
+   the element that held focus — never tab-reachable, never a visible ring */
+.chart:focus { outline: none; }
 /* touch-action: none — a finger dragged across the bracket explores it (pointermove
    readout/highlight) instead of grabbing the page; the shell never scrolls anyway */
 .sunburst svg { width: 100%; height: 100%; display: block; touch-action: none; }
@@ -122,8 +125,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .ms-side { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 15px; font-weight: 700; }
 .ms-side .ms-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ms-fl { font-size: 15px; line-height: 1; } /* sizes only the emoji fallback; the bundled <img> is sized inline */
+/* nowrap: a marathon tiebreak score must never wrap into 2-3 short centred lines mid-cell
+   (breaking the two-row strip) — the name columns (min-width: 0, ellipsis) shrink first */
 .ms-score { text-align: center; font-variant-numeric: tabular-nums; font-weight: 700;
-  letter-spacing: .5px; font-size: 14px; min-width: 0; }
+  letter-spacing: .5px; font-size: 14px; min-width: 0; white-space: nowrap; }
 .ms-score sup { font-size: 9px; color: var(--dim); }
 .mi-chk { color: var(--teal); }
 /* full name vs surname is a pure CSS switch (≤960px media block) — both spans always render, no resize JS */
@@ -131,15 +136,19 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 
 /* focus breadcrumbs — a slim in-flow chip row at the very top of the wheel column (above
    the match strip), rendered only while a section is focused. In-flow on purpose: an
-   overlay pinned to the chart's top edge would sit on the 12-o'clock round-axis tab. */
-.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+   overlay pinned to the chart's top edge would sit on the 12-o'clock round-axis tab.
+   nowrap keeps the row PROVABLY one line (a deep-focus trail can outgrow a ~550px wheel
+   column; a wrapped second row would slide under the float card pinned 44px down) —
+   overflow scrolls instead, with the "‹ Full draw" exit always visible at the left. */
+.crumbs { display: flex; align-items: center; flex-wrap: nowrap; overflow-x: auto; gap: 6px; margin: 0 0 6px; }
 .crumb { font: inherit; font-size: 11px; font-weight: 600; line-height: 1; padding: 5px 10px;
   border-radius: 999px; background: var(--panel); border: 1px solid var(--line);
   color: var(--text); cursor: pointer; white-space: nowrap; }
 .crumb.cur { color: var(--dim); border-color: transparent; background: none; }
 /* while the crumb row occupies the top edge, the float card waits below it so a hover/pin
    card never covers the exit chips (the chips stay clickable regardless — the card is
-   pointer-events: none — but the owner verifies by screenshot) */
+   pointer-events: none — but the owner verifies by screenshot). 44px assumes ONE crumb
+   line, which the row's flex-wrap: nowrap above makes an invariant, not a hope. */
 .sunburst:has(.crumbs) .ro-float { top: 44px; }
 
 /* pinch-magnifier exit chip — phone-only chrome: the ≤720px block shows it while the
@@ -215,6 +224,15 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    cursor must never self-dim */
 .sunburst.arc-dim-mode .q-owner { opacity: .35; transition: opacity .12s; }
 .sunburst.arc-dim-mode .q-owner:hover { opacity: 1; }
+/* …and the lit player's OWN corner stays legible on every input — touch has no hover,
+   and the single-tap grammar pins on every arc tap (highlightPath adds .q-hl) */
+.sunburst.arc-dim-mode .q-owner.q-hl { opacity: 1; }
+
+/* visually-hidden keyboard/SR twins of SVG-only controls: the chart svg is role="img",
+   so the corner handles (and their aria-labels) are presentational — these buttons are
+   the tab-reachable entry into quarter focus (see renderQuarterFocusButtons) */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
 /* readout card — a legible frosted card naming the hovered/pinned player; on desktop it
    waits at the chart's top-left corner (the finalist pill holds the centre), on phones it
@@ -402,17 +420,21 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .ms-side { font-size: 13px; }
   .ms-score { font-size: 12px; }
   .ms-more, .ms-close { padding: 11px 10px; margin: -7px 0; }
+  /* the lone ✕ glyph is ~12px — wider side padding takes the ✕ to a ~40px square target */
+  .ms-close { padding-left: 14px; padding-right: 14px; }
   .ms-zoom::after { content: ""; position: absolute; inset: -7px -4px; }
 
-  /* crumb chips keep their slim look but gain a comfortable phone tap height */
-  .crumb { padding: 9px 12px; }
+  /* crumb chips — the primary focus exit on touch — meet the ≥40px tap bar via
+     min-height + centring (9px padding alone left them ~31px tall) */
+  .crumb { padding: 9px 12px; min-height: 40px; display: inline-flex; align-items: center; }
 
   /* pinch exit — visible only while the magnifier is engaged (.zoomed = k > 1). Fixed
-     bottom-LEFT at 52px so it clears the in-flow legend/status rows (the FAB's 14px line
-     would sit on them — the legend only reserves right-side padding); z 36 keeps it under
-     the whole sheet ladder (FAB 37 < lens scrim 38 < drawer 39 < mi-scrim 40 < detail 41) */
+     bottom-LEFT at 72px so it clears the in-flow legend + status rows (≈69px tall) even
+     when env(safe-area-inset-bottom) is 0 — iOS with the toolbar visible, Android — (the
+     FAB's 14px line would sit on them; the legend only reserves right-side padding);
+     z 36 keeps it under the sheet ladder (FAB 37 < scrim 38 < drawer 39 < mi 40/41) */
   .sunburst.zoomed .zoom-reset { display: inline-flex; align-items: center; position: fixed;
-    left: 14px; bottom: calc(52px + env(safe-area-inset-bottom)); z-index: 36;
+    left: 14px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 36;
     padding: 9px 14px; border: 1px solid var(--line); border-radius: 999px;
     background: var(--panel); color: var(--text); font: inherit; font-size: 13px;
     font-weight: 600; cursor: pointer; box-shadow: 0 6px 22px rgba(0, 0, 0, .38); }
@@ -421,6 +443,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
      would paint under 6px (illegible smudges); the name bumps to 17 SVG units (~9px
      effective) — possible only because the sizes live in CSS, not SVG attributes */
   .q-name { font-size: 17px; }
+  /* the >16-char shrink must survive that bump (same 0,1,0 specificity — this later rule
+     would otherwise lose silently); 14 SVG units ≈ 7.3px effective, above the caption floor */
+  .q-name-sm { font-size: 14px; }
   .q-cap, .q-flag { display: none; }
 
   /* "Details ▾" → the detail tier rises as a bottom sheet over the bracket, with the same

@@ -20,13 +20,18 @@ vi.mock("./store", () => ({
 import { createApp } from "./app";
 
 const SNAP = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3 });
-// the single ATP slam the synthetic snapshot describes, so the bootstrap selects it
+// the ATP slam the synthetic snapshot describes (the bootstrap default), plus a second
+// switchable slam ("upcoming" — pickDefaultSlam never prefers it) so tests can exercise
+// the tour:year:slam arm of the magnifier's geometry key
 const INDEX: SlamIndex = {
   schemaVersion: 1,
   generatedAt: "2026-06-07T00:00:00.000Z",
   slams: [{
     tour: "ATP", year: 2026, slam: "roland-garros", name: "Roland Garros",
     surface: "Clay", status: "complete", generatedAt: "2026-06-07T00:00:00.000Z", drawSize: 8,
+  }, {
+    tour: "ATP", year: 2026, slam: "wimbledon", name: "Wimbledon",
+    surface: "Grass", status: "upcoming", generatedAt: "2026-06-07T00:00:00.000Z", drawSize: 8,
   }],
 };
 
@@ -59,7 +64,8 @@ beforeEach(() => {
   }
   globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
     const u = String(url);
-    const body = u.includes("index.json") ? INDEX : u.includes("roland-garros") ? SNAP : null;
+    const body = u.includes("index.json") ? INDEX
+      : u.includes("roland-garros") || u.includes("wimbledon") ? SNAP : null;
     return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
   }) as typeof fetch;
 });
@@ -213,6 +219,26 @@ describe("match detail tier (Details ▾)", () => {
     expect(root.querySelector(".match-strip")).not.toBeNull();
   });
 
+  it("manages keyboard focus: dialog region on expand, back to the Details toggle on collapse and ESC", async () => {
+    const root = await mountApp();
+    click(pickArc(root));
+    click(root.querySelector<HTMLElement>(".ms-more")!);                   // expand
+    // jsdom computes no layout, so offsetParent is null — the desktop branch (display:none
+    // .sheet-bar): focus lands on the region itself, never silently dropping to <body>
+    expect((document.activeElement as HTMLElement).classList.contains("mi-detail")).toBe(true);
+
+    click(root.querySelector<HTMLElement>(".mi-detail .sheet-close")!);    // click-collapse
+    expect(document.activeElement).toBe(root.querySelector('.match-strip [data-action="detail-expand"]'));
+
+    click(root.querySelector<HTMLElement>(".ms-more")!);                   // re-expand
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // ESC-collapse
+    expect(root.querySelector(".mi-detail")).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('.match-strip [data-action="detail-expand"]'));
+
+    click(root.querySelector<HTMLElement>(".ms-close")!);                  // ✕ closes the match
+    expect((document.activeElement as HTMLElement).classList.contains("chart")).toBe(true); // focus lands, not <body>
+  });
+
   it("closing the match clears detailExpanded — the next match opens collapsed", async () => {
     const root = await mountApp();
     click(pickArc(root));
@@ -269,6 +295,28 @@ describe("pin lifecycle", () => {
     expect(pinnedRows(root).length).toBe(0);
     expect(litArcs(root).length).toBe(0);
   });
+
+  it("a context switch closes the match AND its detail tier (closeMatch in every branch)", async () => {
+    const root = await mountApp();
+    // (a) tour switch (resetSelection)
+    click(pickArc(root));
+    click(root.querySelector<HTMLElement>(".ms-more")!);
+    expect(root.querySelector(".mi-detail")).not.toBeNull();
+    click(root.querySelector<HTMLElement>('[data-action="tour"][data-tour="ATP"]')!);
+    expect(root.querySelector(".match-strip")).toBeNull();
+    expect(root.querySelector(".mi-detail")).toBeNull();
+    // (b) lens switch (the colordim branch)
+    click(pickArc(root));
+    click(root.querySelector<HTMLElement>(".ms-more")!);
+    click(root.querySelector<HTMLElement>('[data-action="colordim"][data-dim="country"]')!);
+    expect(root.querySelector(".match-strip")).toBeNull();
+    expect(root.querySelector(".mi-detail")).toBeNull();
+    // (c) detailExpanded must not have leaked: the next match opens collapsed
+    click(root.querySelector<HTMLElement>('[data-action="colordim"][data-dim="time"]')!);
+    click(pickArc(root));
+    expect(root.querySelector(".match-strip")).not.toBeNull();
+    expect(root.querySelector(".mi-detail")).toBeNull();
+  });
 });
 
 describe("mobile bottom-sheet invariant", () => {
@@ -304,6 +352,31 @@ describe("country lens — nation select vs player pin", () => {
     click(root.querySelector<HTMLElement>(".country-panel .ct-pl[data-hl-path][data-occupant]")!);
     expect(pinnedRows(root).length).toBeGreaterThan(0);
     expect(litArcs(root).length).toBeGreaterThan(0);
+  });
+});
+
+describe("country lens — ARC tap grammar (branch order: hub zoom-out before nation toggle)", () => {
+  it("an arc tap toggles the nation on/off — never pins, never opens the strip, never zooms", async () => {
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>('[data-action="colordim"][data-dim="country"]')!);
+    click(pickArc(root));
+    expect(root.querySelector(".ct-row.on")).not.toBeNull();   // nation selected…
+    expect(root.querySelector(".match-strip")).toBeNull();     // …no match strip
+    expect(pinnedRows(root).length).toBe(0);                   // …no pin
+    click(pickArc(root));                                      // re-tap the same arc (fresh node post-draw)
+    expect(root.querySelector(".ct-row.on")).toBeNull();       // it keeps toggling…
+    expect(root.querySelector(".crumbs")).toBeNull();          // …it does NOT zoom (no selectedNodeId here)
+  });
+
+  it("the focused hub still zooms out on the country lens (checked before the nation branch)", async () => {
+    const root = await mountApp();
+    mockBack();
+    click(root.querySelector<HTMLElement>('[data-action="colordim"][data-dim="country"]')!);
+    click(root.querySelector<HTMLElement>(".q-owner")!);       // corner label focuses r.0.0
+    expect(root.querySelector(".crumb.cur")!.textContent).toMatch(/'s quarter$/);
+    click(root.querySelector<HTMLElement>('path.arc[data-id="r.0.0"]')!); // tap the focused hub
+    expect(root.querySelector(".crumb.cur")!.textContent).toBe("Top half"); // stepped out one level…
+    expect(root.querySelector(".ct-row.on")).toBeNull();       // …without selecting a nation
   });
 });
 
@@ -438,6 +511,21 @@ describe("tap-again zoom + hub zoom-out (focus grammar)", () => {
     expect(root.querySelector('path.arc[data-id="r"]')).not.toBeNull();
   });
 
+  it("keeps '⊕ Zoom' (drill-in) for a match selected while focused ELSEWHERE — never a surprise reset", async () => {
+    const root = await mountApp();
+    mockBack();
+    const half = () => root.querySelector<HTMLElement>('path.arc[data-id="r.0"]')!;
+    click(half()); click(half());                                     // focus the Top half
+    expect(root.querySelector(".ms-zoom")!.textContent).toBe("Reset zoom"); // at its own section
+    click(root.querySelector<HTMLElement>('path.arc[data-id="r.0.0.0"]')!); // select a match deeper in
+    const zoom = root.querySelector<HTMLElement>(".ms-zoom")!;
+    expect(zoom.textContent).toBe("⊕ Zoom");                          // NOT inverted to "Reset zoom"
+    expect(zoom.dataset.id).toBe("r.0.0");                            // targets the match's own section
+    click(zoom);                                                      // …and drills into it
+    expect(root.querySelector(".crumb.cur")!.textContent).toMatch(/'s quarter$/);
+    expect(root.querySelector(".ms-zoom")!.textContent).toBe("Reset zoom"); // now AT that section
+  });
+
   it("focusing the root is a no-op: setFocus('r') normalizes to no focus, no history entry", async () => {
     const root = await mountApp();
     const push = vi.spyOn(history, "pushState");
@@ -532,6 +620,26 @@ describe("focus history discipline (V1-simple: one entry per focus session)", ()
   });
 });
 
+describe("startup history scrub (no deep-link restore — the URL must not lie)", () => {
+  it("scrubs a pre-existing #focus hash/state so a later clear can never re-enter focus", async () => {
+    // simulate reloading (or opening a shared link to) a focused URL
+    history.replaceState({ f: "r.0.0" }, "", "/#r.0.0");
+    const root = await mountApp();
+    expect(location.hash).toBe("");                       // the URL no longer claims a focus…
+    expect(history.state).toBeNull();                     // …and the entry carries no stale {f}
+    expect(root.querySelector(".crumbs")).toBeNull();     // (deep-link restore is deliberately absent)
+
+    // focus then clear with jsdom's REAL (async) history.back(): it lands on the scrubbed
+    // entry, whose popstate must normalize to "no focus" — before the scrub, the stale
+    // hash/{f} would have silently turned the clear into "zoom back to a stale section"
+    click(qArc(root)); click(qArc(root));
+    expect(location.hash).toBe("#r.0.0");
+    click(root.querySelector<HTMLElement>('.crumb[data-id=""]')!);
+    await vi.waitFor(() => { if (location.hash) throw new Error("entry not popped yet"); });
+    expect(root.querySelector(".crumbs")).toBeNull();     // the clear stayed a clear
+  });
+});
+
 describe("ESC ladder (one layer per press, focus last)", () => {
   it("unwinds menu → detail tier → strip → drawer → pin → focus, in that order", async () => {
     const root = await mountApp();
@@ -577,6 +685,29 @@ describe("quarter-owner corner labels", () => {
     click(root.querySelector<HTMLElement>(".q-owner")!);
     expect(root.querySelector(".crumbs")).not.toBeNull();              // the tap navigated…
     expect(root.querySelector(".ct-row.on")).toBeNull();               // …it never selected a nation
+  });
+
+  it("keeps the lit player's own corner at full opacity (.q-hl) while dim-mode engages", async () => {
+    const root = await mountApp();
+    const label = [...root.querySelectorAll<HTMLElement>(".q-owner")].find((l) => l.dataset.occupant)!;
+    const occ = label.dataset.occupant!;
+    const arc = root.querySelector<HTMLElement>(`.sunburst path.arc[data-occupant="${occ}"]`)!;
+    arc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(root.querySelector(".sunburst")!.classList.contains("arc-dim-mode")).toBe(true);
+    expect(label.classList.contains("q-hl")).toBe(true);               // their corner never self-dims
+    root.dispatchEvent(new Event("pointerleave"));
+    expect(label.classList.contains("q-hl")).toBe(false);              // cleared with the highlight
+  });
+
+  it("exposes 4 sr-only keyboard twins — the svg is role=img, so its labels are presentational", async () => {
+    const root = await mountApp();
+    mockBack();
+    const btns = root.querySelectorAll<HTMLElement>(".sunburst button.q-owner-btn");
+    expect(btns).toHaveLength(4);
+    expect(btns[0].dataset.id).toBe("r.0.0");
+    click(btns[0]);                                                    // keyboard-reachable entry into focus
+    expect(root.querySelector(".crumbs")).not.toBeNull();
+    expect(root.querySelector(".q-owner-btn")).toBeNull();             // gone while focused, like the labels
   });
 });
 
@@ -637,6 +768,29 @@ describe("two-finger pinch/pan magnifier", () => {
     expect(root.querySelector(".match-strip")).not.toBeNull();
   });
 
+  it("time-bounds the suppression: a pointer-LESS click (keyboard/AT) lands once the window passes", async () => {
+    const root = await mountApp();
+    vi.useFakeTimers();
+    try {
+      pinchSpread(root);             // a two-finger touch typically synthesizes NO click at all…
+      vi.advanceTimersByTime(600);   // …so the sticky flag must disarm itself after the click window
+      click(pickArc(root));          // bare click, no pointerdown — Enter/Space on a button, AT dispatch
+      expect(root.querySelector(".match-strip")).not.toBeNull();   // it lands
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("a slam switch resets the magnifier — the geometry key covers tour:year:slam, not just focus", async () => {
+    const root = await mountApp();
+    pinchSpread(root);
+    expect(isZoomed(root)).toBe(true);
+    tap(root.querySelector<HTMLElement>('[data-action="slam"][data-slam="wimbledon"]')!);
+    await vi.waitFor(() => {
+      if (!root.querySelector(".sunburst path.arc")) throw new Error("new slam not rendered yet");
+    }, { timeout: 2000 });
+    expect(zoomLayer(root).getAttribute("transform")).toBe("translate(0,0) scale(1)");
+    expect(isZoomed(root)).toBe(false);
+  });
+
   it("a geometry change (focus) resets the view; selection redraws (pin) re-apply it instead", async () => {
     const root = await mountApp();
     pinchSpread(root);
@@ -692,6 +846,26 @@ describe("two-finger pinch/pan magnifier", () => {
     expect(pinnedRows(root).length).toBe(0);
     pointer(window, "pointerup", 1, 300, 350);
   });
+
+  it("pointercancel (iOS stealing the touch) ends the gesture and flushes the deferred draw too", async () => {
+    const root = await mountApp();
+    tap(root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!); // pin someone
+    expect(litArcs(root).length).toBeGreaterThan(0);
+    const svg = root.querySelector(".sunburst svg")!;
+    pointer(svg, "pointerdown", 1, 300, 350);
+    pointer(svg, "pointerdown", 2, 400, 350);     // gesture in progress
+    esc();                                        // clears the pin → draw() deferred mid-gesture
+    expect(litArcs(root).length).toBeGreaterThan(0);
+    pointer(window, "pointercancel", 2, 400, 350);   // the system steals the second finger
+    expect(litArcs(root).length).toBe(0);            // gesture ended → the deferred draw flushed
+    // the leftover finger is no longer a gesture: its moves must not write a transform
+    const before = zoomLayer(root).getAttribute("transform");
+    pointer(root.querySelector(".sunburst svg")!, "pointermove", 1, 320, 350);
+    expect(zoomLayer(root).getAttribute("transform")).toBe(before);
+    pointer(window, "pointercancel", 1, 300, 350);   // …and after IT cancels too,
+    tap(pickArc(root));                              // the next tap still lands normally
+    expect(root.querySelector(".match-strip")).not.toBeNull();
+  });
 });
 
 describe("centre pill while focused", () => {
@@ -708,5 +882,22 @@ describe("centre pill while focused", () => {
     expect(root.querySelector(".crumbs")).not.toBeNull();
     expect(root.querySelector(".center-id")).not.toBeNull();          // pill still names the occupant…
     expect(root.querySelector(".ro-float.ro-idle")).not.toBeNull();   // …so the idle card never doubles it
+  });
+
+  it("falls back to the section-title pill when the focused node has no occupant (all-TBD)", async () => {
+    // an unplayed draw whose r.0.0 subtree is fully TBD: both round-0 entrants nulled
+    const tbd = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 0 });
+    tbd.matches["0-0"].p1 = null;
+    tbd.matches["0-0"].p2 = null;
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      const body = u.includes("index.json") ? INDEX : u.includes("roland-garros") ? tbd : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as typeof fetch;
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>('.q-owner[data-id="r.0.0"]')!); // caption-only, still tappable
+    const pill = root.querySelector(".center-id.center-sec")!;
+    expect(pill).not.toBeNull();
+    expect(pill.textContent).toBe("QF section");                      // sectionTitle's round fallback
   });
 });

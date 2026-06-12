@@ -4,7 +4,7 @@ import { buildSunburst } from "./state";
 import { layout } from "./layout";
 import type { LayoutArc } from "./layout";
 import { colorScale } from "./color";
-import { renderSunburst, renderControls } from "./render";
+import { renderSunburst, renderControls, renderQuarterFocusButtons } from "./render";
 import type { SlamIndex } from "./model";
 
 describe("renderSunburst", () => {
@@ -146,6 +146,14 @@ describe("renderSunburst quarter-owner corner labels", () => {
   it("renders no corner labels when the quarters param is omitted", () => {
     expect(renderSunburst(arcs, colorScale("time", s), 700)).not.toContain("q-owner");
   });
+
+  it("renders sr-only keyboard twins of the handles (the svg is role=img — its labels are presentational)", () => {
+    const html = renderQuarterFocusButtons(quarters);
+    expect(html.match(/<button class="sr-only q-owner-btn"/g)).toHaveLength(4);
+    expect(html).toContain('data-action="focus" data-id="r.0.0"');     // same delegation as the labels
+    expect(html).toContain("Sinner&#39;s quarter · Q1 · seed 1 · out"); // full aria text as the button name
+    expect(html).toContain(">Quarter 4<");                              // the all-TBD quarter stays focusable
+  });
 });
 
 import { renderReadout, type ReadoutInfo } from "./render";
@@ -245,7 +253,7 @@ describe("renderCountryPanel", () => {
   });
 });
 
-import { renderCenterId } from "./render";
+import { renderCenterId, renderCenterSection } from "./render";
 
 describe("renderCenterId", () => {
   it("carries the flag + name; projection italicizes; empty name renders nothing", () => {
@@ -255,5 +263,14 @@ describe("renderCenterId", () => {
     expect(html).not.toContain("projected");
     expect(renderCenterId("SRB", "Djokovic", true)).toContain("projected");
     expect(renderCenterId("SRB", "", false)).toBe("");
+  });
+});
+
+describe("renderCenterSection", () => {
+  it("renders the quieter section pill (occupant unknown); empty title renders nothing", () => {
+    const html = renderCenterSection("Top half");
+    expect(html).toContain('class="center-id center-sec"');
+    expect(html).toContain("Top half");
+    expect(renderCenterSection("")).toBe("");
   });
 });
