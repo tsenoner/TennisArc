@@ -194,6 +194,24 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 /* faded + dashed projections (extends existing .arc.projected opacity) */
 .arc.projected { stroke: var(--dim); stroke-width: .8px; stroke-dasharray: 3 2; }
 
+/* quarter-owner corner labels — quiet cartographic annotations in the circle-in-square
+   dead corners, doubling as tap-to-focus quarter handles. No chip/box chrome on purpose;
+   the name reuses the .ring-label halo recipe so it reads over any theme background. */
+.q-owner { cursor: pointer; }
+.q-owner text, .q-flag { pointer-events: none; } /* the transparent hit rect is the whole target */
+.q-name { font-size: 14px; font-weight: 700; fill: var(--text); paint-order: stroke;
+  stroke: var(--bg); stroke-width: 2.6px; }
+.q-name-sm { font-size: 11.5px; }                /* >16-char surnames shrink, never truncate */
+.q-cap { font-size: 8.5px; font-weight: 600; letter-spacing: .04em; fill: var(--dim); }
+/* eliminated owner: the name dims but stays — "out" lives in the aria-label, never as text */
+.q-out .q-name { fill: var(--dim); }
+.q-owner:hover .q-name { fill: var(--accent); }
+/* hovering a label lights its owner's path (data-occupant → highlightPath), which engages
+   arc-dim-mode — the other three corners fade with the arcs, but the label under the
+   cursor must never self-dim */
+.sunburst.arc-dim-mode .q-owner { opacity: .35; transition: opacity .12s; }
+.sunburst.arc-dim-mode .q-owner:hover { opacity: 1; }
+
 /* readout card — a legible frosted card naming the hovered/pinned player; on desktop it
    waits at the chart's top-left corner (the finalist pill holds the centre), on phones it
    docks as a strip above the chart (media block below) */
@@ -384,6 +402,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 
   /* crumb chips keep their slim look but gain a comfortable phone tap height */
   .crumb { padding: 9px 12px; }
+
+  /* corner labels go name-only on phones: at the ~0.52 SVG scale the caption and flag
+     would paint under 6px (illegible smudges); the name bumps to 17 SVG units (~9px
+     effective) — possible only because the sizes live in CSS, not SVG attributes */
+  .q-name { font-size: 17px; }
+  .q-cap, .q-flag { display: none; }
 
   /* "Details ▾" → the detail tier rises as a bottom sheet over the bracket, with the same
      grip/✕ grammar as the lens drawers; the scrim (rendered only while expanded) dims behind it */

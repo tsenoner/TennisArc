@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -179,6 +179,17 @@ export function createApp(root: HTMLElement): () => void {
     const labelImage = state.colorDim === "country"
       ? (occ: string) => flagAssetUrl(snap.players[occ]?.country ?? "")
       : undefined;
+    // Quarter-owner corner labels (drawn top seed; dimmed once out — quarterOwners). Hidden
+    // entirely while focused: the corners become free space and the crumbs name the section.
+    const qLabels = state.focusId
+      ? undefined
+      : quarterOwners(snap, tree)?.map((q) => {
+          const p = q.playerId ? snap.players[q.playerId] : undefined;
+          return {
+            nodeId: q.nodeId, playerId: q.playerId, surname: p ? surname(p.name) : "",
+            country: p?.country ?? "", seed: q.seed, out: q.out,
+          };
+        });
     const isMatch = !!(state.selectedMatchId && snap.matches[state.selectedMatchId]);
     const lens = state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap, state.seedSort), snap.rounds)
       : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
@@ -249,7 +260,7 @@ export function createApp(root: HTMLElement): () => void {
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst">${crumbs}${strip}<div class="chart">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings)}` +
+        `<div class="sunburst">${crumbs}${strip}<div class="chart">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings, qLabels)}` +
           centerId + `</div>` + roFloat + `</div>` +
         `<div class="side">${panel}</div>` +
       `</div>` +

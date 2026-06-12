@@ -554,6 +554,32 @@ describe("ESC ladder (one layer per press, focus last)", () => {
   });
 });
 
+describe("quarter-owner corner labels", () => {
+  it("renders four tappable handles that focus their quarter; hidden entirely while focused", async () => {
+    const root = await mountApp();
+    mockBack();
+    const labels = root.querySelectorAll<HTMLElement>(".sunburst .q-owner");
+    expect(labels).toHaveLength(4);
+    expect(labels[0].dataset.id).toBe("r.0.0");
+
+    click(labels[0]);                                                  // tap = focus that quarter
+    expect(root.querySelector(".crumbs")).not.toBeNull();
+    expect(root.querySelector(".crumb.cur")!.textContent).toMatch(/'s quarter$/);
+    expect(root.querySelector(".q-owner")).toBeNull();                 // corners vacate in focus mode
+    esc();                                                             // focus is the only layer up
+    expect(root.querySelectorAll(".q-owner")).toHaveLength(4);         // back with the full draw
+  });
+
+  it("focuses on the country lens too (labels aren't arcs — no nation-toggle override)", async () => {
+    const root = await mountApp();
+    mockBack();
+    click(root.querySelector<HTMLElement>('[data-action="colordim"][data-dim="country"]')!);
+    click(root.querySelector<HTMLElement>(".q-owner")!);
+    expect(root.querySelector(".crumbs")).not.toBeNull();              // the tap navigated…
+    expect(root.querySelector(".ct-row.on")).toBeNull();               // …it never selected a nation
+  });
+});
+
 describe("centre pill while focused", () => {
   it("restores the pill naming the focused occupant (their on-arc hub label is dropped) and idles the card", async () => {
     const root = await mountApp();

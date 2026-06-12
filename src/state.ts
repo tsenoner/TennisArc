@@ -154,11 +154,56 @@ export function roundAbbrev(reached: number, rounds: Round[]): string {
     .replace(/^Final$/i, "F");
 }
 
+export interface QuarterOwner {
+  nodeId: string;            // the quarter's node id: r.0.0 (TR), r.0.1 (BR), r.1.0 (BL), r.1.1 (TL)
+  playerId: string | null;   // drawn top seed; null = every slot in the quarter is still TBD
+  seed: number | null;       // the owner's seed (null when the quarter holds no seeds at all)
+  out: boolean;              // owner already eliminated — they KEEP the quarter, the label just dims
+}
+
+/**
+ * The "owner" of each quarter, draw-sheet style: the DRAWN top seed — minimum non-null
+ * seed across the quarter's leaf entrants, ties broken by better ranking — falling back
+ * to the best-ranked entrant when the quarter has no seeds, and to nobody when every
+ * slot is TBD. The owner survives elimination ("Sinner's quarter" outlives Sinner's
+ * exit; `out` flags it so the label can dim). Null when the draw has no quarter
+ * structure: fewer than 3 rounds, or the depth-2 layer isn't exactly 4 nodes.
+ */
+export function quarterOwners(s: Snapshot, root: SunNode): QuarterOwner[] | null {
+  if (s.rounds.length < 3) return null;
+  const quarters = root.children.flatMap((c) => c.children);
+  if (quarters.length !== 4) return null;
+  const out = eliminatedSet(s);
+  return quarters.map((q) => {
+    // Leaves carry the round-0 entrants directly (buildSunburst), so eliminated players
+    // are still enumerated and a null occupant is a TBD slot, never a lost one.
+    const entrants: Player[] = [];
+    const walk = (n: SunNode): void => {
+      if (n.children.length) { n.children.forEach(walk); return; }
+      const p = n.occupant ? s.players[n.occupant] : undefined;
+      if (p) entrants.push(p);
+    };
+    walk(q);
+    let owner: Player | null = null;
+    for (const p of entrants) {
+      if (!owner) { owner = p; continue; }
+      const sp = p.seed ?? Infinity, so = owner.seed ?? Infinity;
+      if (sp < so || (sp === so && (p.ranking ?? Infinity) < (owner.ranking ?? Infinity))) owner = p;
+    }
+    return {
+      nodeId: q.id,
+      playerId: owner?.id ?? null,
+      seed: owner?.seed ?? null,
+      out: owner != null && out.has(owner.id),
+    };
+  });
+}
+
 /**
  * Human name for a focusable section of the draw, in draw-sheet language: depth 1 is the
- * sheet's "Top half"/"Bottom half" (r.0 / r.1), a quarter is named for its occupant for
- * now ("Sinner's quarter" — the quarter-labels step replaces this with the drawn-top-seed
- * owner), and anything else falls back to its own round ("QF section"). Unknown ids → "".
+ * sheet's "Top half"/"Bottom half" (r.0 / r.1), a quarter is named for its drawn-top-seed
+ * owner ("Sinner's quarter" — see quarterOwners; the name survives the owner's exit), and
+ * anything else falls back to its own round ("QF section"). Unknown ids → "".
  */
 export function sectionTitle(s: Snapshot, root: SunNode, id: string): string {
   if (id === root.id) return "Full draw";
@@ -170,7 +215,14 @@ export function sectionTitle(s: Snapshot, root: SunNode, id: string): string {
   if (node.depth === 1) return node.id === `${root.id}.0` ? "Top half" : "Bottom half";
   const last = node.occupant ? (s.players[node.occupant]?.name ?? "").split(" ").slice(-1)[0] : "";
   if (!node.children.length) return last;             // a single slot (hand-crafted id): just the player
-  if (node.depth === 2 && last) return `${last}'s quarter`;
+  if (node.depth === 2) {
+    // a quarter belongs to its drawn top seed, NOT whoever currently leads it; an
+    // owner-less (all-TBD) quarter falls through to the round fallback below
+    const nid = node.id;
+    const q = quarterOwners(s, root)?.find((o) => o.nodeId === nid);
+    const p = q?.playerId ? s.players[q.playerId] : undefined;
+    if (p) return `${p.name.split(" ").slice(-1)[0]}'s quarter`;
+  }
   const ri = s.rounds.length - 1 - node.depth;        // the node's own match round
   return ri >= 0 ? `${roundAbbrev(ri, s.rounds)} section` : last;
 }

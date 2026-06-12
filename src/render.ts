@@ -43,9 +43,80 @@ export function flagImg(iso3: string, h: number, alt = ""): string {
 /** A round name pinned to a ring's mid-radius, drawn as a faint axis at 12 o'clock. */
 export interface RingLabel { y: number; label: string; }
 
-/** Render the sunburst as a self-contained SVG string (centred), with optional write-once curved labels. */
+/** Pre-resolved quarter-owner corner label (the app maps state's QuarterOwner to display
+ *  fields). Order matters: index 0-3 → TR/BR/BL/TL corner and the Q1-Q4 caption. */
+export interface QuarterLabel {
+  nodeId: string;          // r.0.0 (TR), r.0.1 (BR), r.1.0 (BL), r.1.1 (TL)
+  playerId: string | null; // null = all-TBD quarter → caption-only label, still tappable
+  surname: string;         // "" when there is no owner
+  country: string;
+  seed: number | null;
+  out: boolean;            // eliminated owner: .q-out dims the name; "out" lives in the aria-label only
+}
+
+// Quarter-owner corner geometry (centre-relative offsets from the viewBox half-extent c).
+// The circle-in-square corners are dead space — the disc (radius c−8, 342 in the 700 box)
+// touches the box only at the cardinal points — and each quarter's mid-angle (π/4, 3π/4 …)
+// points exactly at "its" corner, so the handles live there at zero radius cost.
+// INVARIANT: the transparent hit rect must NEVER intersect the disc — it paints above the
+// arcs, so any overlap would silently steal R128 arc taps. The rect's nearest point to the
+// centre is its inner corner (c−150, c−56) = (200, 294) at c=350: |(200, 294)| ≈ 355.6 > 342.
+// To grow the tap target, extend ALONG the box edges (toward the cardinal points), never
+// inward. A render test asserts this invariant.
+// Text: columns at x = ±(c−14); the caption hugs the edge (|y| = c−28), the name sits
+// disc-side (baseline |y| = c−44 = 306) — circle half-width there is √(342²−306²) ≈ 153,
+// so a 14px surname reaching ~130px inward clears the disc comfortably.
+const Q_HIT_W = 150, Q_HIT_H = 56;     // hit rect hugging the corner (see invariant above)
+const Q_PAD_X = 14;                    // text column inset from the box edge
+const Q_NAME_PAD = 44, Q_CAP_PAD = 28; // name / caption baseline insets from the edge
+const Q_FLAG_W = 10, Q_FLAG_H = 7.5;   // flag-icons are 4:3
+
+/** The four tappable quarter-owner corner labels — quiet cartographic annotations, not
+ *  buttons: surname (the .ring-label halo recipe via CSS), a "Q1 · seed 1" caption, and a
+ *  flag <image> (NEVER emoji — WebKit won't paint them on SVG text). data-action="focus"
+ *  zooms the quarter on tap (labels aren't arcs, so this works on every lens — country
+ *  included) and data-occupant plugs into the existing hover highlight/readout pipeline.
+ *  Font sizes live in CSS, not attributes, so the ≤720px media bump works. */
+function quarterCorners(quarters: QuarterLabel[], c: number): string {
+  return quarters
+    .slice(0, 4)
+    .map((q, i) => {
+      const sx = i < 2 ? 1 : -1;              // r.0.* fills the right half (angle 0 at 12 o'clock, clockwise)
+      const sy = i === 0 || i === 3 ? -1 : 1; // TR (r.0.0) and TL (r.1.1) are the top corners
+      const end = sx > 0;                     // right corners read toward the edge → anchor end; left mirrored
+      const anchor = end ? ' text-anchor="end"' : "";
+      const tx = sx * (c - Q_PAD_X);
+      const nameY = sy * (c - Q_NAME_PAD);
+      const capY = sy * (c - Q_CAP_PAD);      // always nearer the edge than the name
+      const cap = `Q${i + 1}${q.seed != null ? ` · seed ${q.seed}` : ""}`;
+      const aria = q.playerId ? `${q.surname}'s quarter · ${cap}${q.out ? " · out" : ""}` : `Quarter ${i + 1}`;
+      const name = q.surname
+        ? `<text class="q-name${q.surname.length > 16 ? " q-name-sm" : ""}" x="${tx}" y="${nameY}"${anchor}>${escapeHtml(q.surname)}</text>`
+        : "";
+      // the flag sits in the corner padding strip beyond the text column, level with the name
+      const flagUrl = q.playerId ? flagAssetUrl(q.country) : null;
+      const flag = flagUrl
+        ? `<image class="q-flag" href="${escapeHtml(flagUrl)}" x="${end ? tx + 2 : tx - 2 - Q_FLAG_W}" ` +
+          `y="${(nameY - 5 - Q_FLAG_H / 2).toFixed(2)}" width="${Q_FLAG_W}" height="${Q_FLAG_H}"></image>`
+        : "";
+      return (
+        `<g class="q-owner${q.out ? " q-out" : ""}" data-action="focus" data-id="${escapeHtml(q.nodeId)}" ` +
+        `data-occupant="${escapeHtml(q.playerId ?? "")}" aria-label="${escapeHtml(aria)}">` +
+        `<rect class="q-hit" x="${end ? c - Q_HIT_W : -c}" y="${sy > 0 ? c - Q_HIT_H : -c}" ` +
+        `width="${Q_HIT_W}" height="${Q_HIT_H}" fill="transparent"></rect>` +
+        flag + name +
+        `<text class="q-cap" x="${tx}" y="${capY}"${anchor}>${escapeHtml(cap)}</text>` +
+        `</g>`
+      );
+    })
+    .join("");
+}
+
+/** Render the sunburst as a self-contained SVG string (centred), with optional write-once
+ *  curved labels, a 12-o'clock round axis, and quarter-owner corner handles. */
 export function renderSunburst(
   arcs: LayoutArc[], color: ColorFn, size: number, labels?: SunburstLabels, rings?: RingLabel[],
+  quarters?: QuarterLabel[],
 ): string {
   const c = size / 2;
   const defs: string[] = [];
@@ -167,11 +238,15 @@ export function renderSunburst(
     })
     .join("");
 
+  // corner handles render AFTER the arcs — their hit rects paint on top, which is safe
+  // only because they never overlap the disc (the invariant documented at Q_HIT_W above)
+  const corners = quarters ? quarterCorners(quarters, c) : "";
+
   return (
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
     `role="img" aria-label="Tournament bracket sunburst">` +
     `<g transform="translate(${c},${c})" data-action="reset">` +
-    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}</g></svg>`
+    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}${corners}</g></svg>`
   );
 }
 
