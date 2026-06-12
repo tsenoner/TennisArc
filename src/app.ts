@@ -3,7 +3,7 @@ import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
-  renderSeedPanel, renderCountryPanel, renderMatchInsight, roundAbbrev, renderPanelFab, type ReadoutInfo,
+  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -27,6 +27,7 @@ interface AppState {
   focusId: string | undefined;
   selectedMatchId: string | undefined;
   selectedNodeId: string | undefined;
+  detailExpanded: boolean;  // match detail tier (strip's "Details ▾"): in-flow on desktop, bottom sheet on phones
   selectedCountry: string | undefined;
   theme: Theme;
   openMenu: "slam" | "lens" | undefined;
@@ -54,13 +55,13 @@ export function createApp(root: HTMLElement): () => void {
   applyTheme(theme);
   const state: AppState = {
     tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
-    colorDim: "time", seedSort: "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, selectedCountry: undefined, theme,
+    colorDim: "time", seedSort: "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
     openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined,
   };
   let store: Store | undefined;
 
   // Updated each draw so the (frequent) hover handler can build a readout without a full re-render.
-  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; focused: boolean } | undefined;
+  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; focused: boolean; isMatch: boolean } | undefined;
 
   const surname = (name: string) => name.split(" ").slice(-1)[0] || name;
 
@@ -94,7 +95,9 @@ export function createApp(root: HTMLElement): () => void {
   // INPUT state, never from the resolved player — an active hover on the champion must
   // show their card like anyone else's, and a focused section must keep its occupant named
   // (the pill is dropped while zoomed).
-  const roCls = (idle: boolean) => "ro-float" + (idle ? " ro-idle" : "");
+  // "has-match" hides the readout while a match strip names both players (CSS); it lives
+  // HERE, not in draw(), so updateReadout's outerHTML swaps re-emit it on every rewrite.
+  const roCls = (idle: boolean) => "ro-float" + (idle ? " ro-idle" : "") + (ctx?.isMatch ? " has-match" : "");
   let roCurrent: string | null = null; // who the readout currently shows — skips the 60-120Hz pointermove outerHTML churn
   let roIdle = false;                  // …and whether it is blanked (same skip must see idle flips)
   const updateReadout = (playerId: string | null) => {
@@ -184,21 +187,25 @@ export function createApp(root: HTMLElement): () => void {
     const drawer = state.panelOpen
       ? lens.replace('class="', `class="open${state.panelExpanded ? " expanded" : ""} `)
       : lens;
-    let panel = `<div class="lens-scrim${state.panelOpen && state.panelExpanded ? " open" : ""}" data-action="panel" aria-hidden="true"></div>` +
-      drawer + (state.panelOpen || isMatch ? "" : renderPanelFab(state.colorDim, state.seedSort));
-    // A selected match stacks its insight card below the lens panel in the side column
-    // (desktop); on phones it rises as its own bottom sheet over the (closed) drawer.
+    const panel = `<div class="lens-scrim${state.panelOpen && state.panelExpanded ? " open" : ""}" data-action="panel" aria-hidden="true"></div>` +
+      drawer + (state.panelOpen ? "" : renderPanelFab(state.colorDim, state.seedSort));
+    // A selected match renders as a slim context strip ABOVE the wheel (all viewports) —
+    // never over it. Its detail tier expands in-flow on desktop and as a bottom sheet on
+    // phones; the lens panel keeps the side column / peek drawer to itself throughout.
+    let strip = "";
     if (isMatch) {
       const mm = snap.matches[state.selectedMatchId!];
       const ins = matchInsight(snap, state.selectedMatchId!, time)!;
       const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
-      panel += renderMatchInsight(ins, u, state.selectedNodeId ?? "r", snap.rounds);
+      const nodeId = state.selectedNodeId ?? "r";
+      strip = renderMatchStrip(ins, nodeId, { expanded: state.detailExpanded, focused: state.focusId === nodeId }) +
+        (state.detailExpanded ? renderMatchDetail(ins, u, snap.rounds) : "");
     }
     const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
     // a pinned player owns the readout (hover still previews others; leave restores the pin)
     const pinned = state.pinnedId && snap.players[state.pinnedId] ? state.pinnedId : null;
     const defaultId = pinned ?? focusOcc ?? tree.occupant ?? null;
-    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, focused: !!state.focusId };
+    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, focused: !!state.focusId, isMatch };
     const floatIdle = !pinned && !state.focusId;
     roCurrent = defaultId; roIdle = floatIdle; // the markup below renders the float readout for defaultId
 
@@ -212,7 +219,7 @@ export function createApp(root: HTMLElement): () => void {
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst"><div class="chart">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings)}` +
+        `<div class="sunburst">${strip}<div class="chart">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings)}` +
           centerId + `</div>` + roFloat + `</div>` +
         `<div class="side">${panel}</div>` +
       `</div>` +
@@ -242,9 +249,15 @@ export function createApp(root: HTMLElement): () => void {
     }
   };
 
+  // EVERY dismissal of a selected match routes through here — the detail tier must never
+  // survive its match (a stale detailExpanded would pre-expand the next match's sheet).
+  const closeMatch = () => {
+    state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.detailExpanded = false;
+  };
+
   // Leaving the current draw (tour/year/slam switch) drops every per-draw selection.
   const resetSelection = () => {
-    state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined;
+    state.focusId = undefined; closeMatch();
     state.selectedCountry = undefined; state.pinnedId = undefined;
   };
 
@@ -261,11 +274,6 @@ export function createApp(root: HTMLElement): () => void {
     resetSelection();
     draw(); void load(state.tour, state.year, state.slam);
   };
-
-  // Tap/click detection: clicks within 800ms of a touchstart came from a finger, so the
-  // arc tap can pin-first instead of opening the match sheet immediately (no hover on touch).
-  let lastTouchTs = 0;
-  root.addEventListener("touchstart", () => { lastTouchTs = Date.now(); }, { passive: true, capture: true, signal });
 
   root.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
@@ -284,8 +292,9 @@ export function createApp(root: HTMLElement): () => void {
     if (!el) {
       // A tap on the chart with no [data-action] target releases a pinned path. This complements the
       // reset <g> (which also clears the pin): that fires on the wheel's hub/gaps, this on truly-empty
-      // SVG regions where the event target is the <svg> root rather than the reset group.
-      if (state.pinnedId && t.closest(".sunburst")) { state.pinnedId = undefined; draw(); }
+      // SVG regions where the event target is the <svg> root rather than the reset group. Scoped to
+      // .chart (not .sunburst) so dead space in the match strip above the wheel never unpins.
+      if (state.pinnedId && t.closest(".chart")) { state.pinnedId = undefined; draw(); }
       return;
     }
     if (el.hasAttribute("disabled")) return;
@@ -329,7 +338,7 @@ export function createApp(root: HTMLElement): () => void {
       state.colorDim = el.dataset.dim as ColorDim;
       state.openMenu = undefined;
       if (state.colorDim !== "country") state.selectedCountry = undefined;
-      state.selectedMatchId = undefined; state.selectedNodeId = undefined;
+      closeMatch();
       draw();
     } else if (a === "seed-sort" && el.dataset.sort) {
       // toggles the seed lens between seed order and ELO order — reorders the panel AND recolours the wheel
@@ -348,32 +357,32 @@ export function createApp(root: HTMLElement): () => void {
         const c = s?.players[el.dataset.occupant ?? ""]?.country;
         if (c) state.selectedCountry = state.selectedCountry === c ? undefined : c;
       } else {
+        // One grammar on every input: a single tap/click on an arc pins the player AND
+        // opens the match strip. The strip never covers the wheel, so touch no longer
+        // needs a pin-first second-tap dance — unpin via chart-background tap or Esc
+        // (the centre hub is the final's own arc, so tapping it inspects the final).
         const occ = el.dataset.occupant || null;
-        const fromTouch = Date.now() - lastTouchTs < 800;
-        if (fromTouch && occ && state.pinnedId !== occ) {
-          // touch has no hover: the first tap on an arc pins + names the player
-          // (readout, lit path); a second tap on the same player opens the match sheet
-          state.pinnedId = occ;
-        } else {
-          // desktop (hover already previews the path): one click pins the player AND
-          // opens that arc's match insight — unpin via background click or Esc (the
-          // centre hub is the final's own arc, so clicking it inspects the final)
-          if (occ) state.pinnedId = occ;
-          state.selectedMatchId = el.dataset.match;
-          state.selectedNodeId = id;
-          state.panelOpen = false;   // on phones a selected match supersedes the lens drawer
-        }
+        if (occ) state.pinnedId = occ;
+        if (state.selectedMatchId !== el.dataset.match) state.detailExpanded = false; // a new match starts collapsed
+        state.selectedMatchId = el.dataset.match;
+        state.selectedNodeId = id;
       }
       draw();
     } else if (a === "focus" && el.dataset.id) {
       state.focusId = el.dataset.id;
       draw();
+    } else if (a === "detail-expand") {
+      state.detailExpanded = !state.detailExpanded;
+      draw();
+      // The innerHTML swap dropped the keyboard focus: move it into the just-opened tier
+      // (its ✕ — the sheet's close on phones), or back to the strip's toggle on collapse.
+      if (state.detailExpanded) root.querySelector<HTMLElement>(".mi-detail .sheet-close")?.focus();
+      else root.querySelector<HTMLElement>('.match-strip [data-action="detail-expand"]')?.focus();
     } else if (a === "close-detail") {
-      state.selectedMatchId = undefined;
-      state.selectedNodeId = undefined;
+      closeMatch();
       draw();
     } else if (a === "reset" || id === "r" || (id && id === state.focusId)) {
-      state.focusId = undefined; state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.pinnedId = undefined; draw();
+      state.focusId = undefined; closeMatch(); state.pinnedId = undefined; draw();
     }
     // Selecting a slam/year/lens item from inside an open dropdown closes it → restore focus to its trigger.
     if (menuBefore && state.openMenu === undefined) ddTrigger(menuBefore)?.focus();
@@ -417,11 +426,13 @@ export function createApp(root: HTMLElement): () => void {
     items[next]?.focus();
   }, { signal });
 
-  // Escape unwinds the most recently opened layer: dropdown → match detail → lens drawer → pinned path → focused section.
+  // Escape unwinds the most recently opened layer, one per press:
+  // dropdown → match detail tier → match strip → lens drawer → pinned path → focused section.
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
-    else if (state.selectedMatchId) { state.selectedMatchId = undefined; state.selectedNodeId = undefined; draw(); }
+    else if (state.detailExpanded) { state.detailExpanded = false; draw(); }
+    else if (state.selectedMatchId) { closeMatch(); draw(); }
     else if (state.panelOpen) { state.panelOpen = false; draw(); }
     else if (state.pinnedId) { state.pinnedId = undefined; draw(); }
     else if (state.focusId) { state.focusId = undefined; draw(); }

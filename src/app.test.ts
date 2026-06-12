@@ -145,31 +145,105 @@ describe("tap-to-pin on panel rows", () => {
   });
 });
 
-describe("tap-to-pin vs match sheet on arcs", () => {
-  it("touch: first tap pins the player, second tap opens the match sheet", async () => {
+describe("arc tap → pin + match strip (one grammar on every input)", () => {
+  it("touch: a SINGLE tap pins the player AND opens the strip (no second-tap dance)", async () => {
     const root = await mountApp();
     const arc = pickArc(root);
-    const occ = arc.dataset.occupant!, match = arc.dataset.match!;
 
     touch(arc); click(arc);
-    expect(litArcs(root).length).toBeGreaterThan(0);          // pinned path lit
-    expect(root.querySelector(".match-insight")).toBeNull();  // sheet NOT opened on the first tap
-
-    const same = root.querySelector<HTMLElement>(`.sunburst path.arc[data-occupant="${occ}"][data-match="${match}"]`)!;
-    touch(same); click(same);
-    expect(root.querySelector(".match-insight")).not.toBeNull();
+    expect(litArcs(root).length).toBeGreaterThan(0);                       // pinned path lit
+    expect(root.querySelector(".sunburst .match-strip")).not.toBeNull();   // strip open on the FIRST tap
+    expect(root.querySelector(".mi-detail")).toBeNull();                   // detail tier stays collapsed
   });
 
-  it("desktop: a click with no preceding touch pins the player AND opens the match sheet", async () => {
+  it("desktop: a click pins the player AND opens the strip", async () => {
     const root = await mountApp();
     const arc = pickArc(root);
 
     click(arc);
-    expect(root.querySelector(".match-insight")).not.toBeNull();   // the click opens the match sheet
+    expect(root.querySelector(".match-strip")).not.toBeNull();     // the click opens the strip
     const lit = litArcs(root).length;
     expect(lit).toBeGreaterThan(0);                                // the player's path is lit
     root.dispatchEvent(new Event("pointerleave"));                 // a mere hover-preview would clear here…
     expect(litArcs(root).length).toBe(lit);                        // …but a pin keeps it lit → the click stuck
+  });
+
+  it("strip dead-space taps don't release the pin (unpin is scoped to .chart)", async () => {
+    const root = await mountApp();
+    click(pickArc(root));
+    const lit = litArcs(root).length;
+    expect(lit).toBeGreaterThan(0);
+
+    click(root.querySelector(".match-strip")!);          // padding/score area: no [data-action]
+    expect(litArcs(root).length).toBe(lit);              // pin survives
+    expect(root.querySelector(".match-strip")).not.toBeNull();
+
+    click(root.querySelector(".chart svg")!);            // truly-empty chart region still unpins
+    expect(litArcs(root).length).toBe(0);
+  });
+});
+
+describe("match detail tier (Details ▾)", () => {
+  it("expands behind the strip and ESC unwinds one layer per press: detail → strip", async () => {
+    const root = await mountApp();
+    click(pickArc(root));
+    expect(root.querySelector(".mi-detail")).toBeNull();                   // strip-first: collapsed by default
+    click(root.querySelector<HTMLElement>(".ms-more")!);
+    expect(root.querySelector(".mi-detail")).not.toBeNull();
+    expect(root.querySelector(".mi-scrim")).not.toBeNull();                // phone scrim exists only while expanded
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // rung 1: collapse the tier
+    expect(root.querySelector(".mi-detail")).toBeNull();
+    expect(root.querySelector(".match-strip")).not.toBeNull();             // strip survives
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // rung 2: close the strip
+    expect(root.querySelector(".match-strip")).toBeNull();
+  });
+
+  it("the sheet's own chrome (✕/grip/scrim) collapses only the tier, keeping the strip", async () => {
+    const root = await mountApp();
+    click(pickArc(root));
+    click(root.querySelector<HTMLElement>(".ms-more")!);
+    expect(root.querySelector(".mi-detail")).not.toBeNull();
+
+    click(root.querySelector<HTMLElement>(".mi-detail .sheet-close")!);
+    expect(root.querySelector(".mi-detail")).toBeNull();
+    expect(root.querySelector(".match-strip")).not.toBeNull();
+  });
+
+  it("closing the match clears detailExpanded — the next match opens collapsed", async () => {
+    const root = await mountApp();
+    click(pickArc(root));
+    click(root.querySelector<HTMLElement>(".ms-more")!);                   // expand
+    expect(root.querySelector(".mi-detail")).not.toBeNull();
+
+    click(root.querySelector<HTMLElement>(".ms-close")!);                  // ✕ closes strip AND detail
+    expect(root.querySelector(".match-strip")).toBeNull();
+    expect(root.querySelector(".mi-detail")).toBeNull();
+
+    click(pickArc(root));                                                  // reopen a match
+    expect(root.querySelector(".match-strip")).not.toBeNull();
+    expect(root.querySelector(".mi-detail")).toBeNull();                   // …collapsed, not pre-expanded
+  });
+});
+
+describe("readout hiding while a match is selected (has-match)", () => {
+  it("survives the pointermove outerHTML readout swap and lifts on close", async () => {
+    const root = await mountApp();
+    const arc = pickArc(root);
+    click(arc);
+    expect(root.querySelector(".readout.has-match")).not.toBeNull();
+
+    // hover someone ELSE: updateReadout rewrites the element via outerHTML — roCls owns
+    // the class, so the rewrite must re-emit it (a draw()-time class would be dropped here)
+    const pinnedOcc = arc.dataset.occupant!;
+    const other = [...root.querySelectorAll<HTMLElement>(".sunburst path.arc[data-occupant]")]
+      .find((a) => a.dataset.occupant && a.dataset.occupant !== pinnedOcc)!;
+    other.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(root.querySelector(".readout.has-match")).not.toBeNull();
+
+    click(root.querySelector<HTMLElement>(".ms-close")!);                  // close the match
+    expect(root.querySelector(".readout.has-match")).toBeNull();           // readout returns
   });
 });
 
@@ -256,7 +330,8 @@ describe("finalist pill + corner readout", () => {
     const champ = root.querySelector<HTMLElement>('path.arc[data-id="r"]')!.dataset.occupant!;
     const arc = [...root.querySelectorAll<HTMLElement>("path.arc[data-occupant]")]
       .find((a) => a.dataset.occupant && a.dataset.occupant !== champ)!;
-    touch(arc); click(arc); // phone flow: first tap pins
+    touch(arc); click(arc);                                  // tap pins + opens the strip…
+    click(root.querySelector<HTMLElement>(".ms-close")!);    // …close the strip; the pin survives
     const pill = root.querySelector(".center-id")!;
     const strip = root.querySelector(".readout.ro-float .ro-name")!;
     expect(pill.textContent).not.toBe("");                  // finalist still named at the centre
@@ -283,11 +358,12 @@ describe("finalist pill + corner readout", () => {
     expect(litArcs(root).length).toBeGreaterThan(0);
   });
 
-  it("keeps the lens panel when a match opens (insight stacks below it)", async () => {
+  it("keeps the lens panel in the side column when a match opens (strip lives above the wheel)", async () => {
     const root = await mountApp();
     click(pickArc(root));
-    expect(root.querySelector(".side .match-insight")).not.toBeNull();
-    expect(root.querySelector(".side .leaderboard")).not.toBeNull();
+    expect(root.querySelector(".sunburst .match-strip")).not.toBeNull(); // strip in the wheel column…
+    expect(root.querySelector(".side .leaderboard")).not.toBeNull();     // …lens panel untouched beside it
+    expect(root.querySelector(".side .match-strip")).toBeNull();         // nothing stacks in .side anymore
   });
 });
 
@@ -312,9 +388,9 @@ describe("float card never hides what the user is pointing at (idle = input stat
 
   it("keeps the focused section's occupant named (the pill is dropped while zoomed)", async () => {
     const root = await mountApp();
-    click(pickArc(root));                                              // pin + open insight
-    click(root.querySelector<HTMLElement>('[data-action="focus"]')!);  // zoom to that section
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // close insight
+    click(pickArc(root));                                              // pin + open the match strip
+    click(root.querySelector<HTMLElement>('[data-action="focus"]')!);  // ⊕ Zoom to that section
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // close the strip
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // unpin
     expect(root.querySelector(".center-id")).toBeNull();        // pill dropped while zoomed
     expect(root.querySelector(".ro-float.ro-idle")).toBeNull(); // card stays, naming the occupant

@@ -410,13 +410,15 @@ function insightScore(ins: MatchInsight): string {
 function insightPlayer(side: InsightSide, win: boolean, rounds: Round[]): string {
   const tag = side.seed != null ? `#${side.ranking ?? "?"} · seed ${side.seed}`
     : side.ranking != null ? `#${side.ranking}` : "";
-  const path = `${roundAbbrev(side.roundReached, rounds)}${side.sec > 0 ? ` · ${formatDuration(side.sec)}` : ""}`;
+  // How deep their run went. Cumulative time-on-court is deliberately NOT repeated here —
+  // it already lives in the hover/pin readout.
+  const path = roundAbbrev(side.roundReached, rounds);
   const bd = side.age != null ? ` · ${side.age}y${side.birthdayNear ? ` 🎂 ${escapeHtml(side.birthday)}` : ""}` : "";
   return (
     `<div class="mi-pl${win ? " mi-win" : ""}">` +
     `<span class="mi-fl">${flagImg(side.country, 14, side.country)}</span>` +
     `<span class="mi-who"><b>${escapeHtml(side.name)}</b>${win ? ' <span class="mi-chk">✓</span>' : ""}` +
-    `<small>${escapeHtml(tag)} · ${escapeHtml(path)}${bd}</small></span></div>`
+    `<small>${escapeHtml([tag, path].filter(Boolean).join(" · "))}${bd}</small></span></div>`
   );
 }
 
@@ -430,30 +432,70 @@ function statBar(label: string, v: [number, number] | null): string {
   );
 }
 
-/** Rich match insight rendered in the panel column (replaces the lens panel while a match is selected). */
-export function renderMatchInsight(ins: MatchInsight, sofaUrl: string | null, nodeId: string, rounds: Round[]): string {
+/** One side of the strip's matchup row. Both name forms are always rendered — a pure CSS
+ *  media query picks the full name (wide) or the surname (≤960px), so no resize JS exists.
+ *  `rev` mirrors the right-hand side: name then flag, so the flags bracket the score. */
+function stripSide(side: InsightSide, win: boolean, rev: boolean): string {
+  const short = side.name.split(" ").slice(-1)[0] || side.name;
+  const name = `<span class="ms-name"><span class="nm-full">${escapeHtml(side.name)}</span>` +
+    `<span class="nm-short">${escapeHtml(short)}</span></span>`;
+  const chk = win ? '<span class="mi-chk">✓</span>' : "";
+  const flag = `<span class="ms-fl">${flagImg(side.country, 14, side.country)}</span>`;
+  return `<span class="ms-side">${rev ? `${name}${chk}${flag}` : `${flag}${name}${chk}`}</span>`;
+}
+
+/** Slim match context strip — an in-flow summary at the top of the wheel column on EVERY
+ *  viewport (the same dock pattern the readout already uses ≤960px). The wheel is never
+ *  covered; the heavy tail lives one tap away behind "Details ▾" (renderMatchDetail). */
+export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean }): string {
+  const live = ins.status === "live"
+    ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>` : "";
+  // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
+  // While its own section is focused it flips to a reset; step 3 of the overhaul reroutes this.
+  const zoom = opts.focused
+    ? `<button class="ms-zoom" data-action="reset" data-id="${escapeHtml(nodeId)}">Reset zoom</button>`
+    : `<button class="ms-zoom" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Zoom</button>`;
+  return (
+    `<div class="match-strip" role="region" aria-label="Match insight">` +
+    `<div class="ms-hd"><span class="ms-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}${live}</span>` +
+    `<button class="ms-more" data-action="detail-expand" aria-expanded="${opts.expanded}">Details ${opts.expanded ? "▴" : "▾"}</button>` +
+    zoom +
+    `<button class="ms-close" data-action="close-detail" aria-label="Close match">✕</button></div>` +
+    `<div class="ms-mu">${stripSide(ins.p1, ins.winner === "p1", false)}` +
+    `<div class="ms-score">${insightScore(ins)}</div>` +
+    `${stripSide(ins.p2, ins.winner === "p2", true)}</div>` +
+    `</div>`
+  );
+}
+
+/** On-demand match detail tier (the strip's "Details ▾"): per-player meta, badges, ELO
+ *  context, serve stats, duration and the SofaScore link. In-flow under the strip on
+ *  desktop; a fixed bottom sheet with the standard grip/✕ chrome on phones. Every piece
+ *  of its chrome (scrim, grip, ✕) collapses ONLY this tier — the strip stays. */
+export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rounds: Round[]): string {
+  // The "Upset" pill would triple-signal with the ELO line's accent — one signal only.
   const badges = ins.badges
-    .map((b) => `<span class="mi-bdg${b === "Upset" ? " up" : ""}">${escapeHtml(b)}</span>`)
+    .filter((b) => b !== "Upset")
+    .map((b) => `<span class="mi-bdg">${escapeHtml(b)}</span>`)
     .join("");
   const dur = ins.durationSec != null
     ? `⏱ ${formatDuration(ins.durationSec)}${ins.durationProvisional ? " (live)" : ""}` : "";
   const link = sofaUrl
     ? `<a class="mi-link" href="${sofaUrl}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";
   return (
-    // Scrim is inert on desktop; on phones it dims the bracket behind the bottom-sheet
-    // and tapping it closes the detail (same action as the back button).
-    `<div class="mi-scrim" data-action="close-detail" aria-hidden="true"></div>` +
-    `<aside class="panel match-insight" role="dialog" aria-label="Match insight">` +
-    `<div class="mi-hd"><button class="mi-back" data-action="close-detail">‹ back</button>` +
-    `<span class="mi-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}</span></div>` +
+    // Scrim is inert on desktop; on phones it dims the bracket behind the bottom sheet
+    // and tapping it collapses the detail tier (the strip and selection survive).
+    `<div class="mi-scrim" data-action="detail-expand" aria-hidden="true"></div>` +
+    `<aside class="mi-detail" role="dialog" aria-label="Match details">` +
+    `<div class="sheet-bar"><button class="sheet-grip" data-action="detail-expand" aria-label="Collapse details"><span></span></button>` +
+    `<button class="sheet-close" data-action="detail-expand" aria-label="Close details">✕</button></div>` +
     `<div class="mi-mu">${insightPlayer(ins.p1, ins.winner === "p1", rounds)}` +
-    `<div class="mi-score">${insightScore(ins)}</div>` +
     `${insightPlayer(ins.p2, ins.winner === "p2", rounds)}</div>` +
     (badges ? `<div class="mi-badges">${badges}</div>` : "") +
     statBar("Aces", ins.aces) + statBar("Double faults", ins.doubleFaults) +
-    (ins.eloLine ? `<div class="mi-elo">${escapeHtml(ins.eloLine)}${ins.upset ? " — upset" : ""}</div>` : "") +
+    (ins.eloLine ? `<div class="mi-elo${ins.upset ? " upset" : ""}">${escapeHtml(ins.eloLine)}</div>` : "") +
     (dur ? `<div class="mi-dur">${dur}</div>` : "") +
-    `<div class="mi-acts">${link}<button class="mi-focus" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Focus this section</button></div>` +
+    link +
     `</aside>`
   );
 }

@@ -58,8 +58,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .panel-fab, .lens-scrim, .sheet-bar { display: none; }
 
 .stage { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 10px 14px; }
-/* the side column stacks the lens panel and, when a match is selected, its insight card;
-   it hugs its content instead of stretching to the full stage height */
+/* the side column holds the lens panel alone (a selected match renders as a strip above the
+   wheel instead); it hugs its content instead of stretching to the full stage height */
 .side { display: flex; flex-direction: column; gap: 12px; width: 280px; max-width: 38vw;
   align-self: flex-start; max-height: 100%; min-height: 0; }
 .side > .leaderboard, .side > .panel { width: auto; max-width: none; min-height: 0; }
@@ -98,22 +98,49 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   background: linear-gradient(90deg, #2f6f8f, #d9a441, #e0683c); }
 .legend-grad.seed { background: linear-gradient(90deg, #352170, #6d3fd4, #a36bff, #e2cdff); }
 
-/* match insight (in the panel column) */
-.match-insight { display: flex; flex-direction: column; gap: 10px; }
-.mi-hd { display: flex; align-items: center; justify-content: space-between; }
-.mi-back { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 12px; padding: 0; }
-.mi-rnd { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--teal); font-weight: 600; }
+/* match context strip — slim, frosted, in-flow at the top of the wheel column on EVERY
+   viewport (the readout's ≤960px dock pattern, generalised). Two rows: caption + actions,
+   then the matchup; the heavy tail lives one tap away in the .mi-detail tier below. */
+.match-strip { padding: 8px 12px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--panel);  /* opaque fallback for browsers without color-mix() */
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  margin: 0 0 6px; }
+.ms-hd { display: flex; align-items: center; gap: 6px; }
+.ms-rnd { margin-right: auto; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--teal); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--teal);
+  margin: 0 4px 0 1px; animation: ms-pulse 1.6s ease-in-out infinite; }
+@keyframes ms-pulse { 50% { opacity: .25; } }
+.ms-more, .ms-close { background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px;
+  cursor: pointer; padding: 4px 8px; border-radius: 8px; white-space: nowrap; }
+/* the zoom action is deliberately accented — it replaces the old buried ghost Focus button */
+.ms-zoom { position: relative; background: transparent; border: 1px solid var(--teal); color: var(--teal);
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 10px;
+  border-radius: 8px; white-space: nowrap; }
+.ms-mu { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; margin-top: 6px; }
+.ms-side { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 15px; font-weight: 700; }
+.ms-side .ms-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-fl { font-size: 15px; line-height: 1; } /* sizes only the emoji fallback; the bundled <img> is sized inline */
+.ms-score { text-align: center; font-variant-numeric: tabular-nums; font-weight: 700;
+  letter-spacing: .5px; font-size: 14px; min-width: 0; }
+.ms-score sup { font-size: 9px; color: var(--dim); }
+.mi-chk { color: var(--teal); }
+/* full name vs surname is a pure CSS switch (≤960px media block) — both spans always render, no resize JS */
+.ms-name .nm-short { display: none; }
+
+/* match detail tier — on demand behind the strip's "Details ▾": in-flow under the strip on
+   desktop, a fixed bottom sheet with the standard grip/✕ chrome on phones (media block below) */
+.mi-detail { display: flex; flex-direction: column; gap: 10px; max-width: 520px;
+  padding: 10px 12px; margin: 0 0 6px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--panel); animation: mi-rise .22s ease-out; }
 .mi-mu { display: grid; gap: 6px; }
 .mi-pl { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; background: var(--inset); }
 .mi-pl.mi-win { box-shadow: inset 2px 0 0 var(--teal); }
 .mi-fl { font-size: 17px; } /* sizes only the emoji fallback; the bundled <img> is sized inline */
 .mi-who b { font-size: 13.5px; } .mi-who small { display: block; color: var(--dim); font-size: 11px; }
-.mi-chk { color: var(--teal); }
-.mi-score { text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: 1px; }
-.mi-score sup { font-size: 9px; color: var(--dim); }
 .mi-badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .mi-bdg { font-size: 11px; padding: 3px 8px; border-radius: 7px; background: var(--inset); border: 1px solid var(--line); }
-.mi-bdg.up { border-color: var(--accent); color: var(--upset); }
 .mi-stat { display: grid; grid-template-columns: 26px 1fr 26px; gap: 6px; align-items: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 .mi-stat .mi-slab { grid-column: 1 / -1; text-align: center; font-size: 10px; text-transform: uppercase; color: var(--dim); }
 .mi-bar { display: flex; height: 7px; background: var(--inset); border-radius: 4px; overflow: hidden; }
@@ -122,13 +149,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    so the teal|slate boundary never rests on hue alone */
 .mi-bar i:first-child { background: var(--teal); margin-right: auto; border-right: 2px solid var(--inset); }
 .mi-elo { font-size: 12px; color: var(--dim); background: var(--inset); border-radius: 8px; padding: 8px 10px; }
+/* the single upset signal (the redundant badge and "— upset" suffix are gone) */
+.mi-elo.upset { color: var(--upset); box-shadow: inset 2px 0 0 var(--upset); }
 .mi-dur { font-size: 12px; color: var(--dim); }
-.mi-acts { display: flex; gap: 8px; margin-top: 2px; }
-.mi-link, .mi-focus { flex: 1; text-align: center; font-size: 12px; padding: 9px; border-radius: 9px; cursor: pointer; text-decoration: none; }
-.mi-link { background: var(--teal); color: #04211f; font-weight: 700; }
-.mi-focus { background: transparent; border: 1px solid var(--line); color: var(--dim); }
+.mi-link { display: block; text-align: center; font-size: 12px; padding: 9px; border-radius: 9px;
+  cursor: pointer; text-decoration: none; background: var(--teal); color: #04211f; font-weight: 700; }
 
-/* match-insight scrim: inert on desktop; a tap-to-dismiss dimmer on phones (see media query) */
+/* detail-tier scrim: inert on desktop; a tap-to-collapse dimmer on phones (see media query) */
 .mi-scrim { display: none; }
 
 @keyframes mi-rise { from { transform: translateY(14%); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
@@ -190,6 +217,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    focused) it would only duplicate the finalist pill, so it blanks out */
 .ro-float { top: 10px; left: 10px; transform: none; }
 .ro-float.ro-idle { visibility: hidden; }
+/* while a match is selected the strip already names both players — the readout would only
+   duplicate it (corner card over the strip >960px; a SECOND stacked strip ≤960px), so it
+   hides on every viewport. roCls re-emits the class on each outerHTML rewrite, so a
+   mid-gesture pointermove swap can never drop it. */
+.readout.has-match { display: none; }
 /* narrow windows: the corner would sit on the wheel itself, so the card docks as a strip
    above the chart instead (visibility still blanks it idle — the box holds the row's
    height so the chart never jumps; phones refine the strip further in the block below) */
@@ -197,6 +229,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .ro-float { position: static; order: -1; width: auto; min-height: 40px;
     display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
     column-gap: 8px; row-gap: 0; margin: 0 0 4px; text-align: left; }
+  /* tighter strip band: surnames take over from full names (both are always in the markup) */
+  .ms-name .nm-full { display: none; }
+  .ms-name .nm-short { display: inline; }
 }
 
 /* lens panels share the leaderboard column */
@@ -292,7 +327,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .legend { padding-right: 140px; font-size: 11px; }
   .legend-grad { width: 90px; }
 
-  /* lens panel becomes a bottom drawer opened by the FAB; sits BELOW the match sheet (z 38/39 < 40/41).
+  /* lens panel becomes a bottom drawer opened by the FAB; sits BELOW the match detail sheet
+     (z 38/39 < 40/41), so the peek drawer can stay open under a selected match's strip.
      It opens at PEEK height (chart stays visible above it, no scrim) and expands via the grip;
      only the expanded state dims the bracket behind it. */
   .panel-fab { display: inline-flex; position: fixed; right: 14px; z-index: 37;
@@ -301,9 +337,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
     background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600;
     cursor: pointer; box-shadow: 0 6px 22px rgba(0, 0, 0, .38); }
   .lens-scrim.open { display: block; position: fixed; inset: 0; z-index: 38; background: rgba(4, 8, 12, .55); }
-  /* every lens panel (leaderboard/seed/country) is a bottom drawer — but NOT the match sheet,
-     which has its own fixed positioning + higher z-band below. */
-  .side > .leaderboard, .side > .panel:not(.match-insight) {
+  /* every lens panel (leaderboard/seed/country) is a bottom drawer — the match detail tier
+     lives in .sunburst with its own fixed positioning + higher z-band below. */
+  .side > .leaderboard, .side > .panel {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
     width: auto; max-width: none; max-height: 40dvh; align-self: auto;
     overflow-y: auto; overscroll-behavior: contain;
@@ -311,8 +347,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
     padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
     box-shadow: 0 -12px 40px rgba(0, 0, 0, .5);
     transform: translateY(100%); transition: transform .22s ease-out, max-height .22s ease-out; }
-  .side > .leaderboard.open, .side > .panel:not(.match-insight).open { transform: translateY(0); }
-  .side > .leaderboard.expanded, .side > .panel:not(.match-insight).expanded { max-height: 78dvh; }
+  .side > .leaderboard.open, .side > .panel.open { transform: translateY(0); }
+  .side > .leaderboard.expanded, .side > .panel.expanded { max-height: 78dvh; }
 
   /* bottom-sheet chrome: grip pill toggles peek/expanded, ✕ closes */
   .sheet-bar { display: flex; align-items: center; }
@@ -322,11 +358,21 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .sheet-close { background: none; border: 0; color: var(--dim); font: inherit; font-size: 14px;
     padding: 0 4px 8px 12px; cursor: pointer; }
 
-  /* tapping a player → match detail as a bottom sheet over the bracket (was off-screen below) */
+  /* match strip, phone-tightened: smaller type, and the action buttons keep their small
+     visual size but gain ≥40px effective tap targets (padding for the borderless pair,
+     an invisible ::after halo for the bordered Zoom — its padding IS its visible chrome) */
+  .match-strip { padding: 6px 10px; }
+  .ms-side { font-size: 13px; }
+  .ms-score { font-size: 12px; }
+  .ms-more, .ms-close { padding: 11px 10px; margin: -7px 0; }
+  .ms-zoom::after { content: ""; position: absolute; inset: -7px -4px; }
+
+  /* "Details ▾" → the detail tier rises as a bottom sheet over the bracket, with the same
+     grip/✕ grammar as the lens drawers; the scrim (rendered only while expanded) dims behind it */
   .mi-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(4, 8, 12, .55); }
-  .stage .match-insight { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
-    width: auto; max-width: none; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
+  .stage .mi-detail { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
+    max-width: none; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
     margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
-    padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
     box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); animation: mi-rise .22s ease-out; }
 }
