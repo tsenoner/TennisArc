@@ -13,7 +13,6 @@ import { fetchSnapshot, fetchIndex } from "./api";
 import { pickDefaultSlam, availableYears, slamsForYear } from "./slams";
 import type { Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
-import { pinchUpdate, IDENTITY, type Pt, type View } from "./zoom";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
@@ -151,40 +150,7 @@ export function createApp(root: HTMLElement): () => void {
     open: state.openMenu,
   });
 
-  // ---- two-finger pinch/pan magnifier (EPHEMERAL: never AppState, never the URL) ----
-  // One finger keeps drag-to-explore; a second finger turns the touch into a geometric
-  // magnifier on .zoom-layer (zoom.ts does the math). The view dies with the geometry it
-  // magnified: any tour/year/slam/focus change snaps it back to identity (lastGeomKey).
-  let view: View = IDENTITY;
-  const pointers = new Map<number, Pt>();   // tracked touches (viewBox units), gated on .sunburst
-  let gestureStart: { view: View; a: Pt; b: Pt; ids: [number, number] } | undefined;
-  let pinched = false;      // armed at the SECOND pointerdown: the gesture's synthetic click must never pin/inspect
-  let drawPending = false;  // a draw() asked mid-gesture (live fetch) — deferred, flushed on gesture end
-  let lastGeomKey = "";     // tour:year:slam|focus signature of the last draw — view resets when it changes
-
-  // Pointer position in viewBox units. getScreenCTM absorbs the xMidYMid letterbox — no
-  // hand-rolled px math (the fixed-px-vs-scaled-SVG bug class). jsdom has no CTM: fall
-  // back to raw client px, which the tests treat as viewBox units directly.
-  const svgPt = (e: PointerEvent): Pt => {
-    const m = root.querySelector<SVGSVGElement>(".sunburst svg")?.getScreenCTM?.()?.inverse();
-    return m
-      ? { x: m.a * e.clientX + m.c * e.clientY + m.e, y: m.b * e.clientX + m.d * e.clientY + m.f }
-      : { x: e.clientX, y: e.clientY };
-  };
-
-  // Re-aim the magnifier at the current DOM: an SVG ATTRIBUTE transform (a CSS transform
-  // would rasterize + blur the labels in WebKit) plus the .zoomed class that shows the
-  // phone reset chip. Runs per gesture frame AND after every draw() (fresh .zoom-layer).
-  const applyView = () => {
-    root.querySelector(".zoom-layer")?.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`);
-    root.querySelector(".sunburst")?.classList.toggle("zoomed", view.k > 1);
-  };
-
   const draw = () => {
-    // Mid-gesture the innerHTML swap would destroy the touched elements (WebKit then fires
-    // pointercancel and aborts the pinch), so a draw that lands while two fingers are down
-    // — a resolving live fetch — waits and flushes the moment the gesture ends.
-    if (gestureStart) { drawPending = true; return; }
     if (!state.panelOpen) state.panelExpanded = false; // invariant: a closed drawer always reopens at peek
     hlNodes = []; hlCurrent = null; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
     const snap = state.year ? state.snapshots[snapKey(state.tour, state.year, state.slam)] : undefined;
@@ -194,11 +160,6 @@ export function createApp(root: HTMLElement): () => void {
         `<div class="stage"><div class="loading">Loading ${state.tour} draw…</div></div>`;
       return;
     }
-    // The magnifier dies with the geometry it magnified: a different draw (tour/year/slam)
-    // or focus level snaps the ephemeral view back to identity before anything renders.
-    // Selection state (pin, match, lens, country) is NOT geometry — those redraws keep it.
-    const geomKey = `${snapKey(state.tour, state.year, state.slam)}|${state.focusId ?? ""}`;
-    if (geomKey !== lastGeomKey) { lastGeomKey = geomKey; view = IDENTITY; }
     const time = timeOnCourt(snap);
     const tree = buildSunburst(snap);
     const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
@@ -305,10 +266,6 @@ export function createApp(root: HTMLElement): () => void {
       crumbs = renderCrumbs(trail, sectionTitle(snap, tree, state.focusId));
     }
 
-    // Pinch exit chip (phones): always in the DOM, shown by CSS only while .sunburst
-    // carries the .zoomed class (k > 1, toggled in applyView) — display: none on desktop.
-    const zoomChip = `<button class="zoom-reset" data-action="zoom-reset" aria-label="Reset zoom">⤺ 1×</button>`;
-
     // .chart carries tabindex="-1": a programmatic landing spot for keyboard focus after the
     // strip's ✕ removes the element that held it (never tab-reachable, no visible ring).
     // The sr-only quarter buttons are the keyboard/SR twins of the SVG corner handles —
@@ -317,7 +274,7 @@ export function createApp(root: HTMLElement): () => void {
       renderControls(controlsOpts()) +
       `<div class="stage">` +
         `<div class="sunburst">${crumbs}${strip}<div class="chart" tabindex="-1">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings, qLabels)}` +
-          centerId + `</div>` + (qLabels ? renderQuarterFocusButtons(qLabels) : "") + zoomChip + roFloat + `</div>` +
+          centerId + `</div>` + (qLabels ? renderQuarterFocusButtons(qLabels) : "") + roFloat + `</div>` +
         `<div class="side">${panel}</div>` +
       `</div>` +
       renderLegend(state.colorDim, state.seedSort) +
@@ -330,8 +287,6 @@ export function createApp(root: HTMLElement): () => void {
       highlightPath(pinned);
       root.querySelector(`[data-hl-path][data-occupant="${CSS.escape(pinned)}"]`)?.classList.add("row-pinned");
     }
-    // …and re-aim the magnifier at the fresh .zoom-layer (the swap rendered it untransformed)
-    applyView();
   };
 
   const load = async (tour: Tour, year: number, slam: string) => {
@@ -428,11 +383,6 @@ export function createApp(root: HTMLElement): () => void {
     root.querySelector(`.sunburst path.arc[data-id^="${id}."]`) ? id : id.split(".").slice(0, -1).join(".");
 
   root.addEventListener("click", (e) => {
-    // A pinch's synthetic click (the browser fires one from the first finger even when the
-    // fingers never travelled) must not pin/inspect/reset. The flag disarms at the next
-    // fresh pointerdown OR 500ms after the gesture ends (endPointer) — whichever comes
-    // first — so it swallows the gesture's own click but never a later keyboard/AT click.
-    if (pinched) { pinched = false; return; }
     const t = e.target as HTMLElement;
     const el = t.closest<HTMLElement>("[data-action]");
     // A panel row (seed / leaderboard / country player) pins that player's path — the only
@@ -557,13 +507,8 @@ export function createApp(root: HTMLElement): () => void {
       draw();
       // the ✕ that held keyboard focus left with the strip — land on the chart region
       root.querySelector<HTMLElement>(".chart")?.focus();
-    } else if (a === "zoom-reset") {
-      // the phone chip drops the magnifier alone — ephemeral view, no app state moved, no draw()
-      view = IDENTITY; applyView();
     } else if (a === "reset" || id === "r" || (id && id === state.focusId)) {
-      // the hub/gap tap is the nuclear reset — it also drops a pinch zoom (the geometry
-      // key alone wouldn't when focus was already clear), so "reset everything" is honest
-      view = IDENTITY;
+      // the hub/gap tap is the nuclear reset: focus, match and pin all drop at once
       setFocus(undefined); closeMatch(); state.pinnedId = undefined; draw();
     }
     // Selecting a slam/year/lens item from inside an open dropdown closes it → restore focus to its trigger.
@@ -571,7 +516,6 @@ export function createApp(root: HTMLElement): () => void {
   }, { signal });
 
   root.addEventListener("pointermove", (e) => {
-    if (gestureStart) return; // two fingers down = magnifier, not explore
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-occupant]");
     updateReadout(el?.dataset.occupant || null);
     // hovering an arc or a panel row previews that player's path through the sunburst
@@ -579,49 +523,6 @@ export function createApp(root: HTMLElement): () => void {
     highlightPath(el?.dataset.occupant || state.pinnedId || null);
   }, { signal });
   root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(state.pinnedId ?? null); }, { capture: true, signal });
-
-  // ---- pinch pointer tracking. Gated on .sunburst, NOT the svg: at ≤960px the docked
-  // readout strip renders inside .sunburst above the chart, and a second finger landing
-  // on it would otherwise never join the gesture (a natural grip on a phone). Coordinate
-  // math still runs in the svg's viewBox units via svgPt. ----
-  root.addEventListener("pointerdown", (e) => {
-    if (pointers.size === 0) pinched = false; // a fresh gesture: the previous pinch stops suppressing clicks
-    if (!(e.target as HTMLElement).closest(".sunburst")) return;
-    pointers.set(e.pointerId, svgPt(e));
-    if (pointers.size === 2 && !gestureStart) {
-      // Click suppression arms HERE, at the second pointerdown — not on move: a
-      // sub-threshold pinch (fingers down and straight up) still synthesizes a click.
-      pinched = true;
-      const [[idA, ptA], [idB, ptB]] = [...pointers.entries()];
-      gestureStart = { view, a: ptA, b: ptB, ids: [idA, idB] };
-    }
-  }, { signal });
-  root.addEventListener("pointermove", (e) => {
-    if (!gestureStart || !pointers.has(e.pointerId)) return;
-    pointers.set(e.pointerId, svgPt(e));
-    const a1 = pointers.get(gestureStart.ids[0]), b1 = pointers.get(gestureStart.ids[1]);
-    if (!a1 || !b1) return;
-    // pinchUpdate covers panning too: parallel fingers keep k and move the midpoint.
-    // No rAF throttle — browsers already align touch pointermove to the frame clock.
-    view = pinchUpdate(gestureStart.view, gestureStart.a, gestureStart.b, a1, b1, SIZE);
-    applyView();
-  }, { signal });
-  // Up/cancel live on window: a finger released outside the chart must still end the
-  // gesture, and pointercancel is how iOS reports stealing the touch for a system gesture.
-  const endPointer = (e: PointerEvent) => {
-    if (!pointers.delete(e.pointerId)) return;
-    if (gestureStart && !(pointers.has(gestureStart.ids[0]) && pointers.has(gestureStart.ids[1]))) {
-      gestureStart = undefined;
-      if (drawPending) { drawPending = false; draw(); } // the refresh deferred mid-gesture
-    }
-    // Time-bound the click suppression: browsers usually synthesize NO click after a
-    // two-finger touch, so a flag left sticky would swallow the next pointer-LESS click
-    // (keyboard Enter/Space, an AT-dispatched click). Cover the synthetic-click window,
-    // never outlive it; the pointerdown disarm still handles the fast-retap case.
-    if (pointers.size === 0 && pinched) setTimeout(() => { pinched = false; }, 500);
-  };
-  window.addEventListener("pointerup", endPointer, { signal });
-  window.addEventListener("pointercancel", endPointer, { signal });
 
   // Browser Back/Forward (and the history.back() setFocus issues on clear): the browser
   // has already moved, so ADOPT the entry's focus instead of writing history; a hash that
@@ -665,9 +566,8 @@ export function createApp(root: HTMLElement): () => void {
   }, { signal });
 
   // Escape unwinds the most recently opened layer, one per press: dropdown → match detail
-  // tier → match strip → lens drawer → pinned path → pinch zoom → focused section.
-  // Focus stays the LAST rung — crumbs, the hub and browser Back are its primary exits;
-  // the pinch rung sits just above it so the magnifier clears before the focus unwinds.
+  // tier → match strip → lens drawer → pinned path → focused section. Focus stays the
+  // LAST rung — crumbs, the hub and browser Back are its primary exits.
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
@@ -679,7 +579,6 @@ export function createApp(root: HTMLElement): () => void {
     else if (state.selectedMatchId) { closeMatch(); draw(); }
     else if (state.panelOpen) { state.panelOpen = false; draw(); }
     else if (state.pinnedId) { state.pinnedId = undefined; draw(); }
-    else if (view.k > 1) { view = IDENTITY; applyView(); } // ephemeral view — nothing to redraw
     else if (state.focusId) { setFocus(undefined); draw(); }
   }, { signal });
 

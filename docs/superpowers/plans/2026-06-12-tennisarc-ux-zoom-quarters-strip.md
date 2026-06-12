@@ -47,6 +47,12 @@ Kept on the table: **A — curved ribbons** outside the ring (strongest circular
 
 Mechanics: `src/zoom.ts` pure math (`pinchUpdate`/`panUpdate`, k clamped [1,4], pan clamped `x,y ∈ [700(1−k), 0]`, snap below 1.05), `<g class="zoom-layer">` wrapping the translate group, transform written as an **SVG attribute** (vector-crisp; never CSS transform — WebKit rasterizes). View lives module-level in `createApp()`, never in AppState/URL; reset whenever the geometry key (slam|tour|focusId) changes, **and inside the hub-reset branch** so the nuclear reset is honest. Critique fixes baked in: gate pointers on `closest(".sunburst")` (not the svg — the docked readout strip eats second fingers), set the click-suppression flag at second pointerdown (not only on move), defer `draw()` while two pointers are down (flush on gesture end), `.zoom-reset` chip gets `display:inline-flex` in the ≤720px block at `bottom: calc(52px + safe-area)`, z-36, and a zoom-reset rung joins ESC between pin and focus. **Gate on on-device profiling**; fallback is hiding `.arc-label/.ring-label` during the gesture, never CSS-transform blur.
 
+**RESOLVED 2026-06-12 (post on-device testing): pinch REMOVED.** The magnifier shipped, passed
+synthetic WebKit verification, and worked on a real iPhone — but the owner judged the two-finger
+gesture "too complicated and unintuitive"; with full-area section focus (tap-again / quarter labels
+/ crumbs) the geometric zoom is unneeded. `src/zoom.ts`, the `.zoom-layer` wrapper, all gesture
+handlers, the reset chip and their tests were removed. Semantic focus is the only zoom.
+
 ## 5. Match-insight redesign
 
 **Recommended: A — unified context strip + on-demand detail tier.**

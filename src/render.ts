@@ -261,14 +261,11 @@ export function renderSunburst(
   // only because they never overlap the disc (the invariant documented at Q_HIT_W above)
   const corners = quarters ? quarterCorners(quarters, c) : "";
 
-  // .zoom-layer carries the two-finger magnifier's `translate(x,y) scale(k)` — written by
-  // the app as an SVG ATTRIBUTE (never CSS: WebKit rasterizes CSS-transformed SVG and the
-  // labels blur). It renders untransformed here; applyView re-aims it after every draw.
   return (
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
     `role="img" aria-label="Tournament bracket sunburst">` +
-    `<g class="zoom-layer"><g transform="translate(${c},${c})" data-action="reset">` +
-    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}${corners}</g></g></svg>`
+    `<g transform="translate(${c},${c})" data-action="reset">` +
+    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}${corners}</g></svg>`
   );
 }
 
