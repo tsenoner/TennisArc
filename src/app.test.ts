@@ -158,8 +158,11 @@ describe("tap-to-pin vs match sheet on arcs", () => {
     const arc = pickArc(root);
 
     click(arc);
-    expect(root.querySelector(".match-insight")).not.toBeNull();
-    expect(litArcs(root).length).toBeGreaterThan(0); // hover previews; the click makes it stick
+    expect(root.querySelector(".match-insight")).not.toBeNull();   // the click opens the match sheet
+    const lit = litArcs(root).length;
+    expect(lit).toBeGreaterThan(0);                                // the player's path is lit
+    root.dispatchEvent(new Event("pointerleave"));                 // a mere hover-preview would clear here…
+    expect(litArcs(root).length).toBe(lit);                        // …but a pin keeps it lit → the click stuck
   });
 });
 
