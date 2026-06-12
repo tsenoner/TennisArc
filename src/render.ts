@@ -317,6 +317,9 @@ export function sheetBar(): string {
 }
 
 export function renderLeaderboard(rows: LeaderRow[]): string {
+  // Fewer than 3 fully-covered players means the source has no real duration data for this
+  // event — a 1-2 row "leaderboard" misleads more than it informs, so show nothing.
+  if (rows.length < 3) return "";
   const max = Math.max(1, ...rows.map((r) => r.sec));
   const items = rows
     .map((r, i) => {

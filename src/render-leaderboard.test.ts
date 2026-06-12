@@ -5,12 +5,18 @@ import type { LeaderRow } from "./state";
 const rows: LeaderRow[] = [
   { playerId: "a", name: "Carlos Alcaraz", country: "ESP", sec: 12000, provisional: false, roundReached: 5 },
   { playerId: "b", name: "Jannik <Sinner>", country: "ITA", sec: 6000, provisional: true, roundReached: 4 },
+  { playerId: "c", name: "Casper Ruud", country: "NOR", sec: 3000, provisional: false, roundReached: 3 },
 ];
 
 describe("renderLeaderboard", () => {
+  it("renders nothing when fewer than 3 players qualify (too sparse to rank honestly)", () => {
+    expect(renderLeaderboard(rows.slice(0, 2))).toBe("");
+    expect(renderLeaderboard([])).toBe("");
+  });
+
   it("renders one row per leader with rank, escaped name, bar and formatted time", () => {
     const html = renderLeaderboard(rows);
-    expect((html.match(/class="lb-row"/g) ?? []).length).toBe(2);
+    expect((html.match(/class="lb-row"/g) ?? []).length).toBe(3);
     expect(html).toContain("Carlos Alcaraz");
     expect(html).toContain("Jannik &lt;Sinner&gt;"); // escaped, no raw <
     expect(html).not.toContain("Jannik <Sinner>");
@@ -21,7 +27,7 @@ describe("renderLeaderboard", () => {
 
   it("marks each row for hover path-highlight with the player id", () => {
     const html = renderLeaderboard(rows);
-    expect((html.match(/data-hl-path/g) ?? []).length).toBe(2);
+    expect((html.match(/data-hl-path/g) ?? []).length).toBe(3);
     expect(html).toContain('data-occupant="a"');
     expect(html).toContain('data-occupant="b"');
   });
@@ -32,9 +38,5 @@ describe("renderLeaderboard", () => {
     expect(html).toMatch(/<span class="lb-ctry"><img class="flag"[^>]*> ESP<\/span>/);
     // country is no longer nested inline after the name on the same span
     expect(html).not.toMatch(/Carlos Alcaraz <span class="lb-ctry">/);
-  });
-
-  it("renders an empty list without throwing", () => {
-    expect(renderLeaderboard([]).toString()).toContain("leaderboard");
   });
 });

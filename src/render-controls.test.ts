@@ -94,7 +94,9 @@ describe("sheetBar", () => {
     expect(sheetBar()).toContain('data-action="panel-expand"');
     expect(sheetBar()).toContain('data-action="panel"');
     // all three lens panels carry it so the bottom drawer is always controllable by touch
-    expect(renderLeaderboard([])).toContain("sheet-bar");
+    const lb = (id: string, sec: number) =>
+      ({ playerId: id, name: id, country: "", sec, provisional: false, roundReached: 0 });
+    expect(renderLeaderboard([lb("a", 3), lb("b", 2), lb("c", 1)])).toContain("sheet-bar");
     expect(renderSeedPanel({ total: 0, remaining: 0, mode: "seed", rows: [] }, [])).toContain("sheet-bar");
     expect(renderCountryPanel([], undefined, [])).toContain("sheet-bar");
   });

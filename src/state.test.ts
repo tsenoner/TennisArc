@@ -85,7 +85,34 @@ describe("timeOnCourt", () => {
   });
 });
 
+describe("timeOnCourt coverage", () => {
+  it("marks a player complete only when every counted match has a duration", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3 });
+    const t0 = timeOnCourt(s);
+    for (const v of t0.values()) expect(v.complete).toBe(true);
+    // unknown duration in one match → both its players become incomplete
+    const m = s.matches["0-0"];
+    s.matches["0-0"] = { ...m, durationSec: null };
+    const t = timeOnCourt(s);
+    expect(t.get(m.p1!)!.complete).toBe(false);
+    expect(t.get(m.p2!)!.complete).toBe(false);
+    // an uninvolved player keeps full coverage
+    const other = s.matches["0-1"];
+    expect(t.get(other.p1!)!.complete).toBe(true);
+  });
+});
+
 describe("timeLeaderboard", () => {
+  it("excludes players with partial duration coverage (their total would silently undercount)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3 });
+    const final = Object.values(s.matches).find((m) => m.roundIndex === 2)!;
+    const champ = final.winner === "p1" ? final.p1! : final.p2!;
+    s.matches[final.id] = { ...final, durationSec: null }; // champion's final: duration unknown
+    const rows = timeLeaderboard(s, timeOnCourt(s), 50);
+    expect(rows.some((r) => r.playerId === champ)).toBe(false); // sec > 0, but undercounted
+    expect(rows.length).toBeGreaterThan(0); // fully-covered players still ranked
+  });
+
   it("ranks players by descending time, caps at the limit, excludes zero-time", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 4 });
     const rows = timeLeaderboard(s, timeOnCourt(s), 5);
