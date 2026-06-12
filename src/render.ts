@@ -348,16 +348,20 @@ export interface ReadoutInfo {
   age: number | null; birthday: string; birthdayNear: boolean;
 }
 
-/** The always-legible centre card naming the hovered/focused player. */
-export function renderReadout(info: ReadoutInfo | null): string {
-  if (!info) return `<div class="readout" aria-hidden="true"></div>`;
+/** The legible frosted card naming the hovered/pinned/focused player. The app renders one
+ *  instance with cls "ro-float": the chart's top-left corner card on desktop, the docked
+ *  strip above the chart on narrow viewports. Append "ro-idle" when it would only
+ *  duplicate the centre finalist pill (desktop blanks it then). */
+export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
+  const c = cls ? ` ${cls}` : "";
+  if (!info) return `<div class="readout${c}" aria-hidden="true"></div>`;
   const rank = info.ranking != null ? `#${info.ranking}` : "";
   const seed = info.seed != null ? `seed ${info.seed}` : "";
   const meta1 = [rank, seed].filter(Boolean).join(" · ");
   const time = info.sec > 0 ? `${formatDuration(info.sec)}${info.provisional ? " (live)" : ""} on court` : "";
   const meta2 = [info.roundLabel, time].filter(Boolean).join(" · ");
   return (
-    `<div class="readout filled${info.projected ? " projected" : ""}">` +
+    `<div class="readout filled${info.projected ? " projected" : ""}${c}">` +
     `<div class="ro-ctry">${flagImg(info.country, 11)} ${escapeHtml(info.country)}</div>` +
     `<div class="ro-name">${escapeHtml(info.name)}</div>` +
     (meta1 ? `<div class="ro-meta">${escapeHtml(meta1)}</div>` : "") +
@@ -368,6 +372,16 @@ export function renderReadout(info: ReadoutInfo | null): string {
     (meta2 ? `<div class="ro-meta">${escapeHtml(meta2)}</div>` : "") +
     `</div>`
   );
+}
+
+/** Minimal finalist identity (flag + surname) holding the chart centre on every viewport
+ *  — the constant anchor while the float readout names whoever is hovered/pinned (and the
+ *  champion's only name when the readout idles or shows someone else, so it stays in the
+ *  accessibility tree). Pointer-events pass through to the centre disc beneath. */
+export function renderCenterId(iso3: string, name: string, projected: boolean): string {
+  if (!name) return "";
+  return `<div class="center-id${projected ? " projected" : ""}">` +
+    `${flagImg(iso3, 12)}<span>${escapeHtml(name)}</span></div>`;
 }
 
 function insightScore(ins: MatchInsight): string {

@@ -58,9 +58,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .panel-fab, .lens-scrim, .sheet-bar { display: none; }
 
 .stage { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 10px 14px; }
-/* lens cards hug their content instead of stretching to the full stage height */
-.stage > .leaderboard, .stage > .panel { align-self: flex-start; max-height: 100%; }
-.sunburst { flex: 1; min-width: 0; }
+/* the side column stacks the lens panel and, when a match is selected, its insight card;
+   it hugs its content instead of stretching to the full stage height */
+.side { display: flex; flex-direction: column; gap: 12px; width: 280px; max-width: 38vw;
+  align-self: flex-start; max-height: 100%; min-height: 0; }
+.side > .leaderboard, .side > .panel { width: auto; max-width: none; min-height: 0; }
+.sunburst { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.chart { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
 /* touch-action: none — a finger dragged across the bracket explores it (pointermove
    readout/highlight) instead of grabbing the page; the shell never scrolls anyway */
 .sunburst svg { width: 100%; height: 100%; display: block; touch-action: none; }
@@ -150,8 +154,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 /* faded + dashed projections (extends existing .arc.projected opacity) */
 .arc.projected { stroke: var(--dim); stroke-width: .8px; stroke-dasharray: 3 2; }
 
-/* centre readout overlay — a legible frosted card so the (champion / hovered) name
-   never washes out against the arcs behind it, on phone and desktop alike */
+/* readout card — a legible frosted card naming the hovered/pinned player; on desktop it
+   waits at the chart's top-left corner (the finalist pill holds the centre), on phones it
+   docks as a strip above the chart (media block below) */
 .sunburst { position: relative; }
 /* hover-to-highlight a player's path: dim every other arc, light theirs (opacity contrast only —
    no accent stroke, so the highlight reads the same under every lens colouring) */
@@ -168,6 +173,31 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .readout .ro-meta { font-size: 11px; color: var(--dim); margin-top: 2px; line-height: 1.4; }
 .readout .ro-elo { font-size: 11px; color: var(--teal); margin-top: 2px; }
 .readout.projected .ro-name { font-style: italic; }
+
+/* finalist identity pill at the chart centre — a minimal flag + surname so the winner
+   reads at a glance without the full card; their details appear in the float readout on
+   hover like anyone else's. Taps/clicks pass through to the centre disc (it opens the final). */
+.center-id { display: inline-flex; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%); align-items: center; gap: 5px; padding: 3px 9px;
+  border-radius: 999px; border: 1px solid var(--line);
+  background: var(--panel);  /* opaque fallback for browsers without color-mix() */
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  font-size: 12px; font-weight: 700; pointer-events: none; }
+.center-id.projected span { font-style: italic; }
+
+/* the float card waits at the chart's top-left corner; idle (nothing hovered, pinned, or
+   focused) it would only duplicate the finalist pill, so it blanks out */
+.ro-float { top: 10px; left: 10px; transform: none; }
+.ro-float.ro-idle { visibility: hidden; }
+/* narrow windows: the corner would sit on the wheel itself, so the card docks as a strip
+   above the chart instead (visibility still blanks it idle — the box holds the row's
+   height so the chart never jumps; phones refine the strip further in the block below) */
+@media (max-width: 960px) {
+  .ro-float { position: static; order: -1; width: auto; min-height: 40px;
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
+    column-gap: 8px; row-gap: 0; margin: 0 0 4px; text-align: left; }
+}
 
 /* lens panels share the leaderboard column */
 .panel { width: 280px; max-width: 38vw; overflow-y: auto; }
@@ -240,19 +270,22 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .only-narrow { display: inline-flex; }    /* show the slam/lens dropdowns */
 
   .stage { flex-direction: column; }
+  /* the side column has no box of its own on phones — its children are fixed sheets/FAB */
+  .side { display: contents; }
   /* the readout docks as a strip above the chart (see .readout below); the svg flexes
      into whatever height remains — no vh floor, so the shell can never overflow */
   .sunburst { display: flex; flex-direction: column; min-height: 0; }
   .sunburst svg { flex: 1; min-height: 0; height: auto; }
 
-  /* centre readout → top info strip: a 158px card centred on a ~365px chart hides the
-     F/SF/QF/R16 rings outright, so on phones the card leaves the chart entirely */
-  .readout { position: static; order: -1; transform: none; width: auto; min-height: 40px;
-    display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
-    column-gap: 8px; row-gap: 0; text-align: left; margin: 0 0 4px; }
+  /* phone refinements to the strip the ≤960 block already lays out — a 158px card centred on
+     a ~365px chart would bury the F/SF/QF/R16 rings, so the readout leaves the wheel entirely;
+     here it only gets tighter padding/fonts for the small viewport */
   .readout.filled { padding: 6px 10px; }
   .readout .ro-ctry, .readout .ro-meta, .readout .ro-elo { margin-top: 0; font-size: 10.5px; }
   .readout .ro-name { font-size: 14px; margin-top: 0; }
+  /* …and the idle strip stays visible (it names the finalist as before); desktop blanks the
+     idle card because it would only echo the centre pill, but the phone strip IS that readout */
+  .readout.ro-idle { visibility: visible; }
 
   /* the legend caption shares the bottom row with the fixed FAB pill — reserve the FAB's
      width and compact the ramp/caption so the longest label still fits on one line */
@@ -270,7 +303,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .lens-scrim.open { display: block; position: fixed; inset: 0; z-index: 38; background: rgba(4, 8, 12, .55); }
   /* every lens panel (leaderboard/seed/country) is a bottom drawer — but NOT the match sheet,
      which has its own fixed positioning + higher z-band below. */
-  .stage > .leaderboard, .stage > .panel:not(.match-insight) {
+  .side > .leaderboard, .side > .panel:not(.match-insight) {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
     width: auto; max-width: none; max-height: 40dvh; align-self: auto;
     overflow-y: auto; overscroll-behavior: contain;
@@ -278,8 +311,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
     padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
     box-shadow: 0 -12px 40px rgba(0, 0, 0, .5);
     transform: translateY(100%); transition: transform .22s ease-out, max-height .22s ease-out; }
-  .stage > .leaderboard.open, .stage > .panel:not(.match-insight).open { transform: translateY(0); }
-  .stage > .leaderboard.expanded, .stage > .panel:not(.match-insight).expanded { max-height: 78dvh; }
+  .side > .leaderboard.open, .side > .panel:not(.match-insight).open { transform: translateY(0); }
+  .side > .leaderboard.expanded, .side > .panel:not(.match-insight).expanded { max-height: 78dvh; }
 
   /* bottom-sheet chrome: grip pill toggles peek/expanded, ✕ closes */
   .sheet-bar { display: flex; align-items: center; }

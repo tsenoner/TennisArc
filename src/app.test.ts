@@ -153,13 +153,16 @@ describe("tap-to-pin vs match sheet on arcs", () => {
     expect(root.querySelector(".match-insight")).not.toBeNull();
   });
 
-  it("desktop: a click with no preceding touch opens the match sheet immediately", async () => {
+  it("desktop: a click with no preceding touch pins the player AND opens the match sheet", async () => {
     const root = await mountApp();
     const arc = pickArc(root);
 
     click(arc);
-    expect(root.querySelector(".match-insight")).not.toBeNull();
-    expect(pinnedRows(root).length).toBe(0);
+    expect(root.querySelector(".match-insight")).not.toBeNull();   // the click opens the match sheet
+    const lit = litArcs(root).length;
+    expect(lit).toBeGreaterThan(0);                                // the player's path is lit
+    root.dispatchEvent(new Event("pointerleave"));                 // a mere hover-preview would clear here…
+    expect(litArcs(root).length).toBe(lit);                        // …but a pin keeps it lit → the click stuck
   });
 });
 
@@ -237,5 +240,76 @@ describe("createApp lifecycle", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     // a disposed app's window-keydown handler must not fire — the pin stays lit
     expect(litArcs(root).length).toBeGreaterThan(0);
+  });
+});
+
+describe("finalist pill + corner readout", () => {
+  it("keeps naming the finalist in the centre while another player is pinned", async () => {
+    const root = await mountApp();
+    const champ = root.querySelector<HTMLElement>('path.arc[data-id="r"]')!.dataset.occupant!;
+    const arc = [...root.querySelectorAll<HTMLElement>("path.arc[data-occupant]")]
+      .find((a) => a.dataset.occupant && a.dataset.occupant !== champ)!;
+    touch(arc); click(arc); // phone flow: first tap pins
+    const pill = root.querySelector(".center-id")!;
+    const strip = root.querySelector(".readout.ro-float .ro-name")!;
+    expect(pill.textContent).not.toBe("");                  // finalist still named at the centre
+    expect(strip.textContent).not.toBe("");                 // readout names the pinned player
+    expect(pill.textContent).not.toBe(strip.textContent);   // …and they are different players
+  });
+
+  it("idles the float card until a hover resolves someone other than the finalist", async () => {
+    const root = await mountApp();
+    expect(root.querySelector(".ro-float.ro-idle")).not.toBeNull(); // idle at mount
+    const champ = root.querySelector<HTMLElement>('path.arc[data-id="r"]')!.dataset.occupant!;
+    const arc = [...root.querySelectorAll<HTMLElement>("path.arc[data-occupant]")]
+      .find((a) => a.dataset.occupant && a.dataset.occupant !== champ)!;
+    arc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(root.querySelector(".ro-float.ro-idle")).toBeNull();     // hover wakes it
+    root.dispatchEvent(new Event("pointerleave"));
+    expect(root.querySelector(".ro-float.ro-idle")).not.toBeNull(); // leave restores idle
+  });
+
+  it("hovering an arc lights that player's path", async () => {
+    const root = await mountApp();
+    const arc = pickArc(root);
+    arc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(litArcs(root).length).toBeGreaterThan(0);
+  });
+
+  it("keeps the lens panel when a match opens (insight stacks below it)", async () => {
+    const root = await mountApp();
+    click(pickArc(root));
+    expect(root.querySelector(".side .match-insight")).not.toBeNull();
+    expect(root.querySelector(".side .leaderboard")).not.toBeNull();
+  });
+});
+
+describe("float card never hides what the user is pointing at (idle = input state)", () => {
+  it("shows the finalist's card when their own arc is hovered", async () => {
+    const root = await mountApp();
+    const disc = root.querySelector<HTMLElement>('path.arc[data-id="r"]')!;
+    disc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(root.querySelector(".ro-float.ro-idle")).toBeNull();
+    expect(root.querySelector(".ro-float .ro-name")).not.toBeNull();
+  });
+
+  it("previews the finalist over a pinned card instead of blanking it", async () => {
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!); // pin someone
+    const disc = root.querySelector<HTMLElement>('path.arc[data-id="r"]')!;
+    disc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(root.querySelector(".ro-float.ro-idle")).toBeNull(); // champion preview, not a blank
+    root.dispatchEvent(new Event("pointerleave"));
+    expect(root.querySelector(".ro-float.ro-idle")).toBeNull(); // pinned card returns
+  });
+
+  it("keeps the focused section's occupant named (the pill is dropped while zoomed)", async () => {
+    const root = await mountApp();
+    click(pickArc(root));                                              // pin + open insight
+    click(root.querySelector<HTMLElement>('[data-action="focus"]')!);  // zoom to that section
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // close insight
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // unpin
+    expect(root.querySelector(".center-id")).toBeNull();        // pill dropped while zoomed
+    expect(root.querySelector(".ro-float.ro-idle")).toBeNull(); // card stays, naming the occupant
   });
 });

@@ -183,3 +183,16 @@ describe("renderCountryPanel", () => {
     expect(html).toContain('data-hl-path data-occupant="x"'); // expanded player hover-highlights their path
   });
 });
+
+import { renderCenterId } from "./render";
+
+describe("renderCenterId", () => {
+  it("carries the flag + name; projection italicizes; empty name renders nothing", () => {
+    const html = renderCenterId("SRB", "Djokovic", false);
+    expect(html).toContain("Djokovic");
+    expect(html).toContain("center-id");
+    expect(html).not.toContain("projected");
+    expect(renderCenterId("SRB", "Djokovic", true)).toContain("projected");
+    expect(renderCenterId("SRB", "", false)).toBe("");
+  });
+});
