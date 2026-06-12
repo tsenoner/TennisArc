@@ -27,4 +27,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # publish-data.sh force-pushes the data branch to the hardcoded github.com remote; the push
+      # authenticates via actions/checkout's persist-credentials extraheader (URL-scoped, so it is
+      # inherited by the git worktree the script publishes from). This is owner-repo only — a fork's
+      # GITHUB_TOKEN can't push to tsenoner/TennisArc, so the scheduled job there would 403.
       - run: SKIP_INGEST=1 scripts/publish-data.sh

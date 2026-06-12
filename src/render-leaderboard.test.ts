@@ -9,9 +9,15 @@ const rows: LeaderRow[] = [
 ];
 
 describe("renderLeaderboard", () => {
-  it("renders nothing when fewer than 3 players qualify (too sparse to rank honestly)", () => {
-    expect(renderLeaderboard(rows.slice(0, 2))).toBe("");
-    expect(renderLeaderboard([])).toBe("");
+  it("shows an empty state (no rows) when fewer than 3 players qualify (too sparse to rank honestly)", () => {
+    for (const sparse of [rows.slice(0, 2), []]) {
+      const html = renderLeaderboard(sparse);
+      expect(html).not.toContain("lb-row"); // no ranking rendered
+      expect(html).toContain("panel-empty"); // explains the absence instead of a 1-2 row "leaderboard"
+      // the bottom-sheet chrome must survive so the mobile drawer stays touch-controllable
+      expect(html).toContain("sheet-bar");
+      expect(html).toContain('data-action="panel"'); // the ✕ close button
+    }
   });
 
   it("renders one row per leader with rank, escaped name, bar and formatted time", () => {

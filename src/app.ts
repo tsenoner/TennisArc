@@ -219,7 +219,7 @@ export function createApp(root: HTMLElement): () => void {
       renderLegend(state.colorDim, state.seedSort) +
       `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}` +
         // CC BY-NC-SA: historical durations + ELO + birthdates come from Jeff Sackmann's data
-        ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener">Tennis Abstract</a></span></div>`;
+        ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener noreferrer">Tennis Abstract</a></span></div>`;
 
     // re-light the pinned path on the freshly-rendered arcs (innerHTML swap dropped the classes)
     if (pinned) {

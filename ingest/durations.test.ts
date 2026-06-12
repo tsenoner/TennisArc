@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseMatchesCsv, applyDurations } from "./durations";
+import { parseMatchesCsv, applyDurations, type SlamDurationRow } from "./durations";
 import type { Match, Player } from "../src/model";
 
 const csv = readFileSync(resolve(__dirname, "fixtures/matches-sample.csv"), "utf8");
@@ -83,6 +83,29 @@ describe("applyDurations", () => {
     const res = applyDurations(matches, players, aoRows);
     expect(matches.m.durationSec).toBeNull();
     expect(res.dropped).toBe(1);
+  });
+
+  it("rejects an implausibly large CSV duration (poisoned upstream minutes) and keeps the sane local value", () => {
+    const players = { a: player("a", "Real Player"), b: player("b", "Other Player") };
+    const matches = { m: match(0, "a", "b", 5400) }; // a plausible local value is present
+    const rows: SlamDurationRow[] = [
+      { roundIndex: 0, winnerName: "Real Player", loserName: "Other Player", durationSec: 60_000_000 },
+    ];
+    const res = applyDurations(matches, players, rows);
+    expect(matches.m.durationSec).toBe(5400); // CSV ceiling rejected the poison; local kept
+    expect(res.fromCsv).toBe(0);
+    expect(res.keptLocal).toBe(1);
+  });
+
+  it("keeps a genuine >6h match from the CSV (Isner–Mahut 39 900s is under the 12h ceiling)", () => {
+    const players = { a: player("a", "John Isner"), b: player("b", "Nicolas Mahut") };
+    const matches = { m: match(0, "a", "b", null) };
+    const rows: SlamDurationRow[] = [
+      { roundIndex: 0, winnerName: "John Isner", loserName: "Nicolas Mahut", durationSec: 39_900 },
+    ];
+    const res = applyDurations(matches, players, rows);
+    expect(matches.m.durationSec).toBe(39_900);
+    expect(res.fromCsv).toBe(1);
   });
 
   it("refuses ambiguous fallback joins (two CSV rows sharing surname+initial keys)", () => {

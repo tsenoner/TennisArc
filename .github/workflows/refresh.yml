@@ -9,9 +9,16 @@ permissions:
   contents: write
 concurrency:
   group: refresh-data
-  cancel-in-progress: true
+  # Share the daily durations.yml group so the two never publish at once, and queue rather than
+  # preempt: cancel-in-progress: false means a manual dispatch waits for an in-progress daily run
+  # to finish instead of killing it mid force-push.
+  cancel-in-progress: false
 jobs:
   ingest:
+    # ubuntu-latest only succeeds BETWEEN slams (ingest is a no-op then); DURING a slam SofaScore
+    # 403s a datacenter IP and publish-data.sh aborts under `set -e` before publishing. For live
+    # ingestion run this on a self-hosted residential runner (see the NOTE above); the daily
+    # durations.yml job covers duration healing on hosted runners with SKIP_INGEST=1.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

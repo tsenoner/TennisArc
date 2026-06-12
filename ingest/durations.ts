@@ -8,10 +8,19 @@ const MATCHES_URL = (tour: Tour, year: number): string => {
   return `https://raw.githubusercontent.com/JeffSackmann/tennis_${t}/master/${t}_matches_${year}.csv`;
 };
 
-// Longest genuine slam match in the covered era is well under 6h; SofaScore's suspension
-// wall-clock values start just above it (observed floor 21675s). Local values past the bound
-// are garbage, not marathons.
-const MAX_SANE_SEC = 21_600;
+// Plausibility ceiling for trustworthy on-court time (Jeff Sackmann's `minutes`). The longest match in
+// tennis history is Isner–Mahut 2010 (665 min ≈ 11h05), so nothing genuine exceeds 12h; this caps the
+// CSV merge so a poisoned upstream `minutes` can't ship an absurd duration. Isner–Mahut's 39 900s and
+// Anderson–Isner's 23 760s stay.
+export const MAX_SANE_SEC = 43_200;
+
+// Tighter bound for SofaScore-derived values (live periodN + carried-forward local values). periodN
+// counts rain/curfew suspensions as play time, and a suspended match's wall-clock starts just above 6h
+// (observed floor ~21675s), overlapping genuine epics — so the two can't be told apart by magnitude.
+// Cap at 6h: conservative against suspension garbage, at the cost of clipping the rare genuine >6h match
+// live; Sackmann's official `minutes` backfills that within a day (see applyDurations). The sources
+// differ in trust, so they get different ceilings — never widen this one to MAX_SANE_SEC.
+export const MAX_LOCAL_SEC = 21_600;
 
 // Sackmann tourney_name variants per slam key (compared lowercased; 2024 files say "Us Open").
 const TOURNEY: Record<string, string[]> = {
@@ -50,7 +59,9 @@ const sigKey = (name: string): string => {
 };
 const pairKey = (roundIndex: number, a: string, b: string): string => `${roundIndex}|${[a, b].sort().join("~")}`;
 
-/** Parse a Sackmann yearly matches CSV down to one slam's main-draw duration rows. */
+/** Parse a Sackmann yearly matches CSV down to one slam's main-draw duration rows. The bare-`,`
+ *  split is safe for Sackmann's quote-free schema (none of the columns used carry a comma); it
+ *  would need a real CSV parser only if that upstream format ever changes. */
 export function parseMatchesCsv(csv: string, slam: string): SlamDurationRow[] {
   const names = new Set(TOURNEY[slam] ?? []);
   const lines = csv.split(/\r?\n/);
@@ -80,9 +91,10 @@ export function parseMatchesCsv(csv: string, slam: string): SlamDurationRow[] {
 export interface DurationStats { fromCsv: number; keptLocal: number; dropped: number; unmatched: number }
 
 /**
- * Mutate matches: per finished/retired match, prefer the Sackmann duration (exact name join,
- * then surname+initial fallback); else keep a plausible local value; else null. Ambiguous
- * fallback keys (two CSV rows sharing one signature) join nothing rather than risk a wrong row.
+ * Mutate matches: per finished/retired match, prefer the Sackmann duration (exact name join, then
+ * surname+initial fallback, capped at MAX_SANE_SEC); else keep a local value within the tighter
+ * MAX_LOCAL_SEC SofaScore bound; else null. Ambiguous fallback keys (two CSV rows sharing one
+ * signature) join nothing rather than risk a wrong row.
  */
 export function applyDurations(
   matches: Record<string, Match>, players: Record<string, Player>, rows: SlamDurationRow[],
@@ -90,6 +102,8 @@ export function applyDurations(
   const exact = new Map<string, SlamDurationRow>();
   const fuzzy = new Map<string, SlamDurationRow | null>(); // null = ambiguous
   for (const r of rows) {
+    // exact keys are (round, sorted full-name pair): a single-elimination draw can't stage the same
+    // pair twice in one round, so an unguarded set can't mis-join (unlike the fuzzy signature below).
     exact.set(pairKey(r.roundIndex, fullKey(r.winnerName), fullKey(r.loserName)), r);
     const k = pairKey(r.roundIndex, sigKey(r.winnerName), sigKey(r.loserName));
     fuzzy.set(k, fuzzy.has(k) ? null : r);
@@ -103,14 +117,15 @@ export function applyDurations(
     const row =
       exact.get(pairKey(m.roundIndex, fullKey(n1), fullKey(n2))) ??
       fuzzy.get(pairKey(m.roundIndex, sigKey(n1), sigKey(n2)));
-    if (row?.durationSec != null) {
+    if (row?.durationSec != null && row.durationSec <= MAX_SANE_SEC) {
       m.durationSec = row.durationSec;
       m.durationProvisional = false;
       stats.fromCsv++;
-    } else if (m.durationSec != null && m.durationSec <= MAX_SANE_SEC) {
+    } else if (m.durationSec != null && m.durationSec <= MAX_LOCAL_SEC) {
       stats.keptLocal++;
     } else if (m.durationSec != null) {
       m.durationSec = null;
+      m.durationProvisional = false; // a dropped (unknown) duration is no longer "provisional"
       stats.dropped++;
     } else {
       stats.unmatched++;
