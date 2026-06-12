@@ -580,6 +580,120 @@ describe("quarter-owner corner labels", () => {
   });
 });
 
+// ---- two-finger pinch/pan magnifier helpers ----
+// jsdom has no getScreenCTM, so the app's svgPt falls back to raw clientX/Y — the
+// coordinates below ARE viewBox units. Up/cancel land on window, like real releases.
+function pointer(el: EventTarget, type: string, id: number, x: number, y: number): void {
+  el.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: id, clientX: x, clientY: y }));
+}
+/** A horizontal two-finger spread on the chart: exact ×2 about the midpoint (350,350) →
+ *  view {k:2, x:−300, y:−350}, then both fingers released. */
+function pinchSpread(root: HTMLElement): void {
+  const svg = root.querySelector(".sunburst svg")!;
+  pointer(svg, "pointerdown", 1, 300, 350);
+  pointer(svg, "pointerdown", 2, 400, 350);
+  pointer(svg, "pointermove", 2, 500, 350);
+  pointer(window, "pointerup", 2, 500, 350);
+  pointer(window, "pointerup", 1, 300, 350);
+}
+/** A realistic tap: pointerdown precedes click (as on-device), so a previous pinch's
+ *  sticky click-suppression flag is disarmed exactly as it would be in a browser. */
+function tap(el: Element): void {
+  pointer(el, "pointerdown", 9, 10, 10);
+  pointer(window, "pointerup", 9, 10, 10);
+  click(el);
+}
+const zoomLayer = (root: HTMLElement) => root.querySelector(".zoom-layer")!;
+const isZoomed = (root: HTMLElement) => root.querySelector(".sunburst")!.classList.contains("zoomed");
+
+describe("two-finger pinch/pan magnifier", () => {
+  it("a two-pointer spread writes an SVG attribute transform on .zoom-layer and flags .sunburst.zoomed", async () => {
+    const root = await mountApp();
+    expect(zoomLayer(root).getAttribute("transform")).toBe("translate(0,0) scale(1)"); // identity baseline
+    const svg = root.querySelector(".sunburst svg")!;
+    pointer(svg, "pointerdown", 1, 300, 350);
+    pointer(svg, "pointerdown", 2, 400, 350);
+    pointer(svg, "pointermove", 2, 500, 350);          // spread ×2 about (350,350)…
+    expect(zoomLayer(root).getAttribute("transform")).toBe("translate(-300,-350) scale(2)");
+    expect(isZoomed(root)).toBe(true);                 // …which shows the phone reset chip
+    pointer(window, "pointerup", 2, 500, 350);
+    pointer(window, "pointerup", 1, 300, 350);
+    expect(zoomLayer(root).getAttribute("transform")).toBe("translate(-300,-350) scale(2)"); // sticky after release
+  });
+
+  it("suppresses the gesture's synthetic click — even a sub-threshold pinch never pins/inspects", async () => {
+    const root = await mountApp();
+    const arc = pickArc(root);
+    // two fingers down and straight up (no travel): the browser still synthesizes a click
+    // on the first finger's arc — the SECOND pointerdown alone must arm the suppression
+    pointer(arc, "pointerdown", 1, 300, 350);
+    pointer(arc, "pointerdown", 2, 400, 350);
+    pointer(window, "pointerup", 2, 400, 350);
+    pointer(window, "pointerup", 1, 300, 350);
+    click(arc);
+    expect(root.querySelector(".match-strip")).toBeNull();        // not inspected
+    expect(litArcs(root).length).toBe(0);                         // not pinned
+    tap(arc);                                                     // the NEXT real tap disarms + lands
+    expect(root.querySelector(".match-strip")).not.toBeNull();
+  });
+
+  it("a geometry change (focus) resets the view; selection redraws (pin) re-apply it instead", async () => {
+    const root = await mountApp();
+    pinchSpread(root);
+    expect(zoomLayer(root).getAttribute("transform")).toBe("translate(-300,-350) scale(2)");
+    // pinning is selection, not geometry: the redraw keeps the magnifier on the fresh layer
+    tap(root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!);
+    expect(litArcs(root).length).toBeGreaterThan(0);
+    expect(zoomLayer(root).getAttribute("transform")).toBe("translate(-300,-350) scale(2)");
+    expect(isZoomed(root)).toBe(true);
+    // focusing a quarter IS a geometry change — the view snaps back to identity
+    tap(root.querySelector<HTMLElement>(".q-owner")!);
+    expect(root.querySelector(".crumbs")).not.toBeNull();
+    expect(zoomLayer(root).getAttribute("transform")).toBe("translate(0,0) scale(1)");
+    expect(isZoomed(root)).toBe(false);
+  });
+
+  it("the hub nuclear reset drops the magnifier even when focus was already clear", async () => {
+    const root = await mountApp();
+    pinchSpread(root);
+    expect(isZoomed(root)).toBe(true);
+    tap(root.querySelector('.sunburst g[data-action="reset"]')!); // hub/gap tap: reset everything
+    expect(zoomLayer(root).getAttribute("transform")).toBe("translate(0,0) scale(1)");
+    expect(isZoomed(root)).toBe(false);
+  });
+
+  it("ESC clears the pinch zoom one rung above focus: strip → pin → zoom → focus", async () => {
+    const root = await mountApp();
+    mockBack();
+    click(qArc(root)); click(qArc(root));         // select then focus (pin + strip + crumbs)
+    pinchSpread(root);                            // magnify AFTER focusing (focus would reset it)
+    expect(isZoomed(root)).toBe(true);
+
+    esc(); expect(root.querySelector(".match-strip")).toBeNull(); // 1: strip
+    expect(isZoomed(root)).toBe(true);                            // (redraw re-applied the view)
+    esc(); expect(litArcs(root).length).toBe(0);                  // 2: pin
+    expect(isZoomed(root)).toBe(true);
+    esc(); expect(isZoomed(root)).toBe(false);                    // 3: pinch zoom
+    expect(root.querySelector(".crumbs")).not.toBeNull();         //    focus survives that rung
+    esc(); expect(root.querySelector(".crumbs")).toBeNull();      // 4: focus — still last
+  });
+
+  it("defers a mid-gesture draw and flushes it when the gesture ends", async () => {
+    const root = await mountApp();
+    tap(root.querySelector<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")!); // pin someone
+    expect(litArcs(root).length).toBeGreaterThan(0);
+    const svg = root.querySelector(".sunburst svg")!;
+    pointer(svg, "pointerdown", 1, 300, 350);
+    pointer(svg, "pointerdown", 2, 400, 350);     // gesture in progress
+    esc();                                        // clears the pin → draw() — which must WAIT
+    expect(litArcs(root).length).toBeGreaterThan(0); // DOM untouched mid-gesture (no innerHTML swap)
+    pointer(window, "pointerup", 2, 400, 350);    // gesture ends → the deferred draw flushes
+    expect(litArcs(root).length).toBe(0);
+    expect(pinnedRows(root).length).toBe(0);
+    pointer(window, "pointerup", 1, 300, 350);
+  });
+});
+
 describe("centre pill while focused", () => {
   it("restores the pill naming the focused occupant (their on-arc hub label is dropped) and idles the card", async () => {
     const root = await mountApp();

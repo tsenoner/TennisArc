@@ -142,6 +142,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    pointer-events: none — but the owner verifies by screenshot) */
 .sunburst:has(.crumbs) .ro-float { top: 44px; }
 
+/* pinch-magnifier exit chip — phone-only chrome: the ≤720px block shows it while the
+   gesture's .zoomed class (view k > 1, toggled in applyView) sits on .sunburst */
+.zoom-reset { display: none; }
+
 /* match detail tier — on demand behind the strip's "Details ▾": in-flow under the strip on
    desktop, a fixed bottom sheet with the standard grip/✕ chrome on phones (media block below) */
 .mi-detail { display: flex; flex-direction: column; gap: 10px; max-width: 520px;
@@ -402,6 +406,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 
   /* crumb chips keep their slim look but gain a comfortable phone tap height */
   .crumb { padding: 9px 12px; }
+
+  /* pinch exit — visible only while the magnifier is engaged (.zoomed = k > 1). Fixed
+     bottom-LEFT at 52px so it clears the in-flow legend/status rows (the FAB's 14px line
+     would sit on them — the legend only reserves right-side padding); z 36 keeps it under
+     the whole sheet ladder (FAB 37 < lens scrim 38 < drawer 39 < mi-scrim 40 < detail 41) */
+  .sunburst.zoomed .zoom-reset { display: inline-flex; align-items: center; position: fixed;
+    left: 14px; bottom: calc(52px + env(safe-area-inset-bottom)); z-index: 36;
+    padding: 9px 14px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--panel); color: var(--text); font: inherit; font-size: 13px;
+    font-weight: 600; cursor: pointer; box-shadow: 0 6px 22px rgba(0, 0, 0, .38); }
 
   /* corner labels go name-only on phones: at the ~0.52 SVG scale the caption and flag
      would paint under 6px (illegible smudges); the name bumps to 17 SVG units (~9px
