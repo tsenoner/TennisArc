@@ -317,22 +317,35 @@ export function sheetBar(): string {
 }
 
 export function renderLeaderboard(rows: LeaderRow[]): string {
+  // Fewer than 3 fully-covered players means the source has no real duration data for this event —
+  // a 1-2 row "leaderboard" misleads more than it informs, so show an empty state instead of a
+  // ranking. Keep the <aside> + sheet-bar (as renderSeedPanel/renderCountryPanel do): returning ""
+  // would strand an opened mobile drawer with no on-screen close once the FAB hides itself.
+  const sparse = rows.length < 3;
   const max = Math.max(1, ...rows.map((r) => r.sec));
-  const items = rows
-    .map((r, i) => {
-      const w = Math.round((r.sec / max) * 100);
-      return (
-        `<li class="lb-row" data-hl-path data-occupant="${escapeHtml(r.playerId)}">` +
-        `<span class="lb-rank">${i + 1}</span>` +
-        `<span class="lb-name"><span class="lb-who">${escapeHtml(r.name)}</span>` +
-        `<span class="lb-ctry">${flagImg(r.country, 10)} ${escapeHtml(r.country)}</span></span>` +
-        `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%"></span></span>` +
-        `<span class="lb-time">${formatDuration(r.sec)}${r.provisional ? "*" : ""}</span>` +
-        `</li>`
-      );
-    })
-    .join("");
-  return `<aside class="leaderboard">${sheetBar()}<h2>Most time on court</h2><ol class="lb-list">${items}</ol></aside>`;
+  const items = sparse
+    ? ""
+    : rows
+        .map((r, i) => {
+          const w = Math.round((r.sec / max) * 100);
+          return (
+            `<li class="lb-row" data-hl-path data-occupant="${escapeHtml(r.playerId)}">` +
+            `<span class="lb-rank">${i + 1}</span>` +
+            `<span class="lb-name"><span class="lb-who">${escapeHtml(r.name)}</span>` +
+            `<span class="lb-ctry">${flagImg(r.country, 10)} ${escapeHtml(r.country)}</span></span>` +
+            `<span class="lb-bar"><span aria-hidden="true" style="width:${w}%"></span></span>` +
+            `<span class="lb-time">${formatDuration(r.sec)}${r.provisional ? "*" : ""}</span>` +
+            `</li>`
+          );
+        })
+        .join("");
+  return (
+    `<aside class="leaderboard">${sheetBar()}<h2>Most time on court</h2>` +
+    (sparse
+      ? `<div class="panel-empty">No duration data for this event yet</div>`
+      : `<ol class="lb-list">${items}</ol>`) +
+    `</aside>`
+  );
 }
 
 export interface ReadoutInfo {

@@ -93,7 +93,8 @@ describe("sheetBar", () => {
   it("gives every lens panel the mobile sheet chrome (grip + close)", () => {
     expect(sheetBar()).toContain('data-action="panel-expand"');
     expect(sheetBar()).toContain('data-action="panel"');
-    // all three lens panels carry it so the bottom drawer is always controllable by touch
+    // all three lens panels carry it so the bottom drawer is always controllable by touch — even
+    // an empty leaderboard must keep the sheet-bar (otherwise the opened mobile drawer is a dead end)
     expect(renderLeaderboard([])).toContain("sheet-bar");
     expect(renderSeedPanel({ total: 0, remaining: 0, mode: "seed", rows: [] }, [])).toContain("sheet-bar");
     expect(renderCountryPanel([], undefined, [])).toContain("sheet-bar");

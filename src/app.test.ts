@@ -100,6 +100,13 @@ async function mountApp(): Promise<HTMLElement> {
 }
 
 describe("click handler — pin vs nested action precedence", () => {
+  it("credits the duration source in the status line (CC BY-NC-SA attribution)", async () => {
+    const root = await mountApp();
+    const status = root.querySelector(".status")!;
+    expect(status.innerHTML).toContain("tennisabstract.com");
+    expect(status.textContent).toContain("Tennis Abstract");
+  });
+
   it("lets a [data-action] nested inside a pin row win over pinning", async () => {
     const root = await mountApp();
     expect(document.documentElement.dataset.theme).toBe("dark");

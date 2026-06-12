@@ -1,4 +1,5 @@
 import type { Match, MatchStats, MatchStatus, Player, SetScore } from "../src/model";
+import { MAX_LOCAL_SEC } from "./durations";
 
 interface SofaScoreSide { [k: string]: number | undefined }
 interface SofaEvent {
@@ -78,7 +79,11 @@ export function enrichMatch(
     const periods = Object.entries(ev.time ?? {})
       .filter(([k]) => /^period\d+$/.test(k))
       .reduce((sum, [, v]) => sum + (v ?? 0), 0);
-    durationSec = periods > 0 ? periods : null;
+    // SofaScore periodN counts rain/curfew suspensions as play time — a suspended match "lasts" 6h+
+    // of wall-clock (observed floor ~21675s; one corrupt event reported 94.8h), indistinguishable by
+    // magnitude from a genuine epic. Cap live scrapes at MAX_LOCAL_SEC (6h): conservative against
+    // suspension garbage; a genuine >6h match is backfilled from Sackmann's minutes (see durations.ts).
+    durationSec = periods > 0 && periods <= MAX_LOCAL_SEC ? periods : null;
   }
 
   if (m.p1 && players[m.p1] && ev.homeTeam?.country?.alpha3) players[m.p1].country = ev.homeTeam.country.alpha3;

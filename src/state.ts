@@ -148,6 +148,7 @@ export interface PlayerTime {
   provisional: boolean;
   matches: number;            // matches with a recorded duration that contributed time
   roundReached: number;       // deepest roundIndex reached (winner → roundIndex+1)
+  complete: boolean;          // every counted match had a duration — totals are comparable
 }
 
 /** Whether a match's on-court time should be counted, and whether it's provisional. */
@@ -162,7 +163,7 @@ export function timeOnCourt(s: Snapshot): Map<string, PlayerTime> {
   const out = new Map<string, PlayerTime>();
   const ensure = (id: string): PlayerTime => {
     let v = out.get(id);
-    if (!v) { v = { sec: 0, provisional: false, matches: 0, roundReached: 0 }; out.set(id, v); }
+    if (!v) { v = { sec: 0, provisional: false, matches: 0, roundReached: 0, complete: true }; out.set(id, v); }
     return v;
   };
   for (const m of Object.values(s.matches)) {
@@ -177,6 +178,8 @@ export function timeOnCourt(s: Snapshot): Map<string, PlayerTime> {
         v.sec += m.durationSec;
         v.matches += 1;
         if (provisional) v.provisional = true;
+      } else if (count) {
+        v.complete = false; // counted match with unknown duration — total undercounts
       }
     }
   }
@@ -349,10 +352,11 @@ export function countryBreakdown(s: Snapshot): NationRow[] {
   );
 }
 
-/** Players ranked by cumulative time on court (descending), zero-time excluded. */
+/** Players ranked by cumulative time on court (descending); zero-time and partially-covered
+ *  players excluded — an undercounted total ranked among complete ones is a lie, not a stat. */
 export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limit = 10): LeaderRow[] {
   return [...time.entries()]
-    .filter(([, v]) => v.sec > 0)
+    .filter(([, v]) => v.sec > 0 && v.complete)
     .map(([id, v]) => {
       const p = s.players[id];
       return {

@@ -1,6 +1,29 @@
 # TODO
 
-## Data refresh → move off the Mac to an always-on residential runner
+## [BACKGROUND IDEA] Data refresh → move off the Mac to an always-on residential runner
+
+> **Status 2026-06-12: backgrounded, not planned.** Historical slams (2009–2026) are now
+> pre-fetched and static, so the runner only matters for live freshness during the ~8 slam
+> weeks/year while the Mac is closed. Mitigation instead of new hardware: a daily GitHub
+> Action backfilling results/durations from Jeff Sackmann's CSVs (datacenter-friendly).
+> Revisit the Pi only if slam-week staleness actually hurts in practice.
+>
+> **On-the-fly fetching from Vercel was probed and is non-viable (2026-06-12):** a deployed
+> probe function got HTTP 403 (server: Varnish, no cf-ray) from SofaScore on the API hosts
+> AND the plain homepage. The same plain `fetch` also 403s from a residential IP — the edge
+> fingerprints the client, so only a real browser session passes, and a real headless browser
+> from datacenter IPs is also blocked (GitHub Actions / CF Workers, tested earlier). Client-side
+> fetching from visitors' browsers fails on CORS + the x-requested-with token gate. Don't retest.
+>
+> **ESPN's unofficial API IS datacenter-accessible (probed from a Vercel function 2026-06-12:
+> HTTP 200, full payload).** `site.api.espn.com/apis/site/v2/sports/tennis/{atp,wta}/scoreboard`
+> exposes per-tournament groupings with every match (round, status, competitors, winner,
+> linescores, wasSuspended) — enough to build live slam draws from a cloud cron, killing the
+> residential-IP requirement entirely. Caveats: unofficial/undocumented (could change without
+> notice), date-keyed (assemble the draw by iterating ?dates=YYYYMMDD over the fortnight), and
+> NO per-match duration field — durations would stay SofaScore-live (Mac, opportunistic) and/or
+> Sackmann (days later). Next natural test window: Wimbledon (starts ~2026-06-29) — verify the
+> slam appears with full 128-draw groupings before building an ingest path on it.
 
 The SofaScore ingest must run from a **residential IP** — datacenter IPs (GitHub Actions, Cloudflare Workers/Pages) get a Cloudflare `403`, even with a real headless browser. For now it runs on the Mac via a `launchd` agent (`~/Library/LaunchAgents/com.tennisarc.refresh.plist`, every 1800s), which only refreshes while the Mac is awake and logged in.
 

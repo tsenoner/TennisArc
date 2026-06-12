@@ -37,7 +37,9 @@ cleanup() {
 trap cleanup EXIT
 
 # 1. Refresh the active slam (a fast no-op between tournaments — no browser launched).
-pnpm ingest
+#    SKIP_INGEST=1 runs the rest of the pipeline without touching SofaScore — for datacenter
+#    runners (CI), where SofaScore 403s but the Sackmann duration pass (step 2.5) still works.
+[ -n "${SKIP_INGEST:-}" ] || pnpm ingest
 
 # 2. Carry forward previously-published slams so completed majors persist with no manual freeze.
 #    FIRST learn whether a published `data` branch exists, independently of the fetch: this is the
@@ -91,6 +93,12 @@ if [ "$REMOTE_HAS_DATA" = 1 ] && [ "$HAVE_PUBLISHED" = 0 ]; then
   echo "data branch exists but could not be fetched — refusing to publish (would risk data loss)" >&2
   exit 1
 fi
+
+# 2.5 Duration pass for the current year: prefer Jeff Sackmann's official on-court minutes over
+#     SofaScore's periodN (which counts rain/curfew suspensions as play time) once his CSVs catch
+#     up, days after a slam. Historical years are already corrected in the seed. Non-fatal: if
+#     GitHub raw is unreachable, publish fresh scores anyway — durations self-heal next cycle.
+pnpm backfill-durations "$(date -u +%Y)" || echo "duration pass failed; publishing without it" >&2
 
 # 3. Rebuild the manifest from every per-slam snapshot now on disk (seed + active + carried).
 pnpm reindex

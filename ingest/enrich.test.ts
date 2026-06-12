@@ -26,6 +26,19 @@ describe("enrichMatch", () => {
     expect(pl["101"].country).toBe("FRA");
   });
 
+  it("nulls a finished duration past the 6h SofaScore bound (suspension wall-clock garbage)", () => {
+    const ev = { ...eventSample, time: { period1: 1822, period2: 341176 } }; // rain-suspended set
+    const m = enrichMatch(baseMatch(), ev, null, players(), 0);
+    expect(m.durationSec).toBeNull();
+    expect(m.durationProvisional).toBe(false);
+  });
+
+  it("conservatively nulls a 6h+ periodN (a genuine epic and a suspension are indistinguishable; Sackmann backfills it)", () => {
+    const ev = { ...eventSample, time: { period1: 12000, period2: 11760 } }; // 23 760s ≈ 6h36 wall-clock
+    const m = enrichMatch(baseMatch(), ev, null, players(), 0);
+    expect(m.durationSec).toBeNull(); // > MAX_LOCAL_SEC (6h); the CSV pass restores the real on-court time
+  });
+
   it("for a live event derives provisional duration from now - startTimestamp and sets status live", () => {
     const nowSec = liveEventSample.startTimestamp + 1800;
     const m = enrichMatch(baseMatch({ status: "live", winner: null, sofaEventId: 555 }), liveEventSample, null, players(), nowSec);

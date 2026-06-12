@@ -28,6 +28,10 @@ pnpm reindex      # rebuild public/data/index.json from the snapshots on disk (n
 
 Backfill past editions with `BACKFILL_YEARS=2024,2025 pnpm ingest` (add `BACKFILL_SLAMS=wimbledon` to restrict the slams). Past seasons keep `elo: null` — Tennis Abstract only publishes current ratings, which would be anachronistic on a historical draw. `scripts/probe-history.ts` reports how far back SofaScore has usable draws per slam/tour.
 
+After any backfill, run `pnpm backfill-durations` (optionally with years: `pnpm backfill-durations 2024 2025`). It re-sources every snapshot's match durations from Jeff Sackmann's CSVs and sanity-bounds the rest — SofaScore's historical `time.periodN` is missing before mid-2014, has whole-event holes, and counts rain/curfew suspensions as play time (`ingest/durations.ts` documents the merge policy). Where the CSVs have a hole (Roland Garros 2022/2024/2025, ATP 2015 Wimbledon + US Open, WTA 2015), plausible SofaScore values are kept.
+
+Known coverage gaps in the committed history: Wimbledon 2020 (cancelled), WTA before 2015 (no usable SofaScore draws), and the **2011 ATP US Open is omitted entirely** — SofaScore's `cuptrees` for that edition is missing a main-draw match, so the full draw can't be assembled and `index.json` simply doesn't list it.
+
 ### Refreshing data
 
 SofaScore's API blocks datacenter IPs (Cloudflare 403), so **GitHub-hosted Actions cannot ingest** — the `.github/workflows/refresh.yml` workflow is manual-only and intended for a self-hosted runner with a residential/proxy IP.
@@ -55,4 +59,4 @@ Optional follow-ups:
 
 ## Data source & licence
 
-Data is reverse-engineered from SofaScore's public endpoints for personal, non-commercial use; the app only links out to SofaScore (it does not re-host their UI). Not affiliated with SofaScore, the ATP, WTA, or any tournament.
+Live draws and scores are reverse-engineered from SofaScore's public endpoints for personal, non-commercial use; the app only links out to SofaScore (it does not re-host their UI). Historical match durations, ELO ratings, and player birthdates come from [Jeff Sackmann / Tennis Abstract](https://www.tennisabstract.com/)'s [tennis_atp](https://github.com/JeffSackmann/tennis_atp) and [tennis_wta](https://github.com/JeffSackmann/tennis_wta) datasets, licensed [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) — the derived JSON published on the `data` branch therefore carries the same licence. Not affiliated with SofaScore, Tennis Abstract, the ATP, WTA, or any tournament.

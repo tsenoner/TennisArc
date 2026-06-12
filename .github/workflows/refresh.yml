@@ -9,9 +9,16 @@ permissions:
   contents: write
 concurrency:
   group: refresh-data
-  cancel-in-progress: true
+  # Share the daily durations.yml group so the two never publish at once, and queue rather than
+  # preempt: cancel-in-progress: false means a manual dispatch waits for an in-progress daily run
+  # to finish instead of killing it mid force-push.
+  cancel-in-progress: false
 jobs:
   ingest:
+    # ubuntu-latest only succeeds BETWEEN slams (ingest is a no-op then); DURING a slam SofaScore
+    # 403s a datacenter IP and publish-data.sh aborts under `set -e` before publishing. For live
+    # ingestion run this on a self-hosted residential runner (see the NOTE above); the daily
+    # durations.yml job covers duration healing on hosted runners with SKIP_INGEST=1.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,20 +31,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm ingest
-      - name: Publish data to the data branch
-        if: always()   # publish whatever ingested, even if one tour failed
-        run: |
-          set -e
-          # Only publish if the ingest actually refreshed a seed file. A failed/total-fail run
-          # leaves public/data unchanged → keep the data branch's last-good (no wipe).
-          if [ -z "$(git diff --name-only -- public/data)" ]; then echo "no fresh data; keeping last-good"; exit 0; fi
-          rm -rf /tmp/tapub && mkdir -p /tmp/tapub && cp public/data/*.json /tmp/tapub/
-          git config user.name "tennisarc-bot"
-          git config user.email "bot@users.noreply.github.com"
-          git checkout --orphan data-pub
-          git rm -rf . >/dev/null 2>&1 || true
-          cp /tmp/tapub/*.json .
-          git add -A
-          git commit -m "data: refresh $(date -u +%FT%TZ)" || { echo "no changes"; exit 0; }
-          git push -f origin data-pub:data
+      # publish-data.sh owns the whole pipeline: ingest → carry-forward → duration pass →
+      # reindex → shrink-guarded push. (The inline publish this job used to do predates the
+      # slams/{year}/ layout and would have wiped per-year snapshots.)
+      - run: scripts/publish-data.sh

@@ -1,0 +1,10 @@
+tourney_id,tourney_name,surface,draw_size,tourney_level,tourney_date,match_num,winner_id,winner_seed,winner_entry,winner_name,winner_hand,winner_ht,winner_ioc,winner_age,loser_id,loser_seed,loser_entry,loser_name,loser_hand,loser_ht,loser_ioc,loser_age,score,best_of,round,minutes,w_ace,w_df,w_svpt,w_1stIn,w_1stWon,w_2ndWon,w_SvGms,w_bpSaved,w_bpFaced,l_ace,l_df,l_svpt,l_1stIn,l_1stWon,l_2ndWon,l_SvGms,l_bpSaved,l_bpFaced,winner_rank,winner_rank_points,loser_rank,loser_rank_points
+2024-580,Australian Open,Hard,128,G,20240115,1,1,1,,Jannik Sinner,R,191,ITA,22.4,2,,,Botic Van De Zandschulp,R,188,NED,28.2,6-4 6-4 6-4,5,R128,127,10,2,80,50,40,15,14,2,3,5,4,70,45,30,10,13,3,8,1,9000,60,1000
+2024-580,Australian Open,Hard,128,G,20240115,99,1,1,,Jannik Sinner,R,191,ITA,22.4,3,3,,Daniil Medvedev,R,198,RUS,27.9,3-6 3-6 6-4 6-4 6-3,5,F,224,8,3,150,90,70,30,25,4,6,12,5,160,100,75,28,26,5,9,1,9000,3,7000
+2024-580,Australian Open,Hard,128,G,20240115,50,7,,,Quentin Halys,R,190,FRA,27.1,8,,,Some Qualifier,R,185,USA,24.0,6-3 6-3,3,Q1,66,,,,,,,,,,,,,,,,,,,40,1200,150,400
+2024-339,Brisbane,Hard,32,A,20240101,1,9,,,Grigor Dimitrov,R,191,BUL,32.6,10,,,Holger Rune,R,188,DEN,20.7,7-6(5) 6-4,3,F,118,,,,,,,,,,,,,,,,,,,14,2500,8,3700
+2024-560,Us Open,Hard,128,G,20240826,12,11,,,Alison Van Uytvanck,R,170,BEL,30.3,12,,,Tamara Korpatsch,R,170,GER,29.4,6-2 6-2,3,R64,95,,,,,,,,,,,,,,,,,,,80,800,90,700
+2024-580,Australian Open,Hard,128,G,20240115,60,13,,,Casper Ruud,R,183,NOR,25.1,14,,,Marin Cilic,R,198,CRO,35.3,W/O,5,R64,,,,,,,,,,,,,,,,,,,,9,3000,30,1500
+2024-520,Roland Garros,Clay,128,G,20240526,30,15,,,Lukasz Kubot,R,190,POL,42.0,16,,,Sam Querrey,R,198,USA,36.6,7-5 7-5 7-5,5,R32,101,,,,,,,,,,,,,,,,,,,100,600,110,550
+2024-580,Australian Open,Hard,128,G,20240115,2,17,,,Maria Smith,R,175,USA,25.0,18,,,Anna Jones,R,172,GBR,24.0,6-1 6-1,3,R128,100,,,,,,,,,,,,,,,,,,,50,1100,70,900
+2024-580,Australian Open,Hard,128,G,20240115,3,19,,,Marta Smith,R,176,ESP,26.0,20,,,Aria Jones,R,171,AUS,23.0,6-2 6-2,3,R128,130,,,,,,,,,,,,,,,,,,,55,1050,75,850
