@@ -78,7 +78,9 @@ export function enrichMatch(
     const periods = Object.entries(ev.time ?? {})
       .filter(([k]) => /^period\d+$/.test(k))
       .reduce((sum, [, v]) => sum + (v ?? 0), 0);
-    durationSec = periods > 0 ? periods : null;
+    // Suspended matches carry wall-clock spans in periodN (a rain delay "lasts" 18h+);
+    // no genuine slam match in the covered era exceeds 6h, so past that the value is garbage.
+    durationSec = periods > 0 && periods <= 21_600 ? periods : null;
   }
 
   if (m.p1 && players[m.p1] && ev.homeTeam?.country?.alpha3) players[m.p1].country = ev.homeTeam.country.alpha3;

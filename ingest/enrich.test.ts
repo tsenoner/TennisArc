@@ -26,6 +26,13 @@ describe("enrichMatch", () => {
     expect(pl["101"].country).toBe("FRA");
   });
 
+  it("nulls a finished duration past the 6h sanity bound (suspension wall-clock garbage)", () => {
+    const ev = { ...eventSample, time: { period1: 1822, period2: 341176 } }; // rain-suspended set
+    const m = enrichMatch(baseMatch(), ev, null, players(), 0);
+    expect(m.durationSec).toBeNull();
+    expect(m.durationProvisional).toBe(false);
+  });
+
   it("for a live event derives provisional duration from now - startTimestamp and sets status live", () => {
     const nowSec = liveEventSample.startTimestamp + 1800;
     const m = enrichMatch(baseMatch({ status: "live", winner: null, sofaEventId: 555 }), liveEventSample, null, players(), nowSec);
