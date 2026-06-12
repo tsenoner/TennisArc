@@ -29,14 +29,16 @@ export function layout(root: SunNode, radius: number, focusId?: string): LayoutA
   }
   const dx = fx1 - fx0;
   const kx = dx > 1e-9 ? TAU / dx : 1; // guard degenerate (zero-width) focus
+  // rescale radii so the focused subtree fills the full radius; guard fy0 <= 0 (no-op) and fy0 ≈ radius (degenerate)
+  const ky = fy0 > 0 && fy0 < radius - 1e-9 ? radius / (radius - fy0) : 1;
 
   return nodes
     .map((n) => {
       const x0 = Math.max(0, Math.min(TAU, (n.x0 - fx0) * kx));
       const x1 = Math.max(0, Math.min(TAU, (n.x1 - fx0) * kx));
       // shift radii so the focused node's inner edge → 0; ancestors clamp to 0 and are dropped by the filter
-      const y0 = Math.max(0, n.y0 - fy0);
-      const y1 = Math.max(0, n.y1 - fy0);
+      const y0 = Math.max(0, (n.y0 - fy0) * ky);
+      const y1 = Math.max(0, (n.y1 - fy0) * ky);
       return {
         id: n.data.id, matchId: n.data.matchId, occupant: n.data.occupant,
         projected: n.data.projected, depth: n.depth, x0, x1, y0, y1,
