@@ -1,0 +1,30 @@
+name: Daily duration refresh (Sackmann)
+# Datacenter-friendly counterpart to the residential refresh: SofaScore is unreachable from CI
+# (Cloudflare 403, see TODO.md), but Jeff Sackmann's CSVs on GitHub raw are not. Once a day,
+# re-run the publish pipeline with the SofaScore step skipped — carry forward the live data
+# branch, re-source current-year durations from the CSVs, reindex, and push (the byte-identical
+# check makes this a no-op push-wise most days). Keeps durations honest during slam fortnights
+# even when the Mac that runs the live ingest is asleep.
+on:
+  schedule:
+    - cron: "20 6 * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency:
+  group: refresh-data # same group as the residential refresh — never two publishers at once
+  cancel-in-progress: false
+jobs:
+  durations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: SKIP_INGEST=1 scripts/publish-data.sh

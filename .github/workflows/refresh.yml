@@ -24,20 +24,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm ingest
-      - name: Publish data to the data branch
-        if: always()   # publish whatever ingested, even if one tour failed
-        run: |
-          set -e
-          # Only publish if the ingest actually refreshed a seed file. A failed/total-fail run
-          # leaves public/data unchanged → keep the data branch's last-good (no wipe).
-          if [ -z "$(git diff --name-only -- public/data)" ]; then echo "no fresh data; keeping last-good"; exit 0; fi
-          rm -rf /tmp/tapub && mkdir -p /tmp/tapub && cp public/data/*.json /tmp/tapub/
-          git config user.name "tennisarc-bot"
-          git config user.email "bot@users.noreply.github.com"
-          git checkout --orphan data-pub
-          git rm -rf . >/dev/null 2>&1 || true
-          cp /tmp/tapub/*.json .
-          git add -A
-          git commit -m "data: refresh $(date -u +%FT%TZ)" || { echo "no changes"; exit 0; }
-          git push -f origin data-pub:data
+      # publish-data.sh owns the whole pipeline: ingest → carry-forward → duration pass →
+      # reindex → shrink-guarded push. (The inline publish this job used to do predates the
+      # slams/{year}/ layout and would have wiped per-year snapshots.)
+      - run: scripts/publish-data.sh
