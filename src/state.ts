@@ -1,4 +1,4 @@
-import type { Match, MatchStatus, Player, SetScore, Snapshot } from "./model";
+import type { Match, MatchStatus, Player, Round, SetScore, Snapshot } from "./model";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -141,6 +141,38 @@ export function labelAnchors(root: SunNode): Set<string> {
   };
   walk(root, null);
   return out;
+}
+
+/** Short round label from a player's furthest-reached round index. */
+export function roundAbbrev(reached: number, rounds: Round[]): string {
+  if (reached >= rounds.length) return "Champion";
+  const name = rounds[reached]?.name ?? `R${reached}`;
+  return name
+    .replace(/^Round of\s*/i, "R")
+    .replace(/^Quarterfinal.*/i, "QF")
+    .replace(/^Semifinal.*/i, "SF")
+    .replace(/^Final$/i, "F");
+}
+
+/**
+ * Human name for a focusable section of the draw, in draw-sheet language: depth 1 is the
+ * sheet's "Top half"/"Bottom half" (r.0 / r.1), a quarter is named for its occupant for
+ * now ("Sinner's quarter" — the quarter-labels step replaces this with the drawn-top-seed
+ * owner), and anything else falls back to its own round ("QF section"). Unknown ids → "".
+ */
+export function sectionTitle(s: Snapshot, root: SunNode, id: string): string {
+  if (id === root.id) return "Full draw";
+  const segs = id.split(".");
+  if (segs[0] !== root.id) return "";
+  let node: SunNode | undefined = root;
+  for (const seg of segs.slice(1)) node = node?.children[Number(seg)];
+  if (!node) return "";
+  if (node.depth === 1) return node.id === `${root.id}.0` ? "Top half" : "Bottom half";
+  const last = node.occupant ? (s.players[node.occupant]?.name ?? "").split(" ").slice(-1)[0] : "";
+  if (!node.children.length) return last;             // a single slot (hand-crafted id): just the player
+  if (node.depth === 2 && last) return `${last}'s quarter`;
+  const ri = s.rounds.length - 1 - node.depth;        // the node's own match round
+  return ri >= 0 ? `${roundAbbrev(ri, s.rounds)} section` : last;
 }
 
 export interface PlayerTime {

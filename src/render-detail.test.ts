@@ -50,11 +50,11 @@ describe("renderMatchStrip", () => {
     expect(html).not.toContain("Upset");
   });
 
-  it("flips the Zoom button to a reset while its own section is focused", () => {
+  it("flips the Zoom button to Reset zoom while focused — empty-id focus, NOT the nuclear reset", () => {
     const html = renderMatchStrip(base, "r.0.1", { expanded: true, focused: true });
     expect(html).toContain("Reset zoom");
-    expect(html).toContain('data-action="reset"');
-    expect(html).not.toContain('data-action="focus"');
+    expect(html).toContain('data-action="focus" data-id=""'); // routes through setFocus(undefined)
+    expect(html).not.toContain('data-action="reset"');        // pin + match must survive the un-zoom
     expect(html).toContain('aria-expanded="true"');
   });
 

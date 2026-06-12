@@ -129,6 +129,19 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 /* full name vs surname is a pure CSS switch (≤960px media block) — both spans always render, no resize JS */
 .ms-name .nm-short { display: none; }
 
+/* focus breadcrumbs — a slim in-flow chip row at the very top of the wheel column (above
+   the match strip), rendered only while a section is focused. In-flow on purpose: an
+   overlay pinned to the chart's top edge would sit on the 12-o'clock round-axis tab. */
+.crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.crumb { font: inherit; font-size: 11px; font-weight: 600; line-height: 1; padding: 5px 10px;
+  border-radius: 999px; background: var(--panel); border: 1px solid var(--line);
+  color: var(--text); cursor: pointer; white-space: nowrap; }
+.crumb.cur { color: var(--dim); border-color: transparent; background: none; }
+/* while the crumb row occupies the top edge, the float card waits below it so a hover/pin
+   card never covers the exit chips (the chips stay clickable regardless — the card is
+   pointer-events: none — but the owner verifies by screenshot) */
+.sunburst:has(.crumbs) .ro-float { top: 44px; }
+
 /* match detail tier — on demand behind the strip's "Details ▾": in-flow under the strip on
    desktop, a fixed bottom sheet with the standard grip/✕ chrome on phones (media block below) */
 .mi-detail { display: flex; flex-direction: column; gap: 10px; max-width: 520px;
@@ -212,6 +225,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   font-size: 12px; font-weight: 700; pointer-events: none; }
 .center-id.projected span { font-style: italic; }
+/* focused-section fallback pill (no occupant known yet): quieter than a player identity */
+.center-id.center-sec span { color: var(--dim); }
 
 /* the float card waits at the chart's top-left corner; idle (nothing hovered, pinned, or
    focused) it would only duplicate the finalist pill, so it blanks out */
@@ -366,6 +381,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .ms-score { font-size: 12px; }
   .ms-more, .ms-close { padding: 11px 10px; margin: -7px 0; }
   .ms-zoom::after { content: ""; position: absolute; inset: -7px -4px; }
+
+  /* crumb chips keep their slim look but gain a comfortable phone tap height */
+  .crumb { padding: 9px 12px; }
 
   /* "Details ▾" → the detail tier rises as a bottom sheet over the bracket, with the same
      grip/✕ grammar as the lens drawers; the scrim (rendered only while expanded) dims behind it */

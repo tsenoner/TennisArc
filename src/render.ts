@@ -7,6 +7,8 @@ import type { Round, SlamIndex } from "./model";
 import type { Theme } from "./theme";
 import { flagEmoji, flagAssetUrl } from "./flags";
 import type { LeaderRow, SeedProgress, SeedSort, NationRow, InsightSide, MatchInsight } from "./state";
+import { roundAbbrev } from "./state";
+export { roundAbbrev } from "./state"; // moved to state.ts (sectionTitle needs it); re-exported so callers keep importing from here
 import { availableYears, slamsForYear } from "./slams";
 
 const PAD_ANGLE = 0.004;   // radians of gap between adjacent arcs
@@ -397,6 +399,28 @@ export function renderCenterId(iso3: string, name: string, projected: boolean): 
     `${flagImg(iso3, 12)}<span>${escapeHtml(name)}</span></div>`;
 }
 
+/** Breadcrumb chips for a focused section: "‹ Full draw" (data-id="" on purpose — the
+ *  focus branch accepts the empty id as "clear"), one tappable chip per ancestor section,
+ *  then the current section's name as inert text. Rendered only while a focus is active. */
+export function renderCrumbs(trail: { id: string; label: string }[], current: string): string {
+  const chips = trail
+    .map((t) => `<button class="crumb" data-action="focus" data-id="${escapeHtml(t.id)}">${escapeHtml(t.label)}</button>`)
+    .join("");
+  return (
+    `<nav class="crumbs" aria-label="Zoom breadcrumbs">` +
+    `<button class="crumb" data-action="focus" data-id="">‹ Full draw</button>` +
+    chips +
+    `<span class="crumb cur">${escapeHtml(current)}</span></nav>`
+  );
+}
+
+/** Centre-pill fallback while a focused section has no known occupant yet: names the
+ *  section instead of a player (same pill chrome, no flag). */
+export function renderCenterSection(title: string): string {
+  if (!title) return "";
+  return `<div class="center-id center-sec"><span>${escapeHtml(title)}</span></div>`;
+}
+
 function insightScore(ins: MatchInsight): string {
   if (!ins.score || !ins.score.length) return ins.status === "live" ? "Live" : "—";
   return ins.score
@@ -451,9 +475,10 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
   const live = ins.status === "live"
     ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
-  // While its own section is focused it flips to a reset; step 3 of the overhaul reroutes this.
+  // While ANY section is focused it flips to "Reset zoom" — an empty data-id routed through
+  // the same focus branch (setFocus(undefined)), never the nuclear reset: pin + match survive.
   const zoom = opts.focused
-    ? `<button class="ms-zoom" data-action="reset" data-id="${escapeHtml(nodeId)}">Reset zoom</button>`
+    ? `<button class="ms-zoom" data-action="focus" data-id="">Reset zoom</button>`
     : `<button class="ms-zoom" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Zoom</button>`;
   return (
     `<div class="match-strip" role="region" aria-label="Match insight">` +
@@ -548,17 +573,6 @@ export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
     (rows ? `<div class="panel-sub">${sub}</div><ol class="sp-list">${rows}</ol>` : `<div class="panel-empty">No data for this draw</div>`) +
     `</aside>`
   );
-}
-
-/** Short round label from a player's furthest-reached round index. */
-export function roundAbbrev(reached: number, rounds: Round[]): string {
-  if (reached >= rounds.length) return "Champion";
-  const name = rounds[reached]?.name ?? `R${reached}`;
-  return name
-    .replace(/^Round of\s*/i, "R")
-    .replace(/^Quarterfinal.*/i, "QF")
-    .replace(/^Semifinal.*/i, "SF")
-    .replace(/^Final$/i, "F");
 }
 
 export function renderCountryPanel(rows: NationRow[], selected: string | undefined, rounds: Round[]): string {

@@ -72,6 +72,8 @@ afterEach(() => {
   mounted.length = 0;
   document.body.innerHTML = "";
   delete document.documentElement.dataset.theme;
+  vi.restoreAllMocks();                     // history spies must never leak across tests
+  history.replaceState(null, "", "/");      // …nor a focus hash a test pushed
 });
 
 function click(el: Element): void {
@@ -386,13 +388,185 @@ describe("float card never hides what the user is pointing at (idle = input stat
     expect(root.querySelector(".ro-float.ro-idle")).toBeNull(); // pinned card returns
   });
 
-  it("keeps the focused section's occupant named (the pill is dropped while zoomed)", async () => {
+});
+
+// the depth-2 arc "r.0.0" of the 8-draw fixture: a quarter — non-leaf, never the root
+const qArc = (root: HTMLElement) => root.querySelector<HTMLElement>('path.arc[data-id="r.0.0"]')!;
+const esc = () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+// jsdom's history.back() traverses asynchronously — mock it so focus exits stay deterministic
+const mockBack = () => vi.spyOn(history, "back").mockImplementation(() => {});
+
+describe("tap-again zoom + hub zoom-out (focus grammar)", () => {
+  it("re-tapping the selected non-leaf arc focuses that section; strip flips to Reset zoom", async () => {
     const root = await mountApp();
-    click(pickArc(root));                                              // pin + open the match strip
-    click(root.querySelector<HTMLElement>('[data-action="focus"]')!);  // ⊕ Zoom to that section
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // close the strip
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // unpin
-    expect(root.querySelector(".center-id")).toBeNull();        // pill dropped while zoomed
-    expect(root.querySelector(".ro-float.ro-idle")).toBeNull(); // card stays, naming the occupant
+    mockBack();
+    click(qArc(root));                                                // tap 1: select (pin + strip)
+    expect(root.querySelector(".match-strip")).not.toBeNull();
+    expect(root.querySelector(".crumbs")).toBeNull();                 // not focused yet
+    click(qArc(root));                                                // tap 2: zoom to its own section
+    expect(root.querySelector(".crumbs")).not.toBeNull();             // focused…
+    expect(root.querySelector('path.arc[data-id="r"]')).toBeNull();   // …arcs outside the section gone
+    expect(root.querySelector(".match-strip")).not.toBeNull();        // selection survives the zoom
+    const zoomBtn = root.querySelector<HTMLElement>(".ms-zoom")!;
+    expect(zoomBtn.textContent).toBe("Reset zoom");
+    expect(zoomBtn.dataset.id).toBe("");                              // routed through setFocus(undefined)…
+    click(zoomBtn);
+    expect(root.querySelector(".crumbs")).toBeNull();                 // …which exits the zoom
+    expect(root.querySelector(".match-strip")).not.toBeNull();        // but is NOT the nuclear reset:
+    expect(litArcs(root).length).toBeGreaterThan(0);                  // match + pin both survive
+  });
+
+  it("re-tapping a selected LEAF zooms to its parent (a leaf's section IS its match)", async () => {
+    const root = await mountApp();
+    const leaf = () => root.querySelector<HTMLElement>('path.arc[data-id="r.0.0.0"]')!;
+    click(leaf()); click(leaf());
+    expect(root.querySelector(".crumbs")).not.toBeNull();
+    expect(root.querySelector('path.arc[data-id="r.0.0"]')).not.toBeNull(); // parent is the new hub
+    expect(root.querySelector('path.arc[data-id="r.0"]')).toBeNull();       // grandparent is outside
+    expect(leaf()).not.toBeNull();                                          // the tapped leaf stays in view
+  });
+
+  it("tapping the hub zooms out one level at a time, down to the full draw", async () => {
+    const root = await mountApp();
+    mockBack();
+    click(qArc(root)); click(qArc(root));                             // focus r.0.0
+    click(qArc(root));                                                // hub tap → out to r.0
+    expect(root.querySelector(".crumb.cur")!.textContent).toBe("Top half");
+    expect(root.querySelector('path.arc[data-id="r.0.1"]')).not.toBeNull(); // sibling back in view
+    click(root.querySelector<HTMLElement>('path.arc[data-id="r.0"]')!);     // hub again → full draw
+    expect(root.querySelector(".crumbs")).toBeNull();
+    expect(root.querySelector('path.arc[data-id="r"]')).not.toBeNull();
+  });
+
+  it("focusing the root is a no-op: setFocus('r') normalizes to no focus, no history entry", async () => {
+    const root = await mountApp();
+    const push = vi.spyOn(history, "pushState");
+    click(root.querySelector<HTMLElement>('path.arc[data-id="r"]')!); // select the final (hub arc)
+    const zoom = root.querySelector<HTMLElement>(".ms-zoom")!;
+    expect(zoom.dataset.id).toBe("r");                                // the root section IS the full draw
+    click(zoom);
+    expect(root.querySelector(".crumbs")).toBeNull();                 // no crumbs…
+    expect(root.querySelector(".ms-zoom")!.textContent).toContain("Zoom"); // …still unfocused
+    expect(push).not.toHaveBeenCalled();                              // …and no entry pushed
+  });
+});
+
+describe("focus crumbs", () => {
+  it("renders ‹ Full draw + tappable ancestors + the current section name", async () => {
+    const root = await mountApp();
+    click(qArc(root)); click(qArc(root));                             // focus the quarter r.0.0
+    const chips = [...root.querySelectorAll<HTMLElement>(".crumbs .crumb")];
+    expect(chips[0].textContent).toBe("‹ Full draw");
+    expect(chips[0].dataset.id).toBe("");
+    expect(chips[1].textContent).toBe("Top half");                    // ancestor chip
+    expect(chips[1].dataset.id).toBe("r.0");
+    expect(root.querySelector(".crumb.cur")!.textContent).toMatch(/'s quarter$/);
+  });
+
+  it("the empty-id 'Full draw' crumb clears focus (guard accepts data-id='')", async () => {
+    const root = await mountApp();
+    mockBack();
+    click(qArc(root)); click(qArc(root));
+    expect(root.querySelector(".crumbs")).not.toBeNull();
+    click(root.querySelector<HTMLElement>('.crumb[data-id=""]')!);
+    expect(root.querySelector(".crumbs")).toBeNull();
+    expect(root.querySelector('path.arc[data-id="r"]')).not.toBeNull(); // full draw restored
+  });
+
+  it("an ancestor chip jumps to that level (no extra history entry)", async () => {
+    const root = await mountApp();
+    const push = vi.spyOn(history, "pushState");
+    click(qArc(root)); click(qArc(root));                             // focus r.0.0 (1 push)
+    click(root.querySelector<HTMLElement>('.crumb[data-id="r.0"]')!); // jump up to the half
+    expect(root.querySelector(".crumb.cur")!.textContent).toBe("Top half");
+    expect(push).toHaveBeenCalledTimes(1);                            // level change replaced, not pushed
+  });
+});
+
+describe("focus history discipline (V1-simple: one entry per focus session)", () => {
+  it("pushes ONE entry on entry, replaces on level change, pops exactly once on clear", async () => {
+    const root = await mountApp();
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    const back = mockBack();
+
+    click(qArc(root));                                       // select only —
+    expect(push).not.toHaveBeenCalled();                     // selection is not focus
+    click(qArc(root));                                       // re-tap → enter focus
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenLastCalledWith({ f: "r.0.0" }, "", "#r.0.0");
+
+    click(qArc(root));                                       // hub → out one level (still focused)
+    expect(push).toHaveBeenCalledTimes(1);                   // a level CHANGE never adds an entry
+    expect(replace).toHaveBeenLastCalledWith({ f: "r.0" }, "", "#r.0");
+
+    click(root.querySelector<HTMLElement>('.crumb[data-id=""]')!); // ‹ Full draw
+    expect(back).toHaveBeenCalledTimes(1);                   // gave our entry back…
+    esc(); esc(); esc();                                     // unwind everything else
+    expect(back).toHaveBeenCalledTimes(1);                   // …exactly once — nothing left to pop
+  });
+
+  it("a tour switch scrubs the hash in place — no new entry, no back()", async () => {
+    const root = await mountApp();
+    const back = mockBack();
+    click(qArc(root)); click(qArc(root));                    // focused
+    expect(location.hash).toBe("#r.0.0");
+    const push = vi.spyOn(history, "pushState");
+    click(root.querySelector<HTMLElement>('[data-action="tour"][data-tour="ATP"]')!);
+    expect(location.hash).toBe("");                          // scrubbed via replaceState
+    expect(push).not.toHaveBeenCalled();
+    expect(back).not.toHaveBeenCalled();
+    expect(root.querySelector(".crumbs")).toBeNull();        // focus cleared with the old draw
+  });
+
+  it("popstate routes through setFocus + draw: Forward re-enters, Back exits, stale ids drop", async () => {
+    const root = await mountApp();
+    const push = vi.spyOn(history, "pushState");
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { f: "r.0" } })); // Forward into focus
+    expect(root.querySelector(".crumb.cur")!.textContent).toBe("Top half");
+    expect(push).not.toHaveBeenCalled();                     // adopt the entry, never re-push it
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));         // Back to base
+    expect(root.querySelector(".crumbs")).toBeNull();        // focus exits in one step
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { f: "r.0.0.0.0" } })); // deeper than the draw
+    expect(root.querySelector(".crumbs")).toBeNull();        // unresolvable id → no focus
+  });
+});
+
+describe("ESC ladder (one layer per press, focus last)", () => {
+  it("unwinds menu → detail tier → strip → drawer → pin → focus, in that order", async () => {
+    const root = await mountApp();
+    mockBack();
+    click(qArc(root)); click(qArc(root));                                          // pin + strip + focus
+    click(root.querySelector<HTMLElement>(".ms-more")!);                           // expand the detail tier
+    click(root.querySelector<HTMLElement>(".panel-fab")!);                         // open the lens drawer
+    click(root.querySelector<HTMLElement>('[data-action="toggle-menu"][data-menu="slam"]')!); // open a menu
+
+    esc(); expect(root.querySelector(".dd-pop")).toBeNull();                       // 1: menu
+    expect(root.querySelector(".mi-detail")).not.toBeNull();
+    esc(); expect(root.querySelector(".mi-detail")).toBeNull();                    // 2: detail tier
+    expect(root.querySelector(".match-strip")).not.toBeNull();
+    esc(); expect(root.querySelector(".match-strip")).toBeNull();                  // 3: strip
+    esc(); expect(root.querySelector(".leaderboard.open")).toBeNull();             // 4: drawer
+    expect(litArcs(root).length).toBeGreaterThan(0);
+    esc(); expect(litArcs(root).length).toBe(0);                                   // 5: pin
+    expect(root.querySelector(".crumbs")).not.toBeNull();
+    esc(); expect(root.querySelector(".crumbs")).toBeNull();                       // 6: focus — last resort
+  });
+});
+
+describe("centre pill while focused", () => {
+  it("restores the pill naming the focused occupant (their on-arc hub label is dropped) and idles the card", async () => {
+    const root = await mountApp();
+    mockBack();
+    click(qArc(root)); click(qArc(root));                             // focus the quarter
+    const occ = qArc(root).dataset.occupant!;                         // focused hub's occupant
+    const name = SNAP.players[occ].name.split(" ").slice(-1)[0];
+    expect(root.querySelector(".center-id")!.textContent).toContain(name);  // pill restored in focus mode
+    // the pill carries the name — the hub must not also label it on-arc (anchors.delete(focusId))
+    expect([...root.querySelectorAll(".arc-label")].map((t) => t.textContent)).not.toContain(name);
+    esc(); esc();                                                     // close strip, unpin (focus stays)
+    expect(root.querySelector(".crumbs")).not.toBeNull();
+    expect(root.querySelector(".center-id")).not.toBeNull();          // pill still names the occupant…
+    expect(root.querySelector(".ro-float.ro-idle")).not.toBeNull();   // …so the idle card never doubles it
   });
 });

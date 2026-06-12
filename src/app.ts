@@ -1,8 +1,9 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, type PlayerTime, type SeedSort } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
+  renderCenterSection, renderCrumbs,
   renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
@@ -61,7 +62,7 @@ export function createApp(root: HTMLElement): () => void {
   let store: Store | undefined;
 
   // Updated each draw so the (frequent) hover handler can build a readout without a full re-render.
-  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; focused: boolean; isMatch: boolean } | undefined;
+  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; isMatch: boolean } | undefined;
 
   const surname = (name: string) => name.split(" ").slice(-1)[0] || name;
 
@@ -91,10 +92,10 @@ export function createApp(root: HTMLElement): () => void {
   };
 
   // The float card blanks (ro-idle) only when it has nothing to add beyond the centre
-  // pill: no hover target, no pinned player, no focused section. Idle is judged from that
-  // INPUT state, never from the resolved player — an active hover on the champion must
-  // show their card like anyone else's, and a focused section must keep its occupant named
-  // (the pill is dropped while zoomed).
+  // pill: no hover target, no pinned player. Idle is judged from that INPUT state, never
+  // from the resolved player — an active hover on the champion must show their card like
+  // anyone else's. A focused section's occupant is named by the centre pill (restored in
+  // focus mode), so focus alone keeps the card idle — never the same player twice.
   // "has-match" hides the readout while a match strip names both players (CSS); it lives
   // HERE, not in draw(), so updateReadout's outerHTML swaps re-emit it on every rewrite.
   const roCls = (idle: boolean) => "ro-float" + (idle ? " ro-idle" : "") + (ctx?.isMatch ? " has-match" : "");
@@ -103,7 +104,7 @@ export function createApp(root: HTMLElement): () => void {
   const updateReadout = (playerId: string | null) => {
     if (!ctx) return;
     const resolved = playerId ?? ctx.defaultId;
-    const idle = !playerId && !ctx.pinned && !ctx.focused;
+    const idle = !playerId && !ctx.pinned;
     if (resolved === roCurrent && idle === roIdle) return;
     const el = root.querySelector(".readout.ro-float");
     if (!el) return;
@@ -166,6 +167,7 @@ export function createApp(root: HTMLElement): () => void {
     }));
     const anchors = labelAnchors(tree);
     anchors.delete(tree.id); // champion is named by the centre pill — skip its cramped on-arc label
+    if (state.focusId) anchors.delete(state.focusId); // same rule for the focused hub: its pill (below) carries the name
     const labelText = (occ: string) =>
       state.colorDim === "country"
         // Unmapped nations have no bundled SVG: show the visible ISO code, never an emoji —
@@ -198,28 +200,56 @@ export function createApp(root: HTMLElement): () => void {
       const ins = matchInsight(snap, state.selectedMatchId!, time)!;
       const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
       const nodeId = state.selectedNodeId ?? "r";
-      strip = renderMatchStrip(ins, nodeId, { expanded: state.detailExpanded, focused: state.focusId === nodeId }) +
+      // ⊕ Zoom targets the selected node's own SECTION — itself when it has children, a
+      // leaf's parent match otherwise (resolved decision 2); setFocus maps the root to a no-op.
+      const zoomId = arcs.some((x) => x.id.startsWith(`${nodeId}.`)) ? nodeId : nodeId.split(".").slice(0, -1).join(".");
+      strip = renderMatchStrip(ins, zoomId, { expanded: state.detailExpanded, focused: !!state.focusId }) +
         (state.detailExpanded ? renderMatchDetail(ins, u, snap.rounds) : "");
     }
-    const focusOcc = state.focusId ? arcs.find((a) => a.id === state.focusId)?.occupant ?? null : null;
+    const focusArc = state.focusId ? arcs.find((a) => a.id === state.focusId) : undefined;
+    const focusOcc = focusArc?.occupant ?? null;
     // a pinned player owns the readout (hover still previews others; leave restores the pin)
     const pinned = state.pinnedId && snap.players[state.pinnedId] ? state.pinnedId : null;
     const defaultId = pinned ?? focusOcc ?? tree.occupant ?? null;
-    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, focused: !!state.focusId, isMatch };
-    const floatIdle = !pinned && !state.focusId;
+    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, isMatch };
+    // idle = no pin (hover arrives later via updateReadout); the focused occupant is named
+    // by the restored centre pill, so focus alone no longer wakes the card.
+    const floatIdle = !pinned;
     roCurrent = defaultId; roIdle = floatIdle; // the markup below renders the float readout for defaultId
 
     // The finalist holds the chart centre as a minimal flag + surname pill; their full
-    // card appears in the float readout on hover, like anyone else's. A zoomed section
-    // drops the pill — it would cover the focused node's own centre label.
-    const champ = !state.focusId && tree.occupant ? snap.players[tree.occupant] : undefined;
-    const centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
+    // card appears in the float readout on hover, like anyone else's. While a section is
+    // focused, the pill names the focused occupant instead (their on-arc hub label is
+    // dropped above), falling back to the section's title when no occupant is known yet.
+    let centerId = "";
+    if (state.focusId) {
+      const fp = focusOcc ? snap.players[focusOcc] : undefined;
+      centerId = fp
+        ? renderCenterId(fp.country, surname(fp.name), focusArc?.projected ?? false)
+        : renderCenterSection(sectionTitle(snap, tree, state.focusId));
+    } else if (tree.occupant) {
+      const champ = snap.players[tree.occupant];
+      centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
+    }
     const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
+
+    // Focus crumbs — the zoom's primary exit on every input: "‹ Full draw", a tappable chip
+    // per ancestor section, then the current section's name. In-flow at the top of the wheel
+    // column (an overlay pinned to the chart's top edge would sit on the 12-o'clock axis tab).
+    let crumbs = "";
+    if (state.focusId) {
+      const segs = state.focusId.split(".");
+      const trail = segs.slice(1, -1).map((_, i) => {
+        const aid = segs.slice(0, i + 2).join(".");
+        return { id: aid, label: sectionTitle(snap, tree, aid) };
+      });
+      crumbs = renderCrumbs(trail, sectionTitle(snap, tree, state.focusId));
+    }
 
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst">${strip}<div class="chart">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings)}` +
+        `<div class="sunburst">${crumbs}${strip}<div class="chart">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings)}` +
           centerId + `</div>` + roFloat + `</div>` +
         `<div class="side">${panel}</div>` +
       `</div>` +
@@ -255,9 +285,56 @@ export function createApp(root: HTMLElement): () => void {
     state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.detailExpanded = false;
   };
 
-  // Leaving the current draw (tour/year/slam switch) drops every per-draw selection.
+  // ---- focus + history (V1-simple: ONE history entry per focus session) ----
+  // Entering focus pushes exactly one entry (#r.0.0); changing level replaces it; clearing
+  // pops it via history.back() — so browser Back / iOS back-swipe always exits focus in a
+  // single step (never walking intermediate levels) and never exits the app while focused.
+  let ownsEntry = false; // we pushed the entry we're sitting on (cleared on pop/scrub)
+
+  // A focus id must name a real node in the CURRENT draw — stale ids (a hash popped after
+  // a slam switch, hand-edited URLs) normalize to "no focus" rather than rendering crumbs
+  // for a section that doesn't exist. Walked on the snapshot tree, not the DOM: a focused
+  // render holds only the focused subtree.
+  const inTree = (id: string): boolean => {
+    const snap = state.year ? state.snapshots[snapKey(state.tour, state.year, state.slam)] : undefined;
+    if (!snap) return false;
+    const segs = id.split(".");
+    if (segs[0] !== "r") return false;
+    let node: SunNode | undefined = buildSunburst(snap);
+    for (const seg of segs.slice(1)) node = node?.children[Number(seg)];
+    return !!node;
+  };
+  const normalizeFocus = (id: string | undefined) => (!id || id === "r" || !inTree(id) ? undefined : id);
+
+  // EVERY focus change routes through here. Normalizes the id — "r", "" and unresolvable
+  // ids all mean "no focus" — and keeps the single owned history entry in sync. `adopt` is
+  // the popstate path: the browser has already moved, so only mirror the entry, never write
+  // (a push there would duplicate it). Callers draw() themselves.
+  const setFocus = (id: string | undefined, adopt = false): void => {
+    const next = normalizeFocus(id);
+    if (adopt) ownsEntry = !!next;
+    if (next === state.focusId) return;
+    state.focusId = next;
+    if (adopt) return;
+    if (next) {
+      if (ownsEntry) history.replaceState({ f: next }, "", `#${next}`); // level change — still one entry
+      else { history.pushState({ f: next }, "", `#${next}`); ownsEntry = true; } // entering focus
+    } else if (ownsEntry) {
+      // clearing: give our entry back. The popstate this fires finds focusId already
+      // cleared and is a no-op, so the exit never double-draws.
+      ownsEntry = false;
+      history.back();
+    }
+  };
+
+  // Leaving the current draw (tour/year/slam switch) drops every per-draw selection. The
+  // focus session dies with the draw, so the hash is scrubbed IN PLACE — replaceState only:
+  // no history.back() (that would navigate) and no new entry (Back later is simply inert).
   const resetSelection = () => {
-    state.focusId = undefined; closeMatch();
+    state.focusId = undefined;
+    if (ownsEntry || location.hash) history.replaceState(null, "", location.pathname + location.search);
+    ownsEntry = false;
+    closeMatch();
     state.selectedCountry = undefined; state.pinnedId = undefined;
   };
 
@@ -274,6 +351,12 @@ export function createApp(root: HTMLElement): () => void {
     resetSelection();
     draw(); void load(state.tour, state.year, state.slam);
   };
+
+  // The tapped node's own section (resolved decision 2): the node itself when it has
+  // children — any rendered arc whose id extends it — else its parent (a leaf's section IS
+  // its match). The DOM holds the full laid-out subtree, so the prefix probe is exact.
+  const sectionOf = (id: string): string =>
+    root.querySelector(`.sunburst path.arc[data-id^="${id}."]`) ? id : id.split(".").slice(0, -1).join(".");
 
   root.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
@@ -350,12 +433,23 @@ export function createApp(root: HTMLElement): () => void {
     } else if (a === "theme") {
       state.theme = nextTheme(state.theme); applyTheme(state.theme); saveTheme(state.theme); draw();
     } else if (a === "inspect" && el.dataset.match) {
-      if (state.colorDim === "country") {
+      if (id && id === state.focusId) {
+        // The focused section's own arc is the hub: tapping it zooms OUT one level (its
+        // parent; setFocus maps "r" to a full clear). Checked before any lens semantics —
+        // while focused, the hub is navigation chrome on every lens. This replaces the
+        // nuclear-reset clause this id used to (unreachably) fall through to below.
+        setFocus(id.split(".").slice(0, -1).join("."));
+      } else if (state.colorDim === "country") {
         // On the Country lens an arc tap selects that player's nation (no arc pin here) — touch
         // users still pin a single player's path by tapping their row in the expanded nation list.
         const s = state.snapshots[snapKey(state.tour, state.year, state.slam)];
         const c = s?.players[el.dataset.occupant ?? ""]?.country;
         if (c) state.selectedCountry = state.selectedCountry === c ? undefined : c;
+      } else if (id && id === state.selectedNodeId) {
+        // Tap-again-to-zoom: re-tapping the already-selected arc focuses its own section.
+        // State-based, not timing-based — no double-tap window to race. Selection and pin
+        // survive, so the strip stays open and flips to "Reset zoom".
+        setFocus(sectionOf(id));
       } else {
         // One grammar on every input: a single tap/click on an arc pins the player AND
         // opens the match strip. The strip never covers the wheel, so touch no longer
@@ -368,8 +462,10 @@ export function createApp(root: HTMLElement): () => void {
         state.selectedNodeId = id;
       }
       draw();
-    } else if (a === "focus" && el.dataset.id) {
-      state.focusId = el.dataset.id;
+    } else if (a === "focus" && el.dataset.id !== undefined) {
+      // dataset.id may be "" — the crumbs' "‹ Full draw" chip and the strip's "Reset zoom"
+      // clear focus through this same branch (setFocus(undefined) pops our history entry).
+      setFocus(el.dataset.id || undefined);
       draw();
     } else if (a === "detail-expand") {
       state.detailExpanded = !state.detailExpanded;
@@ -382,7 +478,7 @@ export function createApp(root: HTMLElement): () => void {
       closeMatch();
       draw();
     } else if (a === "reset" || id === "r" || (id && id === state.focusId)) {
-      state.focusId = undefined; closeMatch(); state.pinnedId = undefined; draw();
+      setFocus(undefined); closeMatch(); state.pinnedId = undefined; draw();
     }
     // Selecting a slam/year/lens item from inside an open dropdown closes it → restore focus to its trigger.
     if (menuBefore && state.openMenu === undefined) ddTrigger(menuBefore)?.focus();
@@ -396,6 +492,18 @@ export function createApp(root: HTMLElement): () => void {
     highlightPath(el?.dataset.occupant || state.pinnedId || null);
   }, { signal });
   root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(state.pinnedId ?? null); }, { capture: true, signal });
+
+  // Browser Back/Forward (and the history.back() setFocus issues on clear): the browser
+  // has already moved, so ADOPT the entry's focus instead of writing history; a hash that
+  // no longer resolves (slam switched underneath it) normalizes away and is scrubbed so
+  // the URL stays honest. iOS back-swipe lands here too — it exits focus, not the app.
+  window.addEventListener("popstate", (e) => {
+    const before = state.focusId;
+    const f = (e.state as { f?: string } | null)?.f ?? (location.hash ? location.hash.slice(1) : undefined);
+    setFocus(f, true);
+    if (!state.focusId && location.hash) history.replaceState(null, "", location.pathname + location.search);
+    if (state.focusId !== before) draw();
+  }, { signal });
 
   // Outside-tap closes an open top-bar dropdown (no-op when nothing is open).
   document.addEventListener("pointerdown", (e) => {
@@ -428,6 +536,7 @@ export function createApp(root: HTMLElement): () => void {
 
   // Escape unwinds the most recently opened layer, one per press:
   // dropdown → match detail tier → match strip → lens drawer → pinned path → focused section.
+  // Focus stays the LAST rung — crumbs, the hub and browser Back are its primary exits.
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
@@ -435,7 +544,7 @@ export function createApp(root: HTMLElement): () => void {
     else if (state.selectedMatchId) { closeMatch(); draw(); }
     else if (state.panelOpen) { state.panelOpen = false; draw(); }
     else if (state.pinnedId) { state.pinnedId = undefined; draw(); }
-    else if (state.focusId) { state.focusId = undefined; draw(); }
+    else if (state.focusId) { setFocus(undefined); draw(); }
   }, { signal });
 
   draw(); // initial loading state

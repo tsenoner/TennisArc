@@ -323,6 +323,45 @@ describe("age + birthday helpers", () => {
   });
 });
 
+import { sectionTitle, roundAbbrev } from "./state";
+
+describe("sectionTitle", () => {
+  const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 7 });
+  const root = buildSunburst(s);
+
+  it("names the halves in draw-sheet language (r.0 = top of the sheet)", () => {
+    expect(sectionTitle(s, root, "r.0")).toBe("Top half");
+    expect(sectionTitle(s, root, "r.1")).toBe("Bottom half");
+  });
+
+  it("names a quarter after its occupant (placeholder until the drawn-top-seed owner lands)", () => {
+    const q = root.children[0].children[0]; // r.0.0 — a quarter, occupant decided (full draw played)
+    const last = s.players[q.occupant!].name.split(" ").slice(-1)[0];
+    expect(sectionTitle(s, root, "r.0.0")).toBe(`${last}'s quarter`);
+  });
+
+  it("falls back to the node's own round for deeper sections and occupant-less quarters", () => {
+    // depth 3 in a 32-draw is a Round-of-16 node, occupant or not
+    expect(sectionTitle(s, root, "r.0.0.0")).toBe("R16 section");
+    // an all-TBD quarter (no occupant, not even projected) names its round instead
+    const blank = structuredClone(root);
+    blank.children[0].children[0].occupant = null;
+    expect(sectionTitle(s, blank, "r.0.0")).toBe("QF section");
+  });
+
+  it("returns 'Full draw' for the root and '' for ids that don't resolve", () => {
+    expect(sectionTitle(s, root, "r")).toBe("Full draw");
+    expect(sectionTitle(s, root, "r.7.7")).toBe("");
+    expect(sectionTitle(s, root, "x.0")).toBe("");
+  });
+
+  it("roundAbbrev (moved here from render) keeps its abbreviations", () => {
+    expect(roundAbbrev(0, s.rounds)).toBe("R32");
+    expect(roundAbbrev(2, s.rounds)).toBe("QF");
+    expect(roundAbbrev(5, s.rounds)).toBe("Champion");
+  });
+});
+
 import { matchInsight } from "./state";
 
 describe("matchInsight", () => {
