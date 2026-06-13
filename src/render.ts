@@ -7,6 +7,8 @@ import type { Round, SlamIndex } from "./model";
 import type { Theme } from "./theme";
 import { flagEmoji, flagAssetUrl } from "./flags";
 import type { LeaderRow, SeedProgress, SeedSort, NationRow, InsightSide, MatchInsight } from "./state";
+import { roundAbbrev } from "./state";
+export { roundAbbrev } from "./state"; // moved to state.ts (sectionTitle needs it); re-exported so callers keep importing from here
 import { availableYears, slamsForYear } from "./slams";
 
 const PAD_ANGLE = 0.004;   // radians of gap between adjacent arcs
@@ -41,9 +43,99 @@ export function flagImg(iso3: string, h: number, alt = ""): string {
 /** A round name pinned to a ring's mid-radius, drawn as a faint axis at 12 o'clock. */
 export interface RingLabel { y: number; label: string; }
 
-/** Render the sunburst as a self-contained SVG string (centred), with optional write-once curved labels. */
+/** Pre-resolved quarter-owner corner label (the app maps state's QuarterOwner to display
+ *  fields). Order matters: index 0-3 → TR/BR/BL/TL corner and the Q1-Q4 caption. */
+export interface QuarterLabel {
+  nodeId: string;          // r.0.0 (TR), r.0.1 (BR), r.1.0 (BL), r.1.1 (TL)
+  playerId: string | null; // null = all-TBD quarter → caption-only label, still tappable
+  surname: string;         // "" when there is no owner
+  country: string;
+  seed: number | null;
+  out: boolean;            // eliminated owner: .q-out dims the name; "out" lives in the aria-label only
+}
+
+// Quarter-owner corner geometry (centre-relative offsets from the viewBox half-extent c).
+// The circle-in-square corners are dead space — the disc (radius c−8, 342 in the 700 box)
+// touches the box only at the cardinal points — and each quarter's mid-angle (π/4, 3π/4 …)
+// points exactly at "its" corner, so the handles live there at zero radius cost.
+// INVARIANT: the transparent hit rect must NEVER intersect the disc — it paints above the
+// arcs, so any overlap would silently steal R128 arc taps. The rect's nearest point to the
+// centre is its inner corner (c−150, c−56) = (200, 294) at c=350: |(200, 294)| ≈ 355.6 > 342.
+// To grow the tap target, extend ALONG the box edges (toward the cardinal points), never
+// inward. A render test asserts this invariant.
+// Text: columns at x = ±(c−14); the caption hugs the edge (|y| = c−28), the name sits
+// disc-side (baseline |y| = c−44 = 306) — circle half-width there is √(342²−306²) ≈ 153,
+// so a 14px surname reaching ~130px inward clears the disc comfortably.
+const Q_HIT_W = 150, Q_HIT_H = 56;     // hit rect hugging the corner (see invariant above)
+const Q_PAD_X = 14;                    // text column inset from the box edge
+const Q_NAME_PAD = 44, Q_CAP_PAD = 28; // name / caption baseline insets from the edge
+const Q_FLAG_W = 10, Q_FLAG_H = 7.5;   // flag-icons are 4:3
+
+const quarterCap = (q: QuarterLabel, i: number) => `Q${i + 1}${q.seed != null ? ` · seed ${q.seed}` : ""}`;
+const quarterAria = (q: QuarterLabel, i: number) =>
+  q.playerId ? `${q.surname}'s quarter · ${quarterCap(q, i)}${q.out ? " · out" : ""}` : `Quarter ${i + 1}`;
+
+/** The four tappable quarter-owner corner labels — quiet cartographic annotations, not
+ *  buttons: surname (the .ring-label halo recipe via CSS), a "Q1 · seed 1" caption, and a
+ *  flag <image> (NEVER emoji — WebKit won't paint them on SVG text). data-action="focus"
+ *  zooms the quarter on tap (labels aren't arcs, so this works on every lens — country
+ *  included) and data-occupant plugs into the existing hover highlight/readout pipeline.
+ *  Font sizes live in CSS, not attributes, so the ≤720px media bump works. */
+function quarterCorners(quarters: QuarterLabel[], c: number): string {
+  return quarters
+    .slice(0, 4)
+    .map((q, i) => {
+      const sx = i < 2 ? 1 : -1;              // r.0.* fills the right half (angle 0 at 12 o'clock, clockwise)
+      const sy = i === 0 || i === 3 ? -1 : 1; // TR (r.0.0) and TL (r.1.1) are the top corners
+      const end = sx > 0;                     // right corners read toward the edge → anchor end; left mirrored
+      const anchor = end ? ' text-anchor="end"' : "";
+      const tx = sx * (c - Q_PAD_X);
+      const nameY = sy * (c - Q_NAME_PAD);
+      const capY = sy * (c - Q_CAP_PAD);      // always nearer the edge than the name
+      const cap = quarterCap(q, i);
+      // NOTE: the svg root is role="img", which makes this aria-label PRESENTATIONAL to AT —
+      // the .sr-only q-owner-btn twins (renderQuarterFocusButtons) carry the real a11y.
+      const aria = quarterAria(q, i);
+      const name = q.surname
+        ? `<text class="q-name${q.surname.length > 16 ? " q-name-sm" : ""}" x="${tx}" y="${nameY}"${anchor}>${escapeHtml(q.surname)}</text>`
+        : "";
+      // the flag sits in the corner padding strip beyond the text column, level with the name
+      const flagUrl = q.playerId ? flagAssetUrl(q.country) : null;
+      const flag = flagUrl
+        ? `<image class="q-flag" href="${escapeHtml(flagUrl)}" x="${end ? tx + 2 : tx - 2 - Q_FLAG_W}" ` +
+          `y="${(nameY - 5 - Q_FLAG_H / 2).toFixed(2)}" width="${Q_FLAG_W}" height="${Q_FLAG_H}"></image>`
+        : "";
+      return (
+        `<g class="q-owner${q.out ? " q-out" : ""}" data-action="focus" data-id="${escapeHtml(q.nodeId)}" ` +
+        `data-occupant="${escapeHtml(q.playerId ?? "")}" aria-label="${escapeHtml(aria)}">` +
+        `<rect class="q-hit" x="${end ? c - Q_HIT_W : -c}" y="${sy > 0 ? c - Q_HIT_H : -c}" ` +
+        `width="${Q_HIT_W}" height="${Q_HIT_H}" fill="transparent"></rect>` +
+        flag + name +
+        `<text class="q-cap" x="${tx}" y="${capY}"${anchor}>${escapeHtml(cap)}</text>` +
+        `</g>`
+      );
+    })
+    .join("");
+}
+
+/** Visually-hidden HTML twins of the corner handles. The chart svg is role="img", so
+ *  everything inside it — including the .q-owner groups and their aria-labels — is
+ *  presentational to AT and unreachable by keyboard; without these, focus mode had NO
+ *  keyboard entry at all. The .sr-only buttons ride the same data-action="focus"
+ *  delegation (zero new JS) and the app renders them beside the chart whenever the
+ *  corner labels show (i.e. never while already focused). */
+export function renderQuarterFocusButtons(quarters: QuarterLabel[]): string {
+  return quarters.slice(0, 4)
+    .map((q, i) =>
+      `<button class="sr-only q-owner-btn" data-action="focus" data-id="${escapeHtml(q.nodeId)}">${escapeHtml(quarterAria(q, i))}</button>`)
+    .join("");
+}
+
+/** Render the sunburst as a self-contained SVG string (centred), with optional write-once
+ *  curved labels, a 12-o'clock round axis, and quarter-owner corner handles. */
 export function renderSunburst(
   arcs: LayoutArc[], color: ColorFn, size: number, labels?: SunburstLabels, rings?: RingLabel[],
+  quarters?: QuarterLabel[],
 ): string {
   const c = size / 2;
   const defs: string[] = [];
@@ -165,11 +257,15 @@ export function renderSunburst(
     })
     .join("");
 
+  // corner handles render AFTER the arcs — their hit rects paint on top, which is safe
+  // only because they never overlap the disc (the invariant documented at Q_HIT_W above)
+  const corners = quarters ? quarterCorners(quarters, c) : "";
+
   return (
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
     `role="img" aria-label="Tournament bracket sunburst">` +
     `<g transform="translate(${c},${c})" data-action="reset">` +
-    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}</g></svg>`
+    `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}${corners}</g></svg>`
   );
 }
 
@@ -397,6 +493,28 @@ export function renderCenterId(iso3: string, name: string, projected: boolean): 
     `${flagImg(iso3, 12)}<span>${escapeHtml(name)}</span></div>`;
 }
 
+/** Breadcrumb chips for a focused section: "‹ Full draw" (data-id="" on purpose — the
+ *  focus branch accepts the empty id as "clear"), one tappable chip per ancestor section,
+ *  then the current section's name as inert text. Rendered only while a focus is active. */
+export function renderCrumbs(trail: { id: string; label: string }[], current: string): string {
+  const chips = trail
+    .map((t) => `<button class="crumb" data-action="focus" data-id="${escapeHtml(t.id)}">${escapeHtml(t.label)}</button>`)
+    .join("");
+  return (
+    `<nav class="crumbs" aria-label="Zoom breadcrumbs">` +
+    `<button class="crumb" data-action="focus" data-id="">‹ Full draw</button>` +
+    chips +
+    `<span class="crumb cur">${escapeHtml(current)}</span></nav>`
+  );
+}
+
+/** Centre-pill fallback while a focused section has no known occupant yet: names the
+ *  section instead of a player (same pill chrome, no flag). */
+export function renderCenterSection(title: string): string {
+  if (!title) return "";
+  return `<div class="center-id center-sec"><span>${escapeHtml(title)}</span></div>`;
+}
+
 function insightScore(ins: MatchInsight): string {
   if (!ins.score || !ins.score.length) return ins.status === "live" ? "Live" : "—";
   return ins.score
@@ -410,13 +528,15 @@ function insightScore(ins: MatchInsight): string {
 function insightPlayer(side: InsightSide, win: boolean, rounds: Round[]): string {
   const tag = side.seed != null ? `#${side.ranking ?? "?"} · seed ${side.seed}`
     : side.ranking != null ? `#${side.ranking}` : "";
-  const path = `${roundAbbrev(side.roundReached, rounds)}${side.sec > 0 ? ` · ${formatDuration(side.sec)}` : ""}`;
+  // How deep their run went. Cumulative time-on-court is deliberately NOT repeated here —
+  // it already lives in the hover/pin readout.
+  const path = roundAbbrev(side.roundReached, rounds);
   const bd = side.age != null ? ` · ${side.age}y${side.birthdayNear ? ` 🎂 ${escapeHtml(side.birthday)}` : ""}` : "";
   return (
     `<div class="mi-pl${win ? " mi-win" : ""}">` +
     `<span class="mi-fl">${flagImg(side.country, 14, side.country)}</span>` +
     `<span class="mi-who"><b>${escapeHtml(side.name)}</b>${win ? ' <span class="mi-chk">✓</span>' : ""}` +
-    `<small>${escapeHtml(tag)} · ${escapeHtml(path)}${bd}</small></span></div>`
+    `<small>${escapeHtml([tag, path].filter(Boolean).join(" · "))}${bd}</small></span></div>`
   );
 }
 
@@ -430,30 +550,77 @@ function statBar(label: string, v: [number, number] | null): string {
   );
 }
 
-/** Rich match insight rendered in the panel column (replaces the lens panel while a match is selected). */
-export function renderMatchInsight(ins: MatchInsight, sofaUrl: string | null, nodeId: string, rounds: Round[]): string {
+/** One side of the strip's matchup row. Both name forms are always rendered — a pure CSS
+ *  media query picks the full name (wide) or the surname (≤960px), so no resize JS exists.
+ *  `rev` mirrors the right-hand side: name then flag, so the flags bracket the score. */
+function stripSide(side: InsightSide, win: boolean, rev: boolean): string {
+  const short = side.name.split(" ").slice(-1)[0] || side.name;
+  const name = `<span class="ms-name"><span class="nm-full">${escapeHtml(side.name)}</span>` +
+    `<span class="nm-short">${escapeHtml(short)}</span></span>`;
+  const chk = win ? '<span class="mi-chk">✓</span>' : "";
+  const flag = `<span class="ms-fl">${flagImg(side.country, 14, side.country)}</span>`;
+  return `<span class="ms-side">${rev ? `${name}${chk}${flag}` : `${flag}${name}${chk}`}</span>`;
+}
+
+/** Slim match context strip — an in-flow summary at the top of the wheel column on EVERY
+ *  viewport (the same dock pattern the readout already uses ≤960px). The wheel is never
+ *  covered; the heavy tail lives one tap away behind "Details ▾" (renderMatchDetail). */
+export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean }): string {
+  const live = ins.status === "live"
+    ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>` : "";
+  // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
+  // Only when the view already sits AT this match's own section does it flip to "Reset
+  // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
+  // never the nuclear reset: pin + match survive. Focused anywhere ELSE it stays "⊕ Zoom"
+  // so the strip can still drill into the selected match's section.
+  const zoom = opts.focused
+    ? `<button class="ms-zoom" data-action="focus" data-id="">Reset zoom</button>`
+    : `<button class="ms-zoom" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Zoom</button>`;
+  return (
+    `<div class="match-strip" role="region" aria-label="Match insight">` +
+    `<div class="ms-hd"><span class="ms-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}${live}</span>` +
+    `<button class="ms-more" data-action="detail-expand" aria-expanded="${opts.expanded}">Details ${opts.expanded ? "▴" : "▾"}</button>` +
+    zoom +
+    `<button class="ms-close" data-action="close-detail" aria-label="Close match">✕</button></div>` +
+    `<div class="ms-mu">${stripSide(ins.p1, ins.winner === "p1", false)}` +
+    `<div class="ms-score">${insightScore(ins)}</div>` +
+    `${stripSide(ins.p2, ins.winner === "p2", true)}</div>` +
+    `</div>`
+  );
+}
+
+/** On-demand match detail tier (the strip's "Details ▾"): per-player meta, badges, ELO
+ *  context, serve stats, duration and the SofaScore link. In-flow under the strip on
+ *  desktop; a fixed bottom sheet with the standard grip/✕ chrome on phones. Every piece
+ *  of its chrome (scrim, grip, ✕) collapses ONLY this tier — the strip stays. */
+export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rounds: Round[]): string {
+  // The "Upset" pill would triple-signal with the ELO line's accent — one signal only.
   const badges = ins.badges
-    .map((b) => `<span class="mi-bdg${b === "Upset" ? " up" : ""}">${escapeHtml(b)}</span>`)
+    .filter((b) => b !== "Upset")
+    .map((b) => `<span class="mi-bdg">${escapeHtml(b)}</span>`)
     .join("");
   const dur = ins.durationSec != null
     ? `⏱ ${formatDuration(ins.durationSec)}${ins.durationProvisional ? " (live)" : ""}` : "";
   const link = sofaUrl
     ? `<a class="mi-link" href="${sofaUrl}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";
   return (
-    // Scrim is inert on desktop; on phones it dims the bracket behind the bottom-sheet
-    // and tapping it closes the detail (same action as the back button).
-    `<div class="mi-scrim" data-action="close-detail" aria-hidden="true"></div>` +
-    `<aside class="panel match-insight" role="dialog" aria-label="Match insight">` +
-    `<div class="mi-hd"><button class="mi-back" data-action="close-detail">‹ back</button>` +
-    `<span class="mi-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}</span></div>` +
+    // Scrim is inert on desktop; on phones it dims the bracket behind the bottom sheet
+    // and tapping it collapses the detail tier (the strip and selection survive).
+    `<div class="mi-scrim" data-action="detail-expand" aria-hidden="true"></div>` +
+    // role="region", NOT dialog: on desktop this is an in-flow disclosure, and the phone
+    // sheet has no focus containment — claiming a modal dialog would be dishonest to AT.
+    // tabindex="-1" makes the region itself the programmatic focus target on expand
+    // (desktop hides .sheet-bar, so focusing its ✕ there would silently no-op to <body>).
+    `<aside class="mi-detail" role="region" aria-label="Match details" tabindex="-1">` +
+    `<div class="sheet-bar"><button class="sheet-grip" data-action="detail-expand" aria-label="Collapse details"><span></span></button>` +
+    `<button class="sheet-close" data-action="detail-expand" aria-label="Close details">✕</button></div>` +
     `<div class="mi-mu">${insightPlayer(ins.p1, ins.winner === "p1", rounds)}` +
-    `<div class="mi-score">${insightScore(ins)}</div>` +
     `${insightPlayer(ins.p2, ins.winner === "p2", rounds)}</div>` +
     (badges ? `<div class="mi-badges">${badges}</div>` : "") +
     statBar("Aces", ins.aces) + statBar("Double faults", ins.doubleFaults) +
-    (ins.eloLine ? `<div class="mi-elo">${escapeHtml(ins.eloLine)}${ins.upset ? " — upset" : ""}</div>` : "") +
+    (ins.eloLine ? `<div class="mi-elo${ins.upset ? " upset" : ""}">${escapeHtml(ins.eloLine)}</div>` : "") +
     (dur ? `<div class="mi-dur">${dur}</div>` : "") +
-    `<div class="mi-acts">${link}<button class="mi-focus" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Focus this section</button></div>` +
+    link +
     `</aside>`
   );
 }
@@ -506,17 +673,6 @@ export function renderSeedPanel(prog: SeedProgress, rounds: Round[]): string {
     (rows ? `<div class="panel-sub">${sub}</div><ol class="sp-list">${rows}</ol>` : `<div class="panel-empty">No data for this draw</div>`) +
     `</aside>`
   );
-}
-
-/** Short round label from a player's furthest-reached round index. */
-export function roundAbbrev(reached: number, rounds: Round[]): string {
-  if (reached >= rounds.length) return "Champion";
-  const name = rounds[reached]?.name ?? `R${reached}`;
-  return name
-    .replace(/^Round of\s*/i, "R")
-    .replace(/^Quarterfinal.*/i, "QF")
-    .replace(/^Semifinal.*/i, "SF")
-    .replace(/^Final$/i, "F");
 }
 
 export function renderCountryPanel(rows: NationRow[], selected: string | undefined, rounds: Round[]): string {

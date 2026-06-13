@@ -323,6 +323,97 @@ describe("age + birthday helpers", () => {
   });
 });
 
+import { sectionTitle, roundAbbrev } from "./state";
+
+describe("sectionTitle", () => {
+  const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 7 });
+  const root = buildSunburst(s);
+
+  it("names the halves in draw-sheet language (r.0 = top of the sheet)", () => {
+    expect(sectionTitle(s, root, "r.0")).toBe("Top half");
+    expect(sectionTitle(s, root, "r.1")).toBe("Bottom half");
+  });
+
+  it("names a quarter for its DRAWN top seed, not its current occupant", () => {
+    // owner = min seed among the quarter's entrants (p0..p7 → seed 1), whoever leads it now
+    expect(sectionTitle(s, root, "r.0.0")).toBe("0's quarter");   // "Player 0", seed 1
+    expect(sectionTitle(s, root, "r.1.1")).toBe("24's quarter");  // "Player 24", seed 25
+  });
+
+  it("falls back to the node's own round for deeper sections and owner-less quarters", () => {
+    // depth 3 in a 32-draw is a Round-of-16 node, occupant or not
+    expect(sectionTitle(s, root, "r.0.0.0")).toBe("R16 section");
+    // an all-TBD quarter (every drawn slot unknown) has no owner — it names its round instead
+    const blank = structuredClone(root);
+    const strip = (n: typeof root) => { n.occupant = null; n.children.forEach(strip); };
+    strip(blank.children[0].children[0]);
+    expect(sectionTitle(s, blank, "r.0.0")).toBe("QF section");
+  });
+
+  it("returns 'Full draw' for the root and '' for ids that don't resolve", () => {
+    expect(sectionTitle(s, root, "r")).toBe("Full draw");
+    expect(sectionTitle(s, root, "r.7.7")).toBe("");
+    expect(sectionTitle(s, root, "x.0")).toBe("");
+  });
+
+  it("roundAbbrev (moved here from render) keeps its abbreviations", () => {
+    expect(roundAbbrev(0, s.rounds)).toBe("R32");
+    expect(roundAbbrev(2, s.rounds)).toBe("QF");
+    expect(roundAbbrev(5, s.rounds)).toBe("Champion");
+  });
+});
+
+import { quarterOwners } from "./state";
+
+describe("quarterOwners", () => {
+  // synthetic 32-draw: entrants p0..p31 in draw order, seed i+1, ranking i+1 —
+  // quarters hold p0-7 / p8-15 / p16-23 / p24-31 (TR r.0.0, BR r.0.1, BL r.1.0, TL r.1.1)
+  it("crowns the drawn top seed of each quarter, in TR/BR/BL/TL node order", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 7 });
+    const owners = quarterOwners(s, buildSunburst(s))!;
+    expect(owners.map((o) => o.nodeId)).toEqual(["r.0.0", "r.0.1", "r.1.0", "r.1.1"]);
+    expect(owners.map((o) => o.playerId)).toEqual(["p0", "p8", "p16", "p24"]);
+    expect(owners.map((o) => o.seed)).toEqual([1, 9, 17, 25]);
+  });
+
+  it("keeps an eliminated owner, flagged out (the label dims; the name stays)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 7 });
+    s.matches["0-0"] = { ...s.matches["0-0"], winner: "p2" }; // seed 1 (p0) falls in round 0
+    const owners = quarterOwners(s, buildSunburst(s))!;
+    expect(owners[0]).toMatchObject({ playerId: "p0", seed: 1, out: true });
+  });
+
+  it("breaks a seed tie by better ranking", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 7 });
+    s.players["p0"] = { ...s.players["p0"], seed: null };          // vacate seed 1
+    s.players["p3"] = { ...s.players["p3"], seed: 2, ranking: 1 }; // ties p1's seed 2, better rank
+    const owners = quarterOwners(s, buildSunburst(s))!;
+    expect(owners[0]).toMatchObject({ playerId: "p3", seed: 2 });
+  });
+
+  it("falls back to the best-ranked entrant in a seedless quarter", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 7 });
+    for (let i = 0; i < 8; i++) s.players[`p${i}`] = { ...s.players[`p${i}`], seed: null };
+    s.players["p0"] = { ...s.players["p0"], ranking: 50 };          // demote the natural first
+    const owners = quarterOwners(s, buildSunburst(s))!;
+    expect(owners[0]).toMatchObject({ playerId: "p1", seed: null }); // ranking 2 leads the seedless quarter
+  });
+
+  it("owns nothing in an all-TBD quarter (caption-only label, the others still resolve)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 7, completedRounds: 0 });
+    // blank the TR quarter's drawn slots: round-0 matches 0-0..0-3 feed QF 0 (players p0..p7)
+    for (const id of ["0-0", "0-1", "0-2", "0-3"]) s.matches[id] = { ...s.matches[id], p1: null, p2: null };
+    const owners = quarterOwners(s, buildSunburst(s))!;
+    expect(owners[0]).toMatchObject({ playerId: null, seed: null, out: false });
+    expect(owners[1].playerId).toBe("p8");
+  });
+
+  it("returns null when the draw has no quarter structure (fewer than 3 rounds)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 4, seed: 1 });
+    expect(quarterOwners(s, buildSunburst(s))).toBeNull();
+  });
+});
+
 import { matchInsight } from "./state";
 
 describe("matchInsight", () => {

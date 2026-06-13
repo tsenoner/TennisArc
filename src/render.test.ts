@@ -4,7 +4,7 @@ import { buildSunburst } from "./state";
 import { layout } from "./layout";
 import type { LayoutArc } from "./layout";
 import { colorScale } from "./color";
-import { renderSunburst, renderControls } from "./render";
+import { renderSunburst, renderControls, renderQuarterFocusButtons } from "./render";
 import type { SlamIndex } from "./model";
 
 describe("renderSunburst", () => {
@@ -84,6 +84,75 @@ describe("renderSunburst labels", () => {
     const svg = renderSunburst([bigArc], color, 700, { ...labels, image: () => null });
     expect(svg).toContain("<textPath");
     expect(svg).not.toContain("arc-flag");
+  });
+});
+
+describe("renderSunburst quarter-owner corner labels", () => {
+  const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 7 });
+  const RADIUS = 342; // the app's layout radius: SIZE/2 - 8 — the disc the hit rects must clear
+  const arcs = layout(buildSunburst(s), RADIUS);
+  const quarters = [
+    { nodeId: "r.0.0", playerId: "p0", surname: "Sinner", country: "ITA", seed: 1, out: true },
+    { nodeId: "r.0.1", playerId: "p8", surname: "Alcaraz", country: "ESP", seed: 9, out: false },
+    { nodeId: "r.1.0", playerId: "p16", surname: "Zverev", country: "GER", seed: 17, out: false },
+    { nodeId: "r.1.1", playerId: null, surname: "", country: "", seed: null, out: false },
+  ];
+  const svg = renderSunburst(arcs, colorScale("time", s), 700, undefined, undefined, quarters);
+  const groups = svg.split('<g class="q-owner').slice(1).map((g) => g.split("</g>")[0]);
+
+  it("emits four focus handles in TR/BR/BL/TL node order, with occupant + caption", () => {
+    expect(groups).toHaveLength(4);
+    const ids = [...svg.matchAll(/<g class="q-owner[^"]*" data-action="focus" data-id="([^"]*)"/g)].map((m) => m[1]);
+    expect(ids).toEqual(["r.0.0", "r.0.1", "r.1.0", "r.1.1"]);
+    expect(groups[0]).toContain('data-occupant="p0"');
+    expect(groups[0]).toContain(">Q1 · seed 1</text>");
+    expect(groups[0]).toContain(">Sinner</text>");
+    // right corners anchor end at x = 336; left corners mirror at x = -336, anchor start
+    expect(groups[0]).toContain('x="336" y="-306" text-anchor="end">Sinner</text>');
+    expect(groups[2]).toContain('x="-336" y="306">Zverev</text>');
+    // flags are bundled SVG <image>s — never emoji (WebKit won't paint them on SVG text)
+    expect(groups[0]).toMatch(/<image class="q-flag" href="[^"]*it[^"]*\.svg"/);
+    expect(svg).not.toMatch(/[\u{1F1E6}-\u{1F1FF}]/u);
+  });
+
+  it("keeps every hit rect fully outside the disc (it paints above the arcs and would steal taps)", () => {
+    const rects = [...svg.matchAll(/<rect class="q-hit" x="(-?\d+)" y="(-?\d+)" width="(\d+)" height="(\d+)"/g)]
+      .map((m) => m.slice(1).map(Number));
+    expect(rects).toHaveLength(4);
+    for (const [x, y, w, h] of rects) {
+      // nearest point of the rect to the disc centre (0,0), clamped per axis
+      const nx = Math.min(Math.max(0, x), x + w);
+      const ny = Math.min(Math.max(0, y), y + h);
+      expect(Math.hypot(nx, ny)).toBeGreaterThan(RADIUS);
+    }
+  });
+
+  it("dims an eliminated owner via .q-out, keeping 'out' in the aria-label only", () => {
+    expect(svg).toContain('<g class="q-owner q-out" data-action="focus" data-id="r.0.0"');
+    expect(svg).not.toContain('q-out" data-action="focus" data-id="r.0.1'); // survivors stay undimmed
+    expect(groups[0]).toContain("aria-label=\"Sinner&#39;s quarter · Q1 · seed 1 · out\"");
+    expect(svg).not.toContain("· out</text>"); // the visible caption never says it — colour + aria carry the state
+  });
+
+  it("renders an all-TBD quarter caption-only (no name, no flag) but still tappable", () => {
+    expect(groups[3]).toContain('data-occupant=""');
+    expect(groups[3]).toContain('aria-label="Quarter 4"');
+    expect(groups[3]).toContain(">Q4</text>");
+    expect(groups[3]).not.toContain("q-name");
+    expect(groups[3]).not.toContain("<image");
+    expect(groups[3]).toContain('<rect class="q-hit"');
+  });
+
+  it("renders no corner labels when the quarters param is omitted", () => {
+    expect(renderSunburst(arcs, colorScale("time", s), 700)).not.toContain("q-owner");
+  });
+
+  it("renders sr-only keyboard twins of the handles (the svg is role=img — its labels are presentational)", () => {
+    const html = renderQuarterFocusButtons(quarters);
+    expect(html.match(/<button class="sr-only q-owner-btn"/g)).toHaveLength(4);
+    expect(html).toContain('data-action="focus" data-id="r.0.0"');     // same delegation as the labels
+    expect(html).toContain("Sinner&#39;s quarter · Q1 · seed 1 · out"); // full aria text as the button name
+    expect(html).toContain(">Quarter 4<");                              // the all-TBD quarter stays focusable
   });
 });
 
@@ -184,7 +253,7 @@ describe("renderCountryPanel", () => {
   });
 });
 
-import { renderCenterId } from "./render";
+import { renderCenterId, renderCenterSection } from "./render";
 
 describe("renderCenterId", () => {
   it("carries the flag + name; projection italicizes; empty name renders nothing", () => {
@@ -194,5 +263,14 @@ describe("renderCenterId", () => {
     expect(html).not.toContain("projected");
     expect(renderCenterId("SRB", "Djokovic", true)).toContain("projected");
     expect(renderCenterId("SRB", "", false)).toBe("");
+  });
+});
+
+describe("renderCenterSection", () => {
+  it("renders the quieter section pill (occupant unknown); empty title renders nothing", () => {
+    const html = renderCenterSection("Top half");
+    expect(html).toContain('class="center-id center-sec"');
+    expect(html).toContain("Top half");
+    expect(renderCenterSection("")).toBe("");
   });
 });
