@@ -20,15 +20,28 @@ export async function reindex(dir = OUT_DIR): Promise<SlamIndex> {
     .map((f) => f.split(sep).join("/"))
     .filter((f) => SNAP_RE.test(f))
     .sort();
-  const entries: AvailableSlam[] = [];
+  const snaps: Snapshot[] = [];
   for (const f of files) {
-    const snap = JSON.parse(await readFile(resolve(dir, f), "utf8")) as Snapshot;
-    entries.push(availableSlamOf(snap));
+    snaps.push(JSON.parse(await readFile(resolve(dir, f), "utf8")) as Snapshot);
   }
+  // Classify status against the wall clock advanced past any closed window, so a never-decided final
+  // on the LATEST slam still degrades to `complete` once its event is over — matching the live ingest
+  // path and completing the issue #19 recurrence guard (a file-stamp clock pinned to the newest slam's
+  // own in-window generation time would keep it `live` forever). `now` is at least the newest stamp
+  // (a slam mid-scrape classifies correctly) and at least real time. `generatedAt` stays file-derived,
+  // so the manifest's identity field is stable and back-to-back rebuilds are byte-identical; only a
+  // genuine window-boundary crossing moves a status.
+  // Consequently `status` is NOT a pure function of the on-disk files — a genuine window-boundary
+  // crossing between two runs can flip a status — whereas `generatedAt` stays file-derived, so the
+  // manifest identity and same-instant rebuilds remain byte-identical (the determinism test asserts
+  // only same-instant equality).
+  const stamp = snaps.reduce((max, s) => (s.generatedAt > max ? s.generatedAt : max), "");
+  const now = new Date(Math.max(stamp ? Date.parse(stamp) : 0, Date.now()));
+  const entries: AvailableSlam[] = snaps.map((snap) => availableSlamOf(snap, now));
   entries.sort((a, b) => b.year - a.year || a.slam.localeCompare(b.slam) || a.tour.localeCompare(b.tour));
   return {
     schemaVersion: 2,
-    generatedAt: entries.reduce((max, e) => (e.generatedAt > max ? e.generatedAt : max), ""),
+    generatedAt: stamp,
     slams: entries,
   };
 }

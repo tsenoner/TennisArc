@@ -1,4 +1,5 @@
 import type { Match, Player, Tour } from "../src/model";
+import { ROUND, TOURNEY, fullKey, pairKey, sigKey } from "./names";
 
 // Historical durations come from Jeff Sackmann's tennis_atp / tennis_wta CSVs (CC BY-NC-SA 4.0):
 // SofaScore's time.periodN is absent pre-mid-2014, has whole-event holes, and counts rain/curfew
@@ -22,42 +23,12 @@ export const MAX_SANE_SEC = 43_200;
 // differ in trust, so they get different ceilings — never widen this one to MAX_SANE_SEC.
 export const MAX_LOCAL_SEC = 21_600;
 
-// Sackmann tourney_name variants per slam key (compared lowercased; 2024 files say "Us Open").
-const TOURNEY: Record<string, string[]> = {
-  "australian-open": ["australian open"],
-  "roland-garros": ["roland garros", "french open"],
-  wimbledon: ["wimbledon"],
-  "us-open": ["us open"],
-};
-const ROUND: Record<string, number> = { R128: 0, R64: 1, R32: 2, R16: 3, QF: 4, SF: 5, F: 6 };
-
 export interface SlamDurationRow {
   roundIndex: number;
   winnerName: string;
   loserName: string;
   durationSec: number | null;
 }
-
-/** Lowercased letter-only name tokens. Hyphens split tokens (Auger-Aliassime ↔ "Auger Aliassime");
- *  apostrophes don't (O'Connell ↔ "Oconnell"). Ł/ł need an explicit map — NFD can't decompose them. */
-function nameTokens(name: string): string[] {
-  return name
-    .replace(/[Łł]/g, "l")
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .split(/[\s-]+/)
-    .map((t) => t.replace(/[^a-z]/g, ""))
-    .filter(Boolean);
-}
-
-const fullKey = (name: string): string => nameTokens(name).join("");
-/** Abbreviation-tolerant signature: surname + first initial ("A. van Uytvanck" ↔ "Alison Van Uytvanck"). */
-const sigKey = (name: string): string => {
-  const t = nameTokens(name);
-  return t.length ? `${t[t.length - 1]}:${t[0][0]}` : "";
-};
-const pairKey = (roundIndex: number, a: string, b: string): string => `${roundIndex}|${[a, b].sort().join("~")}`;
 
 /** Parse a Sackmann yearly matches CSV down to one slam's main-draw duration rows. The bare-`,`
  *  split is safe for Sackmann's quote-free schema (none of the columns used carry a comma); it

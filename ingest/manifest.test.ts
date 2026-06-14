@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { slamStatus, availableSlamOf } from "./manifest";
 import type { Match, Snapshot } from "../src/model";
 
-function snap(matches: Partial<Match>[]): Snapshot {
+function snap(matches: Partial<Match>[], tournament: Partial<Snapshot["tournament"]> = {}): Snapshot {
   const m: Record<string, Match> = {};
   matches.forEach((p, i) => {
     m[String(i)] = {
@@ -14,26 +14,40 @@ function snap(matches: Partial<Match>[]): Snapshot {
   return {
     schemaVersion: 2, generatedAt: "2026-06-09T00:00:00.000Z", tour: "ATP",
     tournament: { slam: "roland-garros", name: "Roland Garros", year: 2026, surface: "Clay",
-      sofaUniqueTournamentId: 2480, sofaSeasonId: 85951, drawSize: 128 },
+      sofaUniqueTournamentId: 2480, sofaSeasonId: 85951, drawSize: 128, ...tournament },
     players: {}, matches: m, rounds: [],
   };
 }
 
+// RG 2026 window is [2026-05-21, 2026-06-09).
+const D = (s: string): Date => new Date(s);
+
 describe("slamStatus", () => {
-  it("is live when any match is live", () => {
-    expect(slamStatus(snap([{ nextMatchId: null, status: "finished", winner: "p1" }, { id: "1", nextMatchId: "x", status: "live" }]))).toBe("live");
+  it("classifies a past slam with a scheduled (never-decided) final as complete, not live", () => {
+    // the issue #19 regression: an unscraped final must not keep an old slam 'live'
+    expect(slamStatus(snap([{ nextMatchId: null, status: "scheduled", winner: null }], { year: 2021 }), D("2026-06-12T00:00:00Z"))).toBe("complete");
   });
-  it("is complete when the final (nextMatchId null) is finished and nothing is live", () => {
-    expect(slamStatus(snap([{ nextMatchId: null, status: "finished", winner: "p1" }]))).toBe("complete");
+  it("is live when in-window and a match is in play", () => {
+    expect(slamStatus(snap([{ nextMatchId: null, status: "scheduled" }, { id: "1", nextMatchId: "x", status: "live" }]), D("2026-05-25T00:00:00Z"))).toBe("live");
   });
-  it("is live when the final is not yet finished", () => {
-    expect(slamStatus(snap([{ nextMatchId: null, status: "scheduled" }]))).toBe("live");
+  it("is live when in-window and the draw is up but the final isn't decided", () => {
+    expect(slamStatus(snap([{ nextMatchId: null, status: "scheduled" }]), D("2026-05-22T00:00:00Z"))).toBe("live");
+  });
+  it("is complete when in-window and the final is decided", () => {
+    expect(slamStatus(snap([{ nextMatchId: null, status: "finished", winner: "p1" }]), D("2026-06-08T00:00:00Z"))).toBe("complete");
+  });
+  it("is upcoming when the event window hasn't opened yet", () => {
+    expect(slamStatus(snap([{ nextMatchId: null, status: "scheduled" }], { slam: "us-open", name: "US Open", surface: "Hard" }), D("2026-06-12T00:00:00Z"))).toBe("upcoming");
+  });
+  it("falls back to the final-decided test for an unknown slam (no window)", () => {
+    expect(slamStatus(snap([{ nextMatchId: null, status: "finished", winner: "p1" }], { slam: "atp-finals" }), D("2026-06-12T00:00:00Z"))).toBe("complete");
+    expect(slamStatus(snap([{ nextMatchId: null, status: "scheduled" }], { slam: "atp-finals" }), D("2026-06-12T00:00:00Z"))).toBe("live");
   });
 });
 
 describe("availableSlamOf", () => {
-  it("derives a manifest entry from a snapshot", () => {
-    expect(availableSlamOf(snap([{ nextMatchId: null, status: "finished", winner: "p1" }]))).toEqual({
+  it("derives a manifest entry from a snapshot, threading now into status", () => {
+    expect(availableSlamOf(snap([{ nextMatchId: null, status: "finished", winner: "p1" }]), D("2026-06-08T00:00:00Z"))).toEqual({
       tour: "ATP", year: 2026, slam: "roland-garros", name: "Roland Garros", surface: "Clay",
       status: "complete", generatedAt: "2026-06-09T00:00:00.000Z", drawSize: 128,
     });

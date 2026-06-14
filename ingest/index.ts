@@ -77,7 +77,7 @@ async function publishSlam(cfg: SlamConfig, isoNow: string, nowSec: number): Pro
       await writeFile(file, JSON.stringify(snap));
       const played = Object.values(snap.matches).filter((m) => m.status !== "scheduled" && m.status !== "notstarted").length;
       console.log(`wrote ${snapshotPath(tour, cfg.year, cfg.slam)}: ${Object.keys(snap.matches).length} matches (${played} played)`);
-      entries.push(availableSlamOf(snap));
+      entries.push(availableSlamOf(snap, new Date(isoNow)));
     } catch (err) {
       console.error(`ingest ${cfg.slam} ${tour} failed (keeping last-good):`, err);
     }

@@ -41,6 +41,22 @@ describe("pickDefaultSlam", () => {
     const idx = index([slam({ year: 2024, slam: "us-open", status: "complete" }), slam({ year: 2026, slam: "roland-garros", status: "complete" })]);
     expect(pickDefaultSlam(idx, "ATP")).toEqual({ year: 2026, slam: "roland-garros" });
   });
+  it("opens the latest tournament when every slam is complete", () => {
+    const idx = index([
+      slam({ year: 2021, slam: "us-open", status: "complete" }),
+      slam({ year: 2026, slam: "roland-garros", status: "complete" }),
+      slam({ year: 2024, slam: "wimbledon", status: "complete" }),
+    ]);
+    expect(pickDefaultSlam(idx, "ATP")).toEqual({ year: 2026, slam: "roland-garros" });
+  });
+  it("does not hijack the boot pick with an old slam once spurious 'live' is gone (issue #19 regression)", () => {
+    // before the fix the 2021 US Open was wrongly 'live' and won the pick; now everything past is complete
+    const idx = index([
+      slam({ year: 2021, slam: "us-open", status: "complete" }),
+      slam({ year: 2026, slam: "australian-open", status: "complete" }),
+    ]);
+    expect(pickDefaultSlam(idx, "ATP")).toEqual({ year: 2026, slam: "australian-open" });
+  });
   it("returns null when the tour has no slams", () => {
     expect(pickDefaultSlam(index([slam({ tour: "WTA" })]), "ATP")).toBeNull();
   });
