@@ -3,7 +3,7 @@ import type { Tour } from "../src/model";
 import { computeRatingsAsOfSorted } from "./historical-elo";
 import { loadSorted } from "./calibrate-elo";
 import { ATP_ELO_CONFIG, WTA_ELO_CONFIG } from "./elo-config";
-import { normalizeName } from "./elo";
+import { fullKey } from "./names";
 import ref from "./fixtures/ta-elo-reference.json";
 
 // Regression guard: re-deriving Elo to "today" must still reproduce the pinned live Tennis Abstract
@@ -17,9 +17,12 @@ import ref from "./fixtures/ta-elo-reference.json";
 // TA drifts weekly: when these bands fail for non-bug reasons, re-capture the fixture deliberately
 // (.scratch/capture-ta-reference.ts) and re-run the calibration.
 
+// Bands sit ~3x the observed top-18 median |error| (ATP overall 8 / WTA 5; ATP grass ~71 is the known
+// thin-sample weak spot), leaving room for TA's weekly drift while still tripping on a gross regression
+// (reverting the 50/50 blend or the qual/challenger scope blows overall past 200).
 const BANDS: Record<Tour, { overall: number; hard: number; clay: number; grass: number; minJoin: number }> = {
-  ATP: { overall: 45, hard: 60, clay: 60, grass: 110, minJoin: 16 },
-  WTA: { overall: 30, hard: 45, clay: 45, grass: 70, minJoin: 16 },
+  ATP: { overall: 30, hard: 35, clay: 30, grass: 100, minJoin: 16 },
+  WTA: { overall: 20, hard: 35, clay: 35, grass: 55, minJoin: 16 },
 };
 
 const medianAbs = (a: number[]): number => {
@@ -36,15 +39,17 @@ run(`Elo reproduces Tennis Abstract within calibrated bands (TA as-of ${ref.asOf
     test(`${tour}: median |error| stays within band`, async () => {
       const sorted = await loadSorted(tour, new Date().getUTCFullYear());
       const config = tour === "ATP" ? ATP_ELO_CONFIG : WTA_ELO_CONFIG;
-      const { byId } = computeRatingsAsOfSorted(sorted, 99999999, config);
-      const ours = new Map<string, { overall: number; hard: number | null; clay: number | null; grass: number | null }>();
-      for (const c of byId.values()) { const k = normalizeName(c.name); if (k) ours.set(k, c); }
+      // Freeze at the board's as-of date (real cutoff, not the all-rows sentinel) so the injury/absence
+      // dock applies to players the live board has docked for inactivity.
+      const asOf = Number(ref.asOf.replace(/-/g, ""));
+      // Dominant-id join (byName), same as production, so fragmented players aren't naive-join artifacts.
+      const { byName } = computeRatingsAsOfSorted(sorted, asOf, config);
 
       const players = (ref as any)[tour.toLowerCase()] as Array<{ name: string; overall: number; hard: number | null; clay: number | null; grass: number | null }>;
       const d: number[] = [], dh: number[] = [], dc: number[] = [], dg: number[] = [];
       let joined = 0;
       for (const p of players) {
-        const o = ours.get(normalizeName(p.name));
+        const o = byName.get(fullKey(p.name));
         if (!o) continue;
         joined++;
         d.push(o.overall - p.overall);

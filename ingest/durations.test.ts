@@ -135,6 +135,7 @@ test("qualChallUrl builds the qual/challenger file URL per tour", () => {
 
 test("keepWtaQualItf keeps >=50K ITF tiers and all non-numeric (non-ITF) levels", () => {
   expect(keepWtaQualItf("50")).toBe(true);
+  expect(keepWtaQualItf("60")).toBe(true);    // $60K is >= $50K (was previously omitted)
   expect(keepWtaQualItf("100")).toBe(true);
   expect(keepWtaQualItf("25")).toBe(false);   // sub-$50K ITF -> excluded
   expect(keepWtaQualItf("15")).toBe(false);

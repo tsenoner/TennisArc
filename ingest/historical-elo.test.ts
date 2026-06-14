@@ -13,6 +13,8 @@ import {
   sortEloRows,
   applyHistoricalElo,
   DEFAULT_ELO_CONFIG,
+  activeLayoffDays,
+  layoffPenalty,
   type EloConfig,
   type EloMatchRow,
 } from "./historical-elo";
@@ -340,4 +342,33 @@ test("byName still drops genuinely ambiguous same-name ids with comparable match
   ];
   const { byName } = computeRatingsAsOf(rows, 20240201);
   expect(byName.get("twinname")).toBeUndefined(); // 2 vs 2 matches -> ambiguous -> dropped
+});
+
+describe("injury/absence layoff", () => {
+  it("layoffPenalty: 0 below 8wk, 100 at the trigger, 150 at >=1yr, interpolating between", () => {
+    expect(layoffPenalty(55)).toBe(0);
+    expect(layoffPenalty(56)).toBe(100);
+    expect(layoffPenalty(365)).toBe(150);
+    expect(layoffPenalty(2000)).toBe(150);
+    expect(layoffPenalty(56 + (365 - 56) / 2)).toBeCloseTo(125, 6);
+  });
+
+  it("counts only competitive-season inactivity (off-season / short season excluded)", () => {
+    // ATP Finals (~mid-Nov) to the first event of January is pure off-season -> ~0 active days.
+    expect(activeLayoffDays(20251116, 20260105)).toBeLessThan(56);
+    // A 3-month mid-season gap (inside the Feb–Oct window) counts almost in full.
+    expect(activeLayoffDays(20250301, 20250601)).toBeGreaterThan(85);
+    // The all-rows sentinel yields 0 (callers stay date-agnostic).
+    expect(activeLayoffDays(20240301, 99999999)).toBe(0);
+  });
+
+  it("docks a player who is inactive (mid-season) as of the cutoff, by exactly layoffPenalty", () => {
+    const rows: EloMatchRow[] = [
+      seedRow({ winnerId: "1", winnerName: "Vet", loserId: "2", loserName: "Foe", tourneyDate: 20240301 }),
+    ];
+    const active = computeRatingsAsOf(rows, 20240315).byId.get("1")!.overall; // ~2 wk later: no dock
+    const absent = computeRatingsAsOf(rows, 20240801).byId.get("1")!.overall; // ~5 mo later: docked
+    expect(absent).toBeLessThan(active);
+    expect(active - absent).toBeCloseTo(layoffPenalty(activeLayoffDays(20240301, 20240801)), 6);
+  });
 });

@@ -25,8 +25,10 @@ export async function fetchQualChallCsv(tour: Tour, year: number): Promise<strin
   return res.text();
 }
 
-/** WTA ITF tiers we count (>= $50K). ATP qual_chall needs no prize filter (all challengers count). */
-export const WTA_ITF_MIN_TIERS = new Set(["50", "75", "80", "100", "125"]);
+/** WTA ITF prize tiers we count (TA's rule is ">= $50K"): 50, 60, 75, 80, 100, 125. Including the $60K
+ *  tier slightly improves our match to TA's board once the injury dock is tour-scaled. ATP qual_chall
+ *  needs no prize filter (all challengers count). ($60K was previously omitted, dropping ~6.7k rows.) */
+export const WTA_ITF_MIN_TIERS = new Set(["50", "60", "75", "80", "100", "125"]);
 
 /** Keep a WTA qual_itf row only if its tourney_level is a >= $50K ITF tier, OR a non-ITF level
  *  (letters like W/P/PM/I/G/M — i.e. not a bare dollar-tier number). Sub-$50K numeric tiers drop. */
