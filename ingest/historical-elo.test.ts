@@ -268,6 +268,19 @@ describe("applyHistoricalElo", () => {
   });
 });
 
+test("parseEloMatchesCsv drops rows whose level the predicate rejects", () => {
+  const csv = [
+    "tourney_name,surface,tourney_date,winner_id,loser_id,winner_name,loser_name,round,tourney_level",
+    "A,Hard,20240101,1,2,W A,L B,R32,C",   // level C -> kept by predicate below
+    "B,Hard,20240101,3,4,W C,L D,R32,15",  // level 15 -> rejected
+  ].join("\n");
+  const all = parseEloMatchesCsv(csv);
+  expect(all).toHaveLength(2); // default keeps everything
+  const filtered = parseEloMatchesCsv(csv, (lvl) => lvl !== "15");
+  expect(filtered).toHaveLength(1);
+  expect(filtered[0].level).toBe("C");
+});
+
 test("parseEloMatchesCsv carries round and level for seeding", () => {
   const csv = [
     "tourney_name,surface,tourney_date,winner_id,loser_id,winner_name,loser_name,round,tourney_level",

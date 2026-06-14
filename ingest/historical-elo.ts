@@ -68,7 +68,10 @@ const SURFACES: Record<string, EloSurface> = { Hard: "Hard", Clay: "Clay", Grass
  * for Sackmann's quote-free schema. Rows with an empty winner/loser id or a non-numeric tourney_date
  * are skipped (can't be played into the engine). Unknown/empty surface maps to null (overall-only).
  */
-export function parseEloMatchesCsv(csv: string): EloMatchRow[] {
+export function parseEloMatchesCsv(
+  csv: string,
+  keepLevel: (level: string) => boolean = () => true,
+): EloMatchRow[] {
   const lines = csv.split(/\r?\n/);
   const header = lines[0]?.split(",") ?? [];
   const col = (n: string): number => header.indexOf(n);
@@ -93,6 +96,8 @@ export function parseEloMatchesCsv(csv: string): EloMatchRow[] {
     if (!winnerId || !loserId) continue;
     const date = Number(cols[iDate]);
     if (!Number.isFinite(date) || !cols[iDate]) continue;
+    const level = cols[iLevel] ?? "";
+    if (!keepLevel(level)) continue;
     out.push({
       tourneyName: cols[iName] ?? "",
       tourneyDate: date,
@@ -102,7 +107,7 @@ export function parseEloMatchesCsv(csv: string): EloMatchRow[] {
       winnerName: cols[iWname] ?? "",
       loserName: cols[iLname] ?? "",
       round: cols[iRound] ?? "",
-      level: cols[iLevel] ?? "",
+      level,
     });
   }
   return out;
