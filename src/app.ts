@@ -539,15 +539,15 @@ export function createApp(root: HTMLElement): () => void {
   }, { signal });
 
   root.addEventListener("pointermove", (e) => {
-    // Resolve the element under the pointer by COORDINATES, not e.target. On touch the browser
-    // implicitly captures the pointer to the pointerdown arc, so e.target stays pinned to the
-    // first arc for the whole drag — the lit path would freeze there instead of following the
-    // finger. elementFromPoint hit-tests the node actually under the pointer; on desktop it
-    // returns the same node e.target already was, so mouse hover is unchanged. (labels/flags/
-    // corners are pointer-events:none, so it lands on the arc <path>.) Fallback to e.target
-    // covers a null return — point off-viewport, or a test env without elementFromPoint.
-    const hit = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-    const el = (hit ?? (e.target as HTMLElement))?.closest<HTMLElement>("[data-occupant]");
+    // Resolve the arc under the pointer. A mouse has no implicit pointer capture, so e.target is
+    // already the node under the cursor — keep it (no per-move layout flush). Touch and PEN on a
+    // touchscreen DO get implicit capture: the browser pins e.target to the pointerdown arc for
+    // the whole drag, so the lit path would freeze there instead of following the finger. For
+    // those, hit-test the node actually under the pointer by COORDINATES. (labels/flags/corners
+    // are pointer-events:none, so it lands on the arc <path>; the float card is too.) The e.target
+    // fallback covers a null return — point off-viewport, or a test env without elementFromPoint.
+    const probe = e.pointerType === "mouse" ? null : document.elementFromPoint(e.clientX, e.clientY);
+    const el = (probe ?? (e.target as Element | null))?.closest<HTMLElement>("[data-occupant]");
     updateReadout(el?.dataset.occupant || null);
     // hovering an arc or a panel row previews that player's path through the sunburst
     // (the float card names them too); off-target, a pinned path stays lit

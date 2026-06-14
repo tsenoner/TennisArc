@@ -466,8 +466,9 @@ describe("finalist pill + corner readout", () => {
     // On a touchscreen the pointer is implicitly captured to the pointerdown arc, so every
     // pointermove arrives with e.target pinned to startArc even as the finger slides over
     // otherArc. The handler must hit-test the element actually under the finger by coordinates.
+    // pointerType:"touch" — only touch/pen take the elementFromPoint branch (a mouse keeps e.target).
     const spy = vi.spyOn(document, "elementFromPoint").mockReturnValue(otherArc);
-    startArc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 10, clientY: 10 }));
+    startArc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "touch", clientX: 10, clientY: 10 }));
     spy.mockRestore();
 
     const lit = [...litArcs(root)] as HTMLElement[];
