@@ -103,6 +103,11 @@ export function createApp(root: HTMLElement): () => void {
   let roIdle = false;                  // …and whether it is blanked (same skip must see idle flips)
   const updateReadout = (playerId: string | null) => {
     if (!ctx) return;
+    // A selected match hides the readout (.has-match, CSS) — the strip already names both
+    // players. Skip the buildReadout + outerHTML churn on the invisible node (a touch
+    // drag-to-explore fires a stream of pointermoves); highlightPath still runs separately,
+    // so the lit path keeps following the hover.
+    if (ctx.isMatch) return;
     const resolved = playerId ?? ctx.defaultId;
     const idle = !playerId && !ctx.pinned;
     if (resolved === roCurrent && idle === roIdle) return;
@@ -219,11 +224,19 @@ export function createApp(root: HTMLElement): () => void {
       // ⊕ Zoom targets the selected node's own SECTION — itself when it has children, a
       // leaf's parent match otherwise (resolved decision 2); setFocus maps the root to a no-op.
       const zoomId = arcs.some((x) => x.id.startsWith(`${nodeId}.`)) ? nodeId : nodeId.split(".").slice(0, -1).join(".");
-      // "Reset zoom" only when the view already sits AT this match's section — focused
-      // anywhere else the button keeps "⊕ Zoom" and drills in (a setFocus level change;
-      // inTree validates against the full snapshot tree, so sections outside the focused
-      // subtree resolve too). focusId === zoomId is exactly the re-tap-zoom end state.
-      strip = renderMatchStrip(ins, zoomId, { expanded: state.detailExpanded, focused: state.focusId === zoomId }) +
+      // Three zoom-button states, all keyed off whether the view sits AT the selected node's
+      // own section (zoomId === focusId):
+      //  • focused EXACTLY on the selected node (nodeId === focusId) → "Reset zoom" (un-zoom here).
+      //  • selected node is a LEAF inside its already-focused parent section (zoomId === focusId
+      //    but nodeId is deeper) → nothing to zoom into, and "Reset zoom" would eject to the full
+      //    draw — so drop the button (noZoom). This is the re-tap-zoom end state for a leaf.
+      //  • otherwise (unfocused, or focused elsewhere) → "⊕ Zoom" drills into zoomId.
+      const atSection = state.focusId !== undefined && state.focusId === zoomId;
+      strip = renderMatchStrip(ins, zoomId, {
+          expanded: state.detailExpanded,
+          focused: atSection && nodeId === state.focusId,
+          noZoom: atSection && nodeId !== state.focusId,
+        }) +
         (state.detailExpanded ? renderMatchDetail(ins, u, snap.rounds) : "");
     }
     const focusArc = state.focusId ? arcs.find((a) => a.id === state.focusId) : undefined;
@@ -344,19 +357,26 @@ export function createApp(root: HTMLElement): () => void {
       if (ownsEntry) history.replaceState({ f: next }, "", `#${next}`); // level change — still one entry
       else { history.pushState({ f: next }, "", `#${next}`); ownsEntry = true; } // entering focus
     } else if (ownsEntry) {
-      // clearing: give our entry back. The popstate this fires finds focusId already
-      // cleared and is a no-op, so the exit never double-draws.
+      // clearing: the caller draw()s the full draw synchronously, so scrub the hash NOW
+      // (replaceState updates location immediately) — otherwise the URL still reads #<focus>
+      // until the async popstate lands, lying about the view for a frame. Then hand our entry
+      // back; the popstate that history.back() fires finds focusId already cleared → no-op.
       ownsEntry = false;
+      history.replaceState(null, "", location.pathname + location.search);
       history.back();
     }
   };
 
   // Leaving the current draw (tour/year/slam switch) drops every per-draw selection. The
-  // focus session dies with the draw, so the hash is scrubbed IN PLACE — replaceState only:
-  // no history.back() (that would navigate) and no new entry (Back later is simply inert).
+  // focus session dies with the draw, so exit it SYMMETRICALLY with the crumb/ESC clear:
+  // scrub the hash in place (replaceState, synchronous) and — when we own the focus entry —
+  // hand it back with history.back(), so a later browser Back / iOS back-swipe is NOT
+  // swallowed by a stranded dead entry. back() lands on our honest base entry; the popstate
+  // it fires is a no-op (focusId already cleared, ownsEntry already false).
   const resetSelection = () => {
     state.focusId = undefined;
     if (ownsEntry || location.hash) history.replaceState(null, "", location.pathname + location.search);
+    if (ownsEntry) history.back();
     ownsEntry = false;
     closeMatch();
     state.selectedCountry = undefined; state.pinnedId = undefined;
@@ -397,10 +417,10 @@ export function createApp(root: HTMLElement): () => void {
       return;
     }
     if (!el) {
-      // A tap on the chart with no [data-action] target releases a pinned path. This complements the
-      // reset <g> (which also clears the pin): that fires on the wheel's hub/gaps, this on truly-empty
-      // SVG regions where the event target is the <svg> root rather than the reset group. Scoped to
-      // .chart (not .sunburst) so dead space in the match strip above the wheel never unpins.
+      // A tap on the chart with no [data-action] target releases a pinned path: the inter-arc
+      // gaps and the empty circle-in-square corners aren't painted, so the event target is the
+      // bare <svg> (no [data-action] ancestor). Scoped to .chart (not .sunburst) so dead space
+      // in the match strip above the wheel never unpins.
       if (state.pinnedId && t.closest(".chart")) { state.pinnedId = undefined; draw(); }
       return;
     }
@@ -507,8 +527,11 @@ export function createApp(root: HTMLElement): () => void {
       draw();
       // the ✕ that held keyboard focus left with the strip — land on the chart region
       root.querySelector<HTMLElement>(".chart")?.focus();
-    } else if (a === "reset" || id === "r" || (id && id === state.focusId)) {
-      // the hub/gap tap is the nuclear reset: focus, match and pin all drop at once
+    } else if (id === "r" || (id && id === state.focusId)) {
+      // Fallback reset for the rare arc the inspect branch can't service: a match-LESS arc
+      // (empty data-match) that is the root or the current focus hub — drop focus, match and
+      // pin together. Match-BEARING hubs zoom out one level in the inspect branch above; the
+      // wheel's gaps/empty corners unpin via the !el branch (there is no data-action="reset").
       setFocus(undefined); closeMatch(); state.pinnedId = undefined; draw();
     }
     // Selecting a slam/year/lens item from inside an open dropdown closes it → restore focus to its trigger.
@@ -523,6 +546,20 @@ export function createApp(root: HTMLElement): () => void {
     highlightPath(el?.dataset.occupant || state.pinnedId || null);
   }, { signal });
   root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(state.pinnedId ?? null); }, { capture: true, signal });
+
+  // Sighted-keyboard focus indicator for the SVG-only quarter handles (WCAG 2.4.7): the
+  // sr-only twin's own focus ring is clipped to 1px (invisible), so mirror focus onto the
+  // matching corner label (.q-focus, CSS lights its hit-rect + text) by shared data-id. Both
+  // events bubble; delegate on root so re-renders never need re-binding. Only the sr-only
+  // twins are keyboard-reachable, so a stray match never adds .q-focus to a non-handle.
+  const mirrorQFocus = (e: Event, on: boolean) => {
+    const btn = (e.target as HTMLElement).closest?.<HTMLElement>(".q-owner-btn");
+    if (!btn) return;
+    root.querySelector(`.sunburst .q-owner[data-id="${CSS.escape(btn.dataset.id ?? "")}"]`)
+      ?.classList.toggle("q-focus", on);
+  };
+  root.addEventListener("focusin", (e) => mirrorQFocus(e, true), { signal });
+  root.addEventListener("focusout", (e) => mirrorQFocus(e, false), { signal });
 
   // Browser Back/Forward (and the history.back() setFocus issues on clear): the browser
   // has already moved, so ADOPT the entry's focus instead of writing history; a hash that

@@ -39,6 +39,7 @@ describe("renderMatchStrip", () => {
     expect(html).toContain("⊕ Zoom");
     expect(html).toContain('data-action="detail-expand"');
     expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('aria-controls'); // collapsed: the #match-detail region isn't in the DOM, so no dangling IDREF
     expect(html).toContain('data-action="close-detail"');
   });
 
@@ -56,6 +57,7 @@ describe("renderMatchStrip", () => {
     expect(html).toContain('data-action="focus" data-id=""'); // routes through setFocus(undefined)
     expect(html).not.toContain('data-action="reset"');        // pin + match must survive the un-zoom
     expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('aria-controls="match-detail"');   // expanded: IDREF now resolves to the live region
   });
 
   it("marks a live match with a pulsing dot in the caption", () => {
@@ -94,7 +96,7 @@ describe("renderMatchDetail", () => {
     const html = renderMatchDetail(base, null, rounds);
     // a disclosure REGION, not a (false) modal dialog — desktop renders it in-flow and the
     // phone sheet has no focus containment; tabindex -1 = programmatic focus target on expand
-    expect(html).toContain('<aside class="mi-detail" role="region" aria-label="Match details" tabindex="-1">');
+    expect(html).toContain('<aside id="match-detail" class="mi-detail" role="region" aria-label="Match details" tabindex="-1">');
     expect(html).not.toContain('role="dialog"');
     expect(html).toContain('class="mi-scrim" data-action="detail-expand"');
     expect(html).toContain('class="sheet-grip" data-action="detail-expand"');

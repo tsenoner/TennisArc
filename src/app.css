@@ -1,6 +1,7 @@
 :root {
   --bg: #0d1014; --panel: #161b23; --text: #d7dee6; --dim: #8b95a3;
   --line: #2a323d; --accent: #e0683c; --teal: #36b3a8; --seed: #a98bf0;
+  --teal-text: #36b3a8;  /* teal that meets AA (4.5:1) as small text on --bg; dark theme = --teal (~7.4:1) */
   /* sunken surfaces + in-panel chrome (hairlines/hover sit a step off --panel, not --line) */
   --inset: #0e151d; --inset-2: #1d2a36; --hairline: #1b2430; --hover: #1b2733;
   /* semantic accents tuned per theme for contrast on their actual surfaces */
@@ -10,6 +11,7 @@
 :root[data-theme="light"] {
   --bg: #f6f4ef; --panel: #ffffff; --text: #21262d; --dim: #5b6470;
   --line: #d8dce2; --accent: #c9542b; --teal: #2a8f86; --seed: #6d4bbd;
+  --teal-text: #167a70;  /* darker than --teal: small teal text (.ms-rnd/.ms-zoom) hits 4.5:1 on #f6f4ef */
   --inset: #f1efe9; --inset-2: #e3dfd5; --hairline: #e9ebee; --hover: #f2f4f6;
   --upset: #a8431d; --champ: #85610a; --country: #1b63b4; --bar-muted: #6f7b89;
   color-scheme: light;
@@ -111,14 +113,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   margin: 0 0 6px; }
 .ms-hd { display: flex; align-items: center; gap: 6px; }
 .ms-rnd { margin-right: auto; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--teal); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  color: var(--teal-text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ms-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--teal);
   margin: 0 4px 0 1px; animation: ms-pulse 1.6s ease-in-out infinite; }
 @keyframes ms-pulse { 50% { opacity: .25; } }
 .ms-more, .ms-close { background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px;
   cursor: pointer; padding: 4px 8px; border-radius: 8px; white-space: nowrap; }
 /* the zoom action is deliberately accented — it replaces the old buried ghost Focus button */
-.ms-zoom { position: relative; background: transparent; border: 1px solid var(--teal); color: var(--teal);
+.ms-zoom { position: relative; background: transparent; border: 1px solid var(--teal); color: var(--teal-text);
   font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 10px;
   border-radius: 8px; white-space: nowrap; }
 .ms-mu { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; margin-top: 6px; }
@@ -223,6 +225,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 /* …and the lit player's OWN corner stays legible on every input — touch has no hover,
    and the single-tap grammar pins on every arc tap (highlightPath adds .q-hl) */
 .sunburst.arc-dim-mode .q-owner.q-hl { opacity: 1; }
+/* sighted-keyboard focus indicator (WCAG 2.4.7): the sr-only twin's own ring is clipped to
+   1px and invisible, so a focusin listener mirrors focus onto the matching corner handle
+   (.q-focus, same data-id) — an accent outline on its hit rect + accent text shows which
+   quarter Enter will zoom. The handle stays full-opacity even under arc-dim-mode. */
+.sunburst .q-owner.q-focus { opacity: 1; }
+.q-owner.q-focus .q-hit { stroke: var(--accent); stroke-width: 2; }
+.q-owner.q-focus .q-name, .q-owner.q-focus .q-cap { fill: var(--accent); }
 
 /* visually-hidden keyboard/SR twins of SVG-only controls: the chart svg is role="img",
    so the corner handles (and their aria-labels) are presentational — these buttons are
@@ -441,4 +450,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
     margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
     padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
     box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); animation: mi-rise .22s ease-out; }
+}
+
+/* Honour prefers-reduced-motion: suppress the only continuous motion (the live dot's infinite
+   pulse) and the detail tier's entrance rise. Placed LAST so it overrides the ≤720px bottom-sheet
+   rule above by source order (same specificity). The dot stays visible (opacity reset to full). */
+@media (prefers-reduced-motion: reduce) {
+  .ms-dot { animation: none; opacity: 1; }
+  .mi-detail, .stage .mi-detail { animation: none; }
 }

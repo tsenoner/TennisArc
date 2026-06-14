@@ -264,7 +264,7 @@ export function renderSunburst(
   return (
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
     `role="img" aria-label="Tournament bracket sunburst">` +
-    `<g transform="translate(${c},${c})" data-action="reset">` +
+    `<g transform="translate(${c},${c})">` +
     `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}${corners}</g></svg>`
   );
 }
@@ -504,7 +504,7 @@ export function renderCrumbs(trail: { id: string; label: string }[], current: st
     `<nav class="crumbs" aria-label="Zoom breadcrumbs">` +
     `<button class="crumb" data-action="focus" data-id="">‹ Full draw</button>` +
     chips +
-    `<span class="crumb cur">${escapeHtml(current)}</span></nav>`
+    `<span class="crumb cur" aria-current="true">${escapeHtml(current)}</span></nav>`
   );
 }
 
@@ -565,21 +565,27 @@ function stripSide(side: InsightSide, win: boolean, rev: boolean): string {
 /** Slim match context strip — an in-flow summary at the top of the wheel column on EVERY
  *  viewport (the same dock pattern the readout already uses ≤960px). The wheel is never
  *  covered; the heavy tail lives one tap away behind "Details ▾" (renderMatchDetail). */
-export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean }): string {
+export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean; noZoom?: boolean }): string {
   const live = ins.status === "live"
     ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
   // Only when the view already sits AT this match's own section does it flip to "Reset
   // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
   // never the nuclear reset: pin + match survive. Focused anywhere ELSE it stays "⊕ Zoom"
-  // so the strip can still drill into the selected match's section.
-  const zoom = opts.focused
+  // so the strip can still drill into the selected match's section. `noZoom` drops it
+  // entirely for a leaf selected INSIDE its already-focused section: there is nothing deeper
+  // to zoom into, and a "Reset zoom" there would silently eject to the full draw.
+  const zoom = opts.noZoom ? ""
+    : opts.focused
     ? `<button class="ms-zoom" data-action="focus" data-id="">Reset zoom</button>`
     : `<button class="ms-zoom" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Zoom</button>`;
   return (
     `<div class="match-strip" role="region" aria-label="Match insight">` +
     `<div class="ms-hd"><span class="ms-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}${live}</span>` +
-    `<button class="ms-more" data-action="detail-expand" aria-expanded="${opts.expanded}">Details ${opts.expanded ? "▴" : "▾"}</button>` +
+    // aria-controls only while expanded — the #match-detail region is removed from the DOM
+    // when collapsed, and a dangling IDREF reads inconsistently on some AT; aria-expanded
+    // still conveys the collapsed state on its own.
+    `<button class="ms-more" data-action="detail-expand"${opts.expanded ? ' aria-controls="match-detail"' : ""} aria-expanded="${opts.expanded}">Details ${opts.expanded ? "▴" : "▾"}</button>` +
     zoom +
     `<button class="ms-close" data-action="close-detail" aria-label="Close match">✕</button></div>` +
     `<div class="ms-mu">${stripSide(ins.p1, ins.winner === "p1", false)}` +
@@ -611,7 +617,7 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
     // sheet has no focus containment — claiming a modal dialog would be dishonest to AT.
     // tabindex="-1" makes the region itself the programmatic focus target on expand
     // (desktop hides .sheet-bar, so focusing its ✕ there would silently no-op to <body>).
-    `<aside class="mi-detail" role="region" aria-label="Match details" tabindex="-1">` +
+    `<aside id="match-detail" class="mi-detail" role="region" aria-label="Match details" tabindex="-1">` +
     `<div class="sheet-bar"><button class="sheet-grip" data-action="detail-expand" aria-label="Collapse details"><span></span></button>` +
     `<button class="sheet-close" data-action="detail-expand" aria-label="Close details">✕</button></div>` +
     `<div class="mi-mu">${insightPlayer(ins.p1, ins.winner === "p1", rounds)}` +

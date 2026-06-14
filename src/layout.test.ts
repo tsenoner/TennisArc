@@ -53,6 +53,12 @@ describe("layout", () => {
       // rings stay uniform: every depth band has the same thickness
       const thicknesses = [...new Set(arcs.map((a) => (a.y1 - a.y0).toFixed(6)))];
       expect(thicknesses).toHaveLength(1);
+      // …and the rescale really PRUNES the rest of the draw: every surviving arc is the focused
+      // node itself or a descendant of it — ancestors (clamped to y0=0) and sibling subtrees
+      // (clamped outside [0,τ]) are dropped by the filter, never merely hidden.
+      for (const a of arcs) expect(a.id === focus.id || a.id.startsWith(`${focus.id}.`)).toBe(true);
+      expect(arcs.some((a) => a.id === focus.id)).toBe(true);                // the hub survives…
+      expect(arcs.some((a) => a.id.startsWith(`${focus.id}.`))).toBe(true);  // …with its descendants
     }
   });
 
@@ -77,17 +83,19 @@ describe("layout", () => {
     expect(arcs).toEqual([]);
   });
 
-  it("degenerate: fy0 within epsilon of the radius falls back to ky = 1", () => {
+  it("degenerate: fy0 within epsilon of the radius is guarded (ky=1) and collapses cleanly", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     const root = buildSunburst(s);
-    // pick a max-depth leaf: with radius 1e-9 its y0 leaves < 1e-9 of headroom, tripping the guard
+    // pick a max-depth leaf: with radius 1e-9 its inner edge sits < 1e-9 from the rim, tripping
+    // the guard. Unguarded, ky = radius/(radius − fy0) would explode toward Infinity → NaN arcs;
+    // the guard pins ky=1, and every band is then sub-epsilon and dropped. So the observable
+    // contract is a clean, finite, EMPTY result — assert that (the old loop body never ran, since
+    // arcs was empty, so it asserted nothing).
     let leaf = root;
     while (leaf.children.length) leaf = leaf.children[0];
-    const arcs = layout(root, 1e-9, leaf.id);
-    for (const a of arcs) {
-      expect(Number.isFinite(a.y0)).toBe(true);
-      expect(Number.isFinite(a.y1)).toBe(true);
-    }
+    let arcs!: ReturnType<typeof layout>;
+    expect(() => { arcs = layout(root, 1e-9, leaf.id); }).not.toThrow();
+    expect(arcs).toEqual([]);
   });
 
   it("falls back to the full view when focusId matches no node", () => {

@@ -161,6 +161,12 @@ export interface QuarterOwner {
   out: boolean;              // owner already eliminated — they KEEP the quarter, the label just dims
 }
 
+// Memoized per root tree: within one draw, the corner labels (draw()) and every depth-2
+// crumb (sectionTitle) ask for the same owners — and the same `tree` object is shared across
+// those calls, so a WeakMap keyed by root collapses them to one walk. A fresh draw builds a
+// fresh tree (new key), so stale results never leak; old trees are GC'd with the entry.
+const quarterOwnersMemo = new WeakMap<SunNode, QuarterOwner[] | null>();
+
 /**
  * The "owner" of each quarter, draw-sheet style: the DRAWN top seed — minimum non-null
  * seed across the quarter's leaf entrants, ties broken by better ranking — falling back
@@ -170,6 +176,14 @@ export interface QuarterOwner {
  * structure: fewer than 3 rounds, or the depth-2 layer isn't exactly 4 nodes.
  */
 export function quarterOwners(s: Snapshot, root: SunNode): QuarterOwner[] | null {
+  const cached = quarterOwnersMemo.get(root);
+  if (cached !== undefined) return cached;
+  const result = computeQuarterOwners(s, root);
+  quarterOwnersMemo.set(root, result);
+  return result;
+}
+
+function computeQuarterOwners(s: Snapshot, root: SunNode): QuarterOwner[] | null {
   if (s.rounds.length < 3) return null;
   const quarters = root.children.flatMap((c) => c.children);
   if (quarters.length !== 4) return null;

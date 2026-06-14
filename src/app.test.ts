@@ -239,6 +239,24 @@ describe("match detail tier (Details ▾)", () => {
     expect((document.activeElement as HTMLElement).classList.contains("chart")).toBe(true); // focus lands, not <body>
   });
 
+  it("on mobile (sheet laid out) expand focuses the sheet ✕ — the offsetParent-truthy branch", async () => {
+    const root = await mountApp();
+    // jsdom reports offsetParent=null for everything (no layout), so the desktop branch is all
+    // the other test can reach. Emulate a VISIBLE bottom sheet by making offsetParent truthy,
+    // then assert focus lands on the sheet's ✕ (not the region). Restore the descriptor after so
+    // no other test's display:none assumptions leak.
+    const orig = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetParent");
+    Object.defineProperty(HTMLElement.prototype, "offsetParent", { configurable: true, get() { return document.body; } });
+    try {
+      click(pickArc(root));
+      click(root.querySelector<HTMLElement>(".ms-more")!);                 // expand → mobile branch
+      expect(document.activeElement).toBe(root.querySelector(".mi-detail .sheet-close"));
+    } finally {
+      if (orig) Object.defineProperty(HTMLElement.prototype, "offsetParent", orig);
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).offsetParent;
+    }
+  });
+
   it("closing the match clears detailExpanded — the next match opens collapsed", async () => {
     const root = await mountApp();
     click(pickArc(root));
@@ -523,7 +541,21 @@ describe("tap-again zoom + hub zoom-out (focus grammar)", () => {
     expect(zoom.dataset.id).toBe("r.0.0");                            // targets the match's own section
     click(zoom);                                                      // …and drills into it
     expect(root.querySelector(".crumb.cur")!.textContent).toMatch(/'s quarter$/);
-    expect(root.querySelector(".ms-zoom")!.textContent).toBe("Reset zoom"); // now AT that section
+    // the still-selected leaf now sits INSIDE the focused quarter: there is nothing deeper to
+    // zoom into, and a "Reset zoom" here would eject to the full draw — so the button is gone
+    // (crumbs/hub handle the step-out). See the dedicated leaf-inside-focus case below.
+    expect(root.querySelector(".ms-zoom")).toBeNull();
+  });
+
+  it("hides the zoom control for a leaf selected INSIDE its already-focused section (no eject-to-full-draw)", async () => {
+    const root = await mountApp();
+    mockBack();
+    click(qArc(root)); click(qArc(root));                             // focus the quarter r.0.0
+    expect(root.querySelector(".ms-zoom")!.textContent).toBe("Reset zoom"); // AT the focused node itself
+    click(root.querySelector<HTMLElement>('path.arc[data-id="r.0.0.0"]')!);  // select a leaf inside it
+    expect(root.querySelector(".match-strip")).not.toBeNull();       // strip still names the leaf's match…
+    expect(root.querySelector(".crumbs")).not.toBeNull();            // …still focused on the quarter…
+    expect(root.querySelector(".ms-zoom")).toBeNull();               // …but no surprise "Reset zoom" to eject with
   });
 
   it("focusing the root is a no-op: setFocus('r') normalizes to no focus, no history entry", async () => {
@@ -569,6 +601,26 @@ describe("focus crumbs", () => {
     expect(root.querySelector(".crumb.cur")!.textContent).toBe("Top half");
     expect(push).toHaveBeenCalledTimes(1);                            // level change replaced, not pushed
   });
+
+  it("builds a multi-ancestor trail (2+ tappable ancestors) when focused 3 levels deep", async () => {
+    // the default 8-draw only reaches depth 2 (one ancestor chip); a 32-draw lets us focus a
+    // depth-3 section so the trail-building slice(1,-1) must emit BOTH ancestor chips
+    const deep = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 3 });
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      const body = u.includes("index.json") ? INDEX
+        : u.includes("roland-garros") || u.includes("wimbledon") ? deep : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as typeof fetch;
+    const root = await mountApp();
+    mockBack();
+    const arc = () => root.querySelector<HTMLElement>('path.arc[data-id="r.0.0.0"]')!; // depth-3 node WITH children
+    click(arc()); click(arc());                                        // re-tap → focus r.0.0.0
+    const chips = [...root.querySelectorAll<HTMLElement>('.crumbs .crumb[data-action="focus"]')];
+    // ‹ Full draw (id="") + Top half (r.0) + the quarter (r.0.0) — two real ancestors, in order
+    expect(chips.map((c) => c.dataset.id)).toEqual(["", "r.0", "r.0.0"]);
+    expect(root.querySelector(".crumb.cur[aria-current]")).not.toBeNull(); // current section, inert + marked
+  });
 });
 
 describe("focus history discipline (V1-simple: one entry per focus session)", () => {
@@ -594,17 +646,40 @@ describe("focus history discipline (V1-simple: one entry per focus session)", ()
     expect(back).toHaveBeenCalledTimes(1);                   // …exactly once — nothing left to pop
   });
 
-  it("a tour switch scrubs the hash in place — no new entry, no back()", async () => {
+  it("re-entering focus after a clear PUSHES a fresh entry (ownsEntry reset on clear)", async () => {
+    const root = await mountApp();
+    const push = vi.spyOn(history, "pushState");
+    mockBack();
+    click(qArc(root)); click(qArc(root));                    // enter focus → push #1
+    expect(push).toHaveBeenCalledTimes(1);
+    click(root.querySelector<HTMLElement>('.crumb[data-id=""]')!); // clear focus (pin + selection survive)
+    expect(root.querySelector(".crumbs")).toBeNull();
+    click(qArc(root));                                       // selection survived → re-tap re-enters focus
+    expect(root.querySelector(".crumbs")).not.toBeNull();
+    expect(push).toHaveBeenCalledTimes(2);                   // a FRESH push, not a replace — ownsEntry was reset
+  });
+
+  it("a tour switch while focused hands the focus entry back (no stranded Back-swallowing entry)", async () => {
     const root = await mountApp();
     const back = mockBack();
     click(qArc(root)); click(qArc(root));                    // focused
     expect(location.hash).toBe("#r.0.0");
     const push = vi.spyOn(history, "pushState");
     click(root.querySelector<HTMLElement>('[data-action="tour"][data-tour="ATP"]')!);
-    expect(location.hash).toBe("");                          // scrubbed via replaceState
-    expect(push).not.toHaveBeenCalled();
-    expect(back).not.toHaveBeenCalled();
+    expect(location.hash).toBe("");                          // scrubbed synchronously via replaceState
+    expect(push).not.toHaveBeenCalled();                     // …no NEW entry…
+    expect(back).toHaveBeenCalledTimes(1);                   // …and the owned focus entry is popped, not stranded
     expect(root.querySelector(".crumbs")).toBeNull();        // focus cleared with the old draw
+  });
+
+  it("a tour switch with NO focus owned does not touch history (back stays untouched)", async () => {
+    const root = await mountApp();
+    const back = mockBack();
+    const push = vi.spyOn(history, "pushState");
+    click(qArc(root));                                       // select only — never entered focus
+    click(root.querySelector<HTMLElement>('[data-action="tour"][data-tour="ATP"]')!);
+    expect(push).not.toHaveBeenCalled();
+    expect(back).not.toHaveBeenCalled();                     // nothing owned → no pop
   });
 
   it("popstate routes through setFocus + draw: Forward re-enters, Back exits, stale ids drop", async () => {
@@ -742,5 +817,21 @@ describe("centre pill while focused", () => {
     const pill = root.querySelector(".center-id.center-sec")!;
     expect(pill).not.toBeNull();
     expect(pill.textContent).toBe("QF section");                      // sectionTitle's round fallback
+  });
+});
+
+describe("quarter-focus keyboard handles (sr-only twin → visible focus surrogate)", () => {
+  it("mirrors sr-only button focus onto the matching SVG corner handle (.q-focus)", async () => {
+    const root = await mountApp();
+    // the SVG corner is role=img/presentational; the sr-only <button> is the keyboard entry —
+    // and its 1px-clipped ring is invisible, so focusing it must light the matching corner
+    const btn = root.querySelector<HTMLElement>('.q-owner-btn[data-id="r.0.0"]')!;
+    const corner = () => root.querySelector('.q-owner[data-id="r.0.0"]')!;
+    expect(btn).not.toBeNull();
+    expect(corner().classList.contains("q-focus")).toBe(false);
+    btn.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(corner().classList.contains("q-focus")).toBe(true);        // lit on focus…
+    btn.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    expect(corner().classList.contains("q-focus")).toBe(false);       // …cleared on blur
   });
 });
