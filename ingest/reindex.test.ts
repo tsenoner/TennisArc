@@ -58,6 +58,16 @@ describe("reindex", () => {
     expect(idx.slams.some((s) => s.status === "live")).toBe(false);
   });
 
+  it("does not leave the latest slam stuck 'live' when its final was never decided", async () => {
+    // The only snapshot on disk, stamped INSIDE its own (past) window with a scheduled final. A
+    // file-stamp clock would read that in-window stamp and call it 'live' forever; the wall clock
+    // (now well past Sept 2021) correctly degrades it to complete.
+    await writeSnap(dir, 2021, "atp-us-open.json", snap("ATP", 2021, "us-open", "US Open", "Hard", "2021-09-12T00:00:00.000Z", { status: "scheduled", winner: null }));
+    const idx = await reindex(dir);
+    expect(idx.slams[0].status).toBe("complete");
+    expect(idx.slams.some((s) => s.status === "live")).toBe(false);
+  });
+
   it("is deterministic — same files yield a byte-identical manifest", async () => {
     await writeSnap(dir, 2026, "atp-roland-garros.json", snap("ATP", 2026, "roland-garros", "Roland Garros", "Clay", "2026-06-09T00:00:00.000Z"));
     expect(JSON.stringify(await reindex(dir))).toBe(JSON.stringify(await reindex(dir)));

@@ -123,6 +123,11 @@ export function applyFinal(match: Match, players: Record<string, Player>, row: F
   if (slot === null) return false; // ambiguous / no join — never guess
 
   const parsed = parseSackmannScore(row.score, slot === "p1");
+  // An empty/garbled score string parses to "finished" with zero sets. Don't write a finished final
+  // that has a declared winner but no score — leave it scheduled (mirrors the ambiguous-join no-op).
+  // A genuine walkover (status "walkover", also zero sets) is a real result and is kept.
+  if (parsed.status === "finished" && parsed.sets.length === 0) return false;
+
   match.winner = slot;
   match.status = parsed.status;
   match.score = parsed.status === "walkover" ? null : parsed.sets;

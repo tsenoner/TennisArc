@@ -184,4 +184,25 @@ describe("applyFinal", () => {
     expect(applyFinal(m, players, row)).toBe(false);
     expect(m.winner).toBeNull();
   });
+
+  it("returns false on an empty/garbled score (no finished final with zero sets)", () => {
+    const players = { a: player("a", "Novak Djokovic"), b: player("b", "Daniil Medvedev") };
+    for (const score of ["", "   ", "ABN", "UNK"]) {
+      const m = finalMatch("a", "b");
+      const row: FinalRow = { winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score, minutes: 60 };
+      expect(applyFinal(m, players, row)).toBe(false);
+      expect(m.status).toBe("scheduled"); // left for a human / next scrape, not a winner with no score
+      expect(m.winner).toBeNull();
+    }
+  });
+
+  it("still applies a genuine walkover (zero sets, status walkover, null score)", () => {
+    const players = { a: player("a", "Novak Djokovic"), b: player("b", "Daniil Medvedev") };
+    const m = finalMatch("a", "b");
+    const row: FinalRow = { winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score: "W/O", minutes: null };
+    expect(applyFinal(m, players, row)).toBe(true);
+    expect(m.status).toBe("walkover");
+    expect(m.winner).toBe("p1");
+    expect(m.score).toBeNull();
+  });
 });

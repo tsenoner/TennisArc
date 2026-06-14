@@ -107,6 +107,42 @@ describe("applySeeds", () => {
     expect(s.filledSig).toBe(0);
   });
 
+  it("pass-1 fullKey join never duplicates a seed already pinned to another player", () => {
+    // The snapshot wrongly pins seed 6 to a stale player (upstream quirk); Sackmann's real #6 is FAA.
+    // Merge must not assign FAA a second seed 6 — leave him null rather than create a duplicate.
+    const csv = [HEADER, row("Australian Open", "R128", "Felix Auger-Aliassime", "6", "Filler", "")].join("\n");
+    const map = parseSeedsCsv(csv, "australian-open");
+    const players = {
+      stale: player("stale", "Some Qualifier", 6), // wrongly holds seed 6 already
+      faa: player("faa", "Felix Auger-Aliassime"),  // Sackmann's real #6, currently null
+    };
+    const s = applySeeds(players, map);
+    expect(players.stale.seed).toBe(6);    // existing seed untouched (merge)
+    expect(players.faa.seed).toBeNull();   // not assigned a duplicate 6
+    expect(s.takenSkip).toBe(1);
+    const seeds = Object.values(players).map((p) => p.seed).filter((x) => x !== null);
+    expect(new Set(seeds).size).toBe(seeds.length); // no duplicates
+  });
+
+  it("does not guess between two abbreviated snapshot players sharing one signature", () => {
+    // Only Karolina is seeded in Sackmann (full names), so sigOwner('pliskova:k')=11 is unambiguous on
+    // the CSV side. But if BOTH twins appear abbreviated in the snapshot, neither can be assigned.
+    const csv = [
+      HEADER,
+      row("Wimbledon", "R128", "Karolina Pliskova", "11", "Filler One", ""),
+      row("Wimbledon", "R128", "Kristyna Pliskova", "", "Filler Two", ""),
+    ].join("\n");
+    const map = parseSeedsCsv(csv, "wimbledon");
+    const players = {
+      a: player("a", "K. Pliskova"), // abbreviated — can't fullKey-join either twin
+      b: player("b", "K. Pliskova"),
+    };
+    const s = applySeeds(players, map);
+    expect(players.a.seed).toBeNull();
+    expect(players.b.seed).toBeNull();
+    expect(s.sigAmbiguousSkip).toBe(2); // both skipped: snapshot-side signature collision
+  });
+
   it("merge (overwrite=false) preserves an existing partial seed and never overwrites it", () => {
     // snapshot already seeded Serena 1; CSV says 1 too but also adds Kvitova 4.
     const csv = [

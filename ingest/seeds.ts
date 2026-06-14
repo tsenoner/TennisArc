@@ -106,27 +106,40 @@ export function applySeeds(
   const taken = new Set<number>();
   if (!overwrite) for (const p of list) if (p.seed !== null) taken.add(p.seed);
 
-  // Pass 1 — exact fullKey join.
+  // Pass 1 — exact fullKey join. The `taken` guard applies here too: if the snapshot already pins
+  // that seed number to a different player (a stale upstream seed that disagrees with Sackmann), skip
+  // rather than create a duplicate — duplicate-prevention is symmetric across both passes.
   const sigCandidates: Player[] = [];
   for (const p of list) {
     if (p.seed !== null && !overwrite) { stats.alreadySeeded++; continue; }
     const seed = seedMap.byFull.get(fullKey(p.name));
-    if (seed !== undefined) {
+    if (seed === undefined) {
+      sigCandidates.push(p);
+    } else if (taken.has(seed)) {
+      stats.takenSkip++;
+    } else {
       p.seed = seed;
       taken.add(seed);
       stats.filledFull++;
-    } else {
-      sigCandidates.push(p);
     }
+  }
+
+  // How many still-unseeded snapshot players share each signature: when two collide we can't tell
+  // which one is the seeded player, so neither is assigned (the snapshot-side twin guard).
+  const sigCandCount = new Map<string, number>();
+  for (const p of sigCandidates) {
+    const sk = sigKey(p.name);
+    if (sk) sigCandCount.set(sk, (sigCandCount.get(sk) ?? 0) + 1);
   }
 
   // Pass 2 — surname+initial fallback for everything still unseeded after pass 1.
   for (const p of sigCandidates) {
-    const owner = seedMap.sigOwner.get(sigKey(p.name));
+    const sk = sigKey(p.name);
+    const owner = seedMap.sigOwner.get(sk);
     if (owner === undefined) {
       stats.unjoined++;          // no fullKey and no sigKey match at all
-    } else if (owner === null) {
-      stats.sigAmbiguousSkip++;  // sig owned by >1 distinct full name
+    } else if (owner === null || (sigCandCount.get(sk) ?? 0) > 1) {
+      stats.sigAmbiguousSkip++;  // sig ambiguous on the CSV side OR the snapshot side
     } else if (taken.has(owner)) {
       stats.takenSkip++;         // twin guard: that seed already belongs to someone
     } else {
