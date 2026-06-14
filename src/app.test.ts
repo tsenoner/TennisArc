@@ -62,6 +62,12 @@ beforeEach(() => {
       escape: (s: string) => String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`),
     };
   }
+  // This jsdom build ships no document.elementFromPoint; the touch-drag highlight hit-tests with
+  // it. Default to null so the handler falls back to e.target (matching desktop hover, which all
+  // existing pointermove tests assert); the touch-capture test overrides it to the under-finger arc.
+  if (typeof document.elementFromPoint !== "function") {
+    (document as unknown as { elementFromPoint: () => Element | null }).elementFromPoint = () => null;
+  }
   globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
     const u = String(url);
     const body = u.includes("index.json") ? INDEX
@@ -449,6 +455,26 @@ describe("finalist pill + corner readout", () => {
     const arc = pickArc(root);
     arc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
     expect(litArcs(root).length).toBeGreaterThan(0);
+  });
+
+  it("follows the finger to the arc under the pointer, not the touchstart arc (touch capture)", async () => {
+    const root = await mountApp();
+    const startArc = pickArc(root);
+    const otherArc = [...root.querySelectorAll<HTMLElement>(".sunburst path.arc[data-occupant]")]
+      .find((a) => a.dataset.occupant && a.dataset.occupant !== startArc.dataset.occupant)!;
+
+    // On a touchscreen the pointer is implicitly captured to the pointerdown arc, so every
+    // pointermove arrives with e.target pinned to startArc even as the finger slides over
+    // otherArc. The handler must hit-test the element actually under the finger by coordinates.
+    // pointerType:"touch" — only touch/pen take the elementFromPoint branch (a mouse keeps e.target).
+    const spy = vi.spyOn(document, "elementFromPoint").mockReturnValue(otherArc);
+    startArc.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "touch", clientX: 10, clientY: 10 }));
+    spy.mockRestore();
+
+    const lit = [...litArcs(root)] as HTMLElement[];
+    expect(lit.length).toBeGreaterThan(0);                                       // a path is lit…
+    expect(lit.every((a) => a.dataset.occupant === otherArc.dataset.occupant))   // …the under-finger
+      .toBe(true);                                                               // player's, not startArc's
   });
 
   it("keeps the lens panel in the side column when a match opens (strip lives above the wheel)", async () => {
