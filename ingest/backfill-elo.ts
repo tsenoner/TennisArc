@@ -1,15 +1,17 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Snapshot, Tour } from "../src/model";
-import { fetchMatchesCsv } from "./durations";
+import { fetchMatchesCsv, fetchQualChallCsv, keepWtaQualItf } from "./durations";
 import { TOURNEY } from "./names";
 import {
   applyHistoricalElo,
   computeRatingsAsOfSorted,
   parseEloMatchesCsv,
   sortEloRows,
+  type EloConfig,
   type EloMatchRow,
 } from "./historical-elo";
+import { ATP_ELO_CONFIG, WTA_ELO_CONFIG } from "./elo-config";
 
 // Recompute surface-aware historical Elo for every on-disk snapshot, frozen at each slam's own start
 // date, from Jeff Sackmann's FULL match history (every event per tour, not just slams). The only
@@ -26,15 +28,16 @@ const START_YEAR = 2000;
  *  ONCE into replay order so every per-snapshot recompute reuses it via computeRatingsAsOfSorted. */
 async function loadTourRows(tour: Tour, maxYear: number): Promise<EloMatchRow[]> {
   const rows: EloMatchRow[] = [];
+  const itfFilter = tour === "WTA" ? keepWtaQualItf : undefined;
   for (let year = START_YEAR; year <= maxYear; year++) {
-    const csv = await fetchMatchesCsv(tour, year).catch((err) => {
-      console.warn(`${tour} ${year}: matches CSV unavailable (${err}) — skipping that year`);
-      return null;
-    });
-    if (csv) rows.push(...parseEloMatchesCsv(csv));
+    const main = await fetchMatchesCsv(tour, year).catch((e) => (console.warn(`${tour} ${year} main: ${e}`), null));
+    if (main) rows.push(...parseEloMatchesCsv(main));
+    const qc = await fetchQualChallCsv(tour, year).catch((e) => (console.warn(`${tour} ${year} qual: ${e}`), null));
+    if (qc) rows.push(...parseEloMatchesCsv(qc, itfFilter));
   }
   return sortEloRows(rows);
 }
+const configFor = (tour: Tour): EloConfig => (tour === "ATP" ? ATP_ELO_CONFIG : WTA_ELO_CONFIG);
 
 /** The shared tourney_date for a (year, slam) in the fetched rows, or null if Sackmann has no such
  *  event yet (current-slam lag) — that absence is the coverage gate, NOT a reason to write null elo. */
@@ -82,7 +85,7 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const { byName } = computeRatingsAsOfSorted(rows, cutoff);
+      const { byName } = computeRatingsAsOfSorted(rows, cutoff, configFor(snap.tour));
       // Snapshot the prior elo so we can detect a true no-op (idempotent re-runs leave git clean).
       const before = JSON.stringify(Object.values(snap.players).map((p) => p.elo ?? null));
       const { matched, unmatched } = applyHistoricalElo(snap.players, byName);
