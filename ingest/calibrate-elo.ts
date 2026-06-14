@@ -35,8 +35,9 @@ async function cachedCsv(name: string, fetcher: () => Promise<string | null>): P
   return csv;
 }
 
-/** Load + parse + sort ONCE per tour so the grid search only re-runs the (cheap) engine replay. */
-async function loadSorted(tour: Tour, maxYear: number): Promise<EloMatchRow[]> {
+/** Load + parse + sort ONCE per tour so the grid search only re-runs the (cheap) engine replay.
+ *  Exported so the regression fixture reuses the same cached load. */
+export async function loadSorted(tour: Tour, maxYear: number): Promise<EloMatchRow[]> {
   const rows: EloMatchRow[] = [];
   const itf = tour === "WTA" ? keepWtaQualItf : undefined;
   for (let y = START_YEAR; y <= maxYear; y++) {
@@ -84,6 +85,10 @@ async function calibrate(tour: Tour): Promise<void> {
   console.log(`${tour} BEST-by-overall: seedTour=${bestOvr.seedTour} seedSub=${bestOvr.seedSub}  overall meanAbs=${bestOvr.ovr.toFixed(1)} (median ${bestOvr.om.toFixed(1)})  hard=${bestOvr.h.toFixed(1)} clay=${bestOvr.c.toFixed(1)} grass=${bestOvr.g.toFixed(1)}`);
 }
 
-(async () => {
-  for (const tour of ["ATP", "WTA"] as const) await calibrate(tour);
-})().catch((e) => { console.error(e); process.exit(1); });
+// Only run the (slow, network) grid search when invoked directly — importing this module (e.g. from the
+// regression fixture) must NOT kick off a calibration.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  (async () => {
+    for (const tour of ["ATP", "WTA"] as const) await calibrate(tour);
+  })().catch((e) => { console.error(e); process.exit(1); });
+}

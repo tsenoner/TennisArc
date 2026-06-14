@@ -1,0 +1,260 @@
+{
+  "asOf": "2026-06-14",
+  "note": "Live Tennis Abstract board snapshot for the Elo regression fixture. Re-capture deliberately when TA drifts.",
+  "atp": [
+    {
+      "name": "Jannik Sinner",
+      "overall": 2319.8,
+      "hard": 2263.2,
+      "clay": 2215.7,
+      "grass": 2088.3
+    },
+    {
+      "name": "Carlos Alcaraz",
+      "overall": 2166.8,
+      "hard": 2093.3,
+      "clay": 2106.6,
+      "grass": 2034.2
+    },
+    {
+      "name": "Alexander Zverev",
+      "overall": 2104.3,
+      "hard": 2043.8,
+      "clay": 2053.4,
+      "grass": 1907.1
+    },
+    {
+      "name": "Novak Djokovic",
+      "overall": 2059.3,
+      "hard": 2021.7,
+      "clay": 1959.2,
+      "grass": 1924.9
+    },
+    {
+      "name": "Arthur Fils",
+      "overall": 2020.6,
+      "hard": 1949.7,
+      "clay": 1955.1,
+      "grass": 1796.4
+    },
+    {
+      "name": "Rafael Jodar",
+      "overall": 1998.6,
+      "hard": 1872.7,
+      "clay": 1948.9,
+      "grass": 1699.3
+    },
+    {
+      "name": "Daniil Medvedev",
+      "overall": 1992.3,
+      "hard": 1969.8,
+      "clay": 1896.4,
+      "grass": 1875.3
+    },
+    {
+      "name": "Casper Ruud",
+      "overall": 1983.1,
+      "hard": 1888.7,
+      "clay": 1973,
+      "grass": 1714.8
+    },
+    {
+      "name": "Alex De Minaur",
+      "overall": 1970,
+      "hard": 1940.1,
+      "clay": 1873.9,
+      "grass": 1820.9
+    },
+    {
+      "name": "Lorenzo Musetti",
+      "overall": 1968.8,
+      "hard": 1903.5,
+      "clay": 1952.6,
+      "grass": 1850.4
+    },
+    {
+      "name": "Felix Auger Aliassime",
+      "overall": 1965.9,
+      "hard": 1936.2,
+      "clay": 1867.9,
+      "grass": 1784.2
+    },
+    {
+      "name": "Jakub Mensik",
+      "overall": 1955.7,
+      "hard": 1905,
+      "clay": 1873.3,
+      "grass": 1739.1
+    },
+    {
+      "name": "Learner Tien",
+      "overall": 1954.7,
+      "hard": 1911,
+      "clay": 1828.2,
+      "grass": 1719.6
+    },
+    {
+      "name": "Joao Fonseca",
+      "overall": 1952.2,
+      "hard": 1926.1,
+      "clay": 1868.6,
+      "grass": 1717.3
+    },
+    {
+      "name": "Tommy Paul",
+      "overall": 1934.7,
+      "hard": 1874.3,
+      "clay": 1878.6,
+      "grass": 1764.8
+    },
+    {
+      "name": "Ben Shelton",
+      "overall": 1929.5,
+      "hard": 1906.2,
+      "clay": 1829.6,
+      "grass": 1780.4
+    },
+    {
+      "name": "Jiri Lehecka",
+      "overall": 1929.5,
+      "hard": 1886.1,
+      "clay": 1829.5,
+      "grass": 1797.2
+    },
+    {
+      "name": "Andrey Rublev",
+      "overall": 1913.8,
+      "hard": 1854.3,
+      "clay": 1878.2,
+      "grass": 1806.4
+    }
+  ],
+  "wta": [
+    {
+      "name": "Aryna Sabalenka",
+      "overall": 2229.8,
+      "hard": 2206.2,
+      "clay": 2108.1,
+      "grass": 1991.6
+    },
+    {
+      "name": "Elena Rybakina",
+      "overall": 2156.4,
+      "hard": 2126.9,
+      "clay": 2018.6,
+      "grass": 1912.1
+    },
+    {
+      "name": "Mirra Andreeva",
+      "overall": 2097.8,
+      "hard": 2005.8,
+      "clay": 2046.3,
+      "grass": 1827.3
+    },
+    {
+      "name": "Coco Gauff",
+      "overall": 2090.7,
+      "hard": 2044.4,
+      "clay": 2028.1,
+      "grass": 1851.1
+    },
+    {
+      "name": "Jessica Pegula",
+      "overall": 2086.2,
+      "hard": 2052.8,
+      "clay": 1936.2,
+      "grass": 1873.2
+    },
+    {
+      "name": "Iga Swiatek",
+      "overall": 2080.1,
+      "hard": 2029.9,
+      "clay": 2016.2,
+      "grass": 1935.8
+    },
+    {
+      "name": "Elina Svitolina",
+      "overall": 2071.7,
+      "hard": 1998.3,
+      "clay": 1995.4,
+      "grass": 1837.1
+    },
+    {
+      "name": "Marta Kostyuk",
+      "overall": 2056.7,
+      "hard": 1967.5,
+      "clay": 1992.1,
+      "grass": 1737.4
+    },
+    {
+      "name": "Karolina Muchova",
+      "overall": 2053.1,
+      "hard": 2027.6,
+      "clay": 1886,
+      "grass": 1773.2
+    },
+    {
+      "name": "Victoria Mboko",
+      "overall": 2030.9,
+      "hard": 2018.8,
+      "clay": 1868.6,
+      "grass": 1729.3
+    },
+    {
+      "name": "Belinda Bencic",
+      "overall": 1989,
+      "hard": 1952.3,
+      "clay": 1848.5,
+      "grass": 1790.9
+    },
+    {
+      "name": "Naomi Osaka",
+      "overall": 1972.4,
+      "hard": 1913.9,
+      "clay": 1878.6,
+      "grass": 1741.1
+    },
+    {
+      "name": "Sorana Cirstea",
+      "overall": 1966.5,
+      "hard": 1919.4,
+      "clay": 1860.7,
+      "grass": 1688.5
+    },
+    {
+      "name": "Madison Keys",
+      "overall": 1957,
+      "hard": 1905,
+      "clay": 1878.8,
+      "grass": 1776.7
+    },
+    {
+      "name": "Linda Noskova",
+      "overall": 1947.5,
+      "hard": 1898.3,
+      "clay": 1797.7,
+      "grass": 1775.9
+    },
+    {
+      "name": "Anastasia Potapova",
+      "overall": 1932.4,
+      "hard": 1818.1,
+      "clay": 1895.5,
+      "grass": 1712.9
+    },
+    {
+      "name": "Diana Shnaider",
+      "overall": 1929.9,
+      "hard": 1852.2,
+      "clay": 1860.3,
+      "grass": 1758.8
+    },
+    {
+      "name": "Jasmine Paolini",
+      "overall": 1921.7,
+      "hard": 1880.8,
+      "clay": 1864.5,
+      "grass": 1770.3
+    }
+  ]
+}
