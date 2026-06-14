@@ -39,8 +39,8 @@ run(`Elo reproduces Tennis Abstract within calibrated bands (TA as-of ${ref.asOf
     test(`${tour}: median |error| stays within band`, async () => {
       const sorted = await loadSorted(tour, new Date().getUTCFullYear());
       const config = tour === "ATP" ? ATP_ELO_CONFIG : WTA_ELO_CONFIG;
-      // Freeze at the board's as-of date (real cutoff, not the all-rows sentinel) so the injury/absence
-      // dock applies to players the live board has docked for inactivity.
+      // Freeze at the board's as-of date (real cutoff, not the all-rows sentinel).
+      // (no dock; cutoff just gates rows).
       const asOf = Number(ref.asOf.replace(/-/g, ""));
       // Dominant-id join (byName), same as production, so fragmented players aren't naive-join artifacts.
       const { byName } = computeRatingsAsOfSorted(sorted, asOf, config);

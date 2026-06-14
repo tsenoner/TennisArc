@@ -21,14 +21,13 @@ import { fetchElo } from "./elo";
 
 const CACHE = resolve(process.cwd(), "ingest/.cache/elo");
 mkdirSync(CACHE, { recursive: true });
-const START_YEAR = 2000;
+const START_YEAR = Number(process.env.ELO_START_YEAR) || 2000;
 // seedTour is held at TA's documented tradition (1500) plus a sensitivity pair; seedSub (the unpublished
 // "low 1200s") is swept finely. We choose by the HEADLINE overall meanAbs, not the surface-dragged sum.
 const SEED_TOURS = [1300, 1350, 1400, 1450, 1500];
 const SEED_SUBS = [1010, 1050, 1090, 1130, 1170];
 const TOP_N = 50;
-// "As of today" cutoff — a real date (not the 99999999 all-rows sentinel) so the injury/absence dock,
-// which keys off inactivity up to the cutoff, applies to currently-absent players the live board docks.
+// "As of today" cutoff (a real date) — gates rows to <= today.
 const TODAY = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ""));
 
 async function cachedCsv(name: string, fetcher: () => Promise<string | null>): Promise<string | null> {
@@ -77,7 +76,7 @@ async function calibrate(tour: Tour): Promise<void> {
     for (const seedSub of SEED_SUBS) {
       // Use the dominant-id join (byName), same as production, so fragmented players (e.g. Mensik) are
       // not naive-join artifacts that inflate the residuals.
-      const { byName } = computeRatingsAsOfSorted(sorted, TODAY, seedConfig(seedTour, seedSub, tour === "ATP" ? 1 : 0));
+      const { byName } = computeRatingsAsOfSorted(sorted, TODAY, seedConfig(seedTour, seedSub));
       const d: number[] = [], dh: number[] = [], dc: number[] = [], dg: number[] = [];
       for (const t of taTop) {
         const o = byName.get(fullKey(t.name)); if (!o) continue;
