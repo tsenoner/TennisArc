@@ -27,10 +27,15 @@ export interface SeedStats {
   unjoined: number;         // no fullKey and no sigKey match at all
 }
 
-/** Parse a Sackmann yearly matches CSV down to one slam's main-draw seed map. Only numeric seeds
- *  (`/^\d+$/`) count — entry codes (WC/Q/LL) live in the separate *_entry column and the snapshot
- *  `entry` field, never in `*_seed`. The bare-`,` split is safe for Sackmann's quote-free schema
- *  (none of the columns used carry a comma), matching parseMatchesCsv in durations.ts. */
+// A Grand Slam main draw seeds exactly 1..32. Sackmann's *_seed column additionally encodes notable
+// *unseeded* entrants with a number above 32 (e.g. Badosa = "33" at RG 2021, where she was unseeded
+// and reached the QF) — that is a ranking-ish marker, not a tournament seed, so reject anything > 32.
+const MAX_SEED = 32;
+
+/** Parse a Sackmann yearly matches CSV down to one slam's main-draw seed map. Only real GS seeds
+ *  (numeric, 1..32) count — entry codes (WC/Q/LL) live in the separate *_entry column and the
+ *  snapshot `entry` field, and Sackmann's 33+ unseeded markers are dropped. The bare-`,` split is safe
+ *  for Sackmann's quote-free schema (none of the columns used carry a comma). */
 export function parseSeedsCsv(csv: string, slam: string): SeedMap {
   const names = new Set(TOURNEY[slam] ?? []);
   const lines = csv.split(/\r?\n/);
@@ -54,6 +59,7 @@ export function parseSeedsCsv(csv: string, slam: string): SeedMap {
   const collect = (name: string, seedRaw: string): void => {
     if (!/^\d+$/.test(seedRaw)) return; // numeric seeds only; entry codes / blanks skipped
     const seed = Number(seedRaw);
+    if (seed < 1 || seed > MAX_SEED) return; // drop Sackmann's 33+ unseeded markers (and any stray 0)
     const fk = fullKey(name);
     if (!fk) return;
     byFull.set(fk, seed);

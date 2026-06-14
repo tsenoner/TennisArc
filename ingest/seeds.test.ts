@@ -36,6 +36,18 @@ describe("parseSeedsCsv", () => {
     expect(map.byFull.has("somebody")).toBe(false); // blank seed
     expect(distinctSeedCount(map)).toBe(4); // 11,1,3,6
   });
+
+  it("drops Sackmann's out-of-range markers: a GS seeds only 1..32, so 33+ (notable unseeded) is ignored", () => {
+    const csv = [
+      HEADER,
+      row("Roland Garros", "R128", "Paula Badosa", "33", "Real Seed", "8"), // 33 = unseeded marker
+      row("Roland Garros", "R64", "Zero Seed", "0", "Filler", ""),          // stray 0 also rejected
+    ].join("\n");
+    const map = parseSeedsCsv(csv, "roland-garros");
+    expect(map.byFull.has("paulabadosa")).toBe(false);
+    expect(map.byFull.has("zeroseed")).toBe(false);
+    expect(map.byFull.get("realseed")).toBe(8);
+  });
 });
 
 describe("applySeeds", () => {
