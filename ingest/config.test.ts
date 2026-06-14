@@ -1,5 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { activeSlam } from "./config";
+import { activeSlam, eventWindow } from "./config";
+
+describe("eventWindow", () => {
+  it("reparametrizes the configured month-day onto an arbitrary year", () => {
+    expect(eventWindow("roland-garros", 2021)).toEqual({ from: Date.UTC(2021, 4, 21), to: Date.UTC(2021, 5, 9) });
+    expect(eventWindow("us-open", 2020)).toEqual({ from: Date.UTC(2020, 7, 25), to: Date.UTC(2020, 8, 15) });
+  });
+  it("always returns from < to", () => {
+    for (const slam of ["australian-open", "roland-garros", "wimbledon", "us-open"]) {
+      const w = eventWindow(slam, 2019)!;
+      expect(w.from).toBeLessThan(w.to);
+    }
+  });
+  it("returns null for an unknown slam", () => {
+    expect(eventWindow("not-a-slam", 2026)).toBeNull();
+  });
+});
 
 describe("activeSlam", () => {
   it("returns the Slam in progress within its [from, to) window", () => {

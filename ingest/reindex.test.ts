@@ -5,11 +5,11 @@ import { resolve, join } from "node:path";
 import { reindex } from "./reindex";
 import type { Match, Snapshot } from "../src/model";
 
-function snap(tour: "ATP" | "WTA", year: number, slam: string, name: string, surface: string, generatedAt: string): Snapshot {
+function snap(tour: "ATP" | "WTA", year: number, slam: string, name: string, surface: string, generatedAt: string, finalOver: Partial<Match> = {}): Snapshot {
   const final: Match = {
     id: "0", roundIndex: 0, slot: 0, nextMatchId: null, p1: "a", p2: "b",
     status: "finished", winner: "p1", score: null, live: null, durationSec: null,
-    durationProvisional: false, sofaEventId: null, sofaCustomId: null, stats: null,
+    durationProvisional: false, sofaEventId: null, sofaCustomId: null, stats: null, ...finalOver,
   };
   return {
     schemaVersion: 2, generatedAt, tour,
@@ -46,6 +46,16 @@ describe("reindex", () => {
     // newest snapshot stamp wins, deterministically
     expect(idx.generatedAt).toBe("2026-06-09T00:00:00.000Z");
     expect(idx.slams[1]).toMatchObject({ tour: "ATP", year: 2026, slam: "roland-garros", status: "complete", drawSize: 128 });
+  });
+
+  it("classifies a past slam with a scheduled (never-decided) final as complete, not live", async () => {
+    // issue #19: a past slam whose final was never scraped must not stay 'live' and hijack the boot pick
+    await writeSnap(dir, 2021, "atp-us-open.json", snap("ATP", 2021, "us-open", "US Open", "Hard", "2026-06-12T00:00:00.000Z", { status: "scheduled", winner: null }));
+    await writeSnap(dir, 2026, "atp-roland-garros.json", snap("ATP", 2026, "roland-garros", "Roland Garros", "Clay", "2026-06-09T00:00:00.000Z"));
+    const idx = await reindex(dir);
+    const uso = idx.slams.find((s) => s.year === 2021 && s.slam === "us-open")!;
+    expect(uso.status).toBe("complete");
+    expect(idx.slams.some((s) => s.status === "live")).toBe(false);
   });
 
   it("is deterministic — same files yield a byte-identical manifest", async () => {

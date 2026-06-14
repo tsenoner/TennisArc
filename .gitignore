@@ -23,3 +23,4 @@ dist/
 # ingestion scratch (raw fetched snapshots kept out of the app build)
 ingest/.cache/
 .vercel
+.scratch/

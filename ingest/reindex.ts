@@ -20,15 +20,20 @@ export async function reindex(dir = OUT_DIR): Promise<SlamIndex> {
     .map((f) => f.split(sep).join("/"))
     .filter((f) => SNAP_RE.test(f))
     .sort();
-  const entries: AvailableSlam[] = [];
+  const snaps: Snapshot[] = [];
   for (const f of files) {
-    const snap = JSON.parse(await readFile(resolve(dir, f), "utf8")) as Snapshot;
-    entries.push(availableSlamOf(snap));
+    snaps.push(JSON.parse(await readFile(resolve(dir, f), "utf8")) as Snapshot);
   }
+  // `now` is derived from the files (newest snapshot stamp), not the wall clock, so status
+  // classification stays a pure function of the inputs and re-runs are byte-identical. The empty-dir
+  // sentinel keeps Date math valid; an empty manifest has no entries to classify anyway.
+  const stamp = snaps.reduce((max, s) => (s.generatedAt > max ? s.generatedAt : max), "");
+  const now = stamp ? new Date(stamp) : new Date(0);
+  const entries: AvailableSlam[] = snaps.map((snap) => availableSlamOf(snap, now));
   entries.sort((a, b) => b.year - a.year || a.slam.localeCompare(b.slam) || a.tour.localeCompare(b.tour));
   return {
     schemaVersion: 2,
-    generatedAt: entries.reduce((max, e) => (e.generatedAt > max ? e.generatedAt : max), ""),
+    generatedAt: stamp,
     slams: entries,
   };
 }
