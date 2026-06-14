@@ -10,7 +10,17 @@ import { fullKey, sigKey } from "./names";
 // be rewound to a historical event. This recomputes ratings deterministically from raw results so a
 // 2016 snapshot shows 2016 Elo, not today's.
 
-const START_RATING = 1500;
+/**
+ * Tunable entrant seeding. `seedFor(level, round)` returns the starting rating for a player's first-ever
+ * appearance, given the level (tourney_level) and round of that debut match. Tennis Abstract seeds new
+ * entrants below 1500 (a "low 1200s" value that depends on debut level); the default keeps 1500 so
+ * nothing changes until a config is passed.
+ */
+export interface EloConfig {
+  seedFor: (level: string, round: string) => number;
+}
+
+export const DEFAULT_ELO_CONFIG: EloConfig = { seedFor: () => 1500 };
 
 /** Logistic Elo expectation for A beating B. winProbability(r,r) === 0.5, monotonic in (rA - rB). */
 export function winProbability(rA: number, rB: number): number {
@@ -109,14 +119,14 @@ interface RatingState {
   name: string;
 }
 
-const freshState = (name: string): RatingState => ({
-  overall: START_RATING,
+const freshState = (name: string, seed: number): RatingState => ({
+  overall: seed,
   overallN: 0,
-  hard: START_RATING,
+  hard: seed,
   hardN: 0,
-  clay: START_RATING,
+  clay: seed,
   clayN: 0,
-  grass: START_RATING,
+  grass: seed,
   grassN: 0,
   name,
 });
@@ -130,10 +140,12 @@ const freshState = (name: string): RatingState => ({
 export class EloEngine {
   readonly players = new Map<string, RatingState>();
 
-  private state(id: string, name: string): RatingState {
+  constructor(private readonly config: EloConfig = DEFAULT_ELO_CONFIG) {}
+
+  private state(id: string, name: string, level: string, round: string): RatingState {
     let s = this.players.get(id);
     if (!s) {
-      s = freshState(name);
+      s = freshState(name, this.config.seedFor(level, round));
       this.players.set(id, s);
     } else if (name && !s.name) {
       s.name = name;
@@ -142,8 +154,8 @@ export class EloEngine {
   }
 
   update(row: EloMatchRow): void {
-    const w = this.state(row.winnerId, row.winnerName);
-    const l = this.state(row.loserId, row.loserName);
+    const w = this.state(row.winnerId, row.winnerName, row.level, row.round);
+    const l = this.state(row.loserId, row.loserName, row.level, row.round);
 
     // Overall: symmetric update, each side with its own K from its own prior count.
     const eW = winProbability(w.overall, l.overall);
@@ -208,8 +220,12 @@ export function sortEloRows(rows: EloMatchRow[]): EloMatchRow[] {
  * with `tourneyDate < cutoffDate` (strict) into a fresh engine, then resolve per-surface values.
  * The backfill pre-sorts each tour's rows once and reuses this across ~113 snapshots.
  */
-export function computeRatingsAsOfSorted(sortedRows: EloMatchRow[], cutoffDate: number): ComputedRatings {
-  const engine = new EloEngine();
+export function computeRatingsAsOfSorted(
+  sortedRows: EloMatchRow[],
+  cutoffDate: number,
+  config: EloConfig = DEFAULT_ELO_CONFIG,
+): ComputedRatings {
+  const engine = new EloEngine(config);
   // Track distinct ids per fullKey so an ambiguous name (two players, one fullKey) can be dropped.
   const idsByName = new Map<string, Set<string>>();
   const noteName = (name: string, id: string): void => {
@@ -250,10 +266,14 @@ export function computeRatingsAsOfSorted(sortedRows: EloMatchRow[], cutoffDate: 
 /**
  * Compute frozen ratings as of `cutoffDate`: sort rows into deterministic order, then replay. Thin
  * wrapper so a shuffled input yields byte-identical output via `sortEloRows`; equal to
- * `computeRatingsAsOfSorted(sortEloRows(rows), cutoffDate)`.
+ * `computeRatingsAsOfSorted(sortEloRows(rows), cutoffDate, config)`.
  */
-export function computeRatingsAsOf(rows: EloMatchRow[], cutoffDate: number): ComputedRatings {
-  return computeRatingsAsOfSorted(sortEloRows(rows), cutoffDate);
+export function computeRatingsAsOf(
+  rows: EloMatchRow[],
+  cutoffDate: number,
+  config: EloConfig = DEFAULT_ELO_CONFIG,
+): ComputedRatings {
+  return computeRatingsAsOfSorted(sortEloRows(rows), cutoffDate, config);
 }
 
 /**

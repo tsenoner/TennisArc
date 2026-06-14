@@ -12,6 +12,8 @@ import {
   computeRatingsAsOfSorted,
   sortEloRows,
   applyHistoricalElo,
+  DEFAULT_ELO_CONFIG,
+  type EloConfig,
   type EloMatchRow,
 } from "./historical-elo";
 
@@ -280,4 +282,24 @@ test("resolveSurfaceElo is a flat 50/50 blend (TA methodology)", () => {
   expect(resolveSurfaceElo(1500, 0, 2000)).toBeNull();
   expect(resolveSurfaceElo(1600, 1, 2000)).toBe(1800);   // 0.5*2000 + 0.5*1600
   expect(resolveSurfaceElo(1600, 50, 2000)).toBe(1800);  // identical at high count
+});
+
+const seedRow = (o: Partial<any> = {}) => ({
+  tourneyName: "T", tourneyDate: 20240101, surface: "Hard" as const,
+  winnerId: "1", loserId: "2", winnerName: "Win A", loserName: "Lose B",
+  round: "R32", level: "A", ...o,
+});
+test("seedFor controls the entrant rating; default is 1500", () => {
+  expect(DEFAULT_ELO_CONFIG.seedFor("A", "R32")).toBe(1500);
+  // A debut loser starts at the seed and drops kFactor(0)*0.5 ≈ 65.66 after one loss, so they end
+  // just below the seed. Shifting the seed shifts that whole window by the same amount.
+  const def = computeRatingsAsOf([seedRow()], 20240102);
+  expect(def.byId.get("2")!.overall).toBeLessThan(1500);
+  expect(def.byId.get("2")!.overall).toBeGreaterThan(1400); // 1500 - 65.66 ≈ 1434.34
+  const cfg: EloConfig = { seedFor: (level) => (level === "C" ? 1230 : 1500) };
+  const cust = computeRatingsAsOf([seedRow({ level: "C" })], 20240102, cfg);
+  expect(cust.byId.get("2")!.overall).toBeLessThan(1230);
+  expect(cust.byId.get("2")!.overall).toBeGreaterThan(1130); // 1230 - 65.66 ≈ 1164.34
+  // The two configs differ by exactly the seed gap (1500 - 1230 = 270): same dynamics, shifted floor.
+  expect(def.byId.get("2")!.overall - cust.byId.get("2")!.overall).toBeCloseTo(270, 9);
 });
