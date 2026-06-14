@@ -31,6 +31,10 @@ export async function reindex(dir = OUT_DIR): Promise<SlamIndex> {
   // (a slam mid-scrape classifies correctly) and at least real time. `generatedAt` stays file-derived,
   // so the manifest's identity field is stable and back-to-back rebuilds are byte-identical; only a
   // genuine window-boundary crossing moves a status.
+  // Consequently `status` is NOT a pure function of the on-disk files — a genuine window-boundary
+  // crossing between two runs can flip a status — whereas `generatedAt` stays file-derived, so the
+  // manifest identity and same-instant rebuilds remain byte-identical (the determinism test asserts
+  // only same-instant equality).
   const stamp = snaps.reduce((max, s) => (s.generatedAt > max ? s.generatedAt : max), "");
   const now = new Date(Math.max(stamp ? Date.parse(stamp) : 0, Date.now()));
   const entries: AvailableSlam[] = snaps.map((snap) => availableSlamOf(snap, now));

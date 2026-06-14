@@ -12,7 +12,7 @@ export interface FinalRow {
   winnerName: string;
   loserName: string;
   score: string;
-  minutes: number | null;
+  durationSec: number | null;
 }
 
 export interface SackmannScore {
@@ -59,7 +59,7 @@ export function parseSackmannScore(score: string, winnerIsP1: boolean): Sackmann
 
 /**
  * Extract the single final (round "F") row for a slam from a Sackmann yearly CSV. Returns null when
- * no F row for that slam is present. minutes -> on-court seconds (Math.round(minutes*60)) or null.
+ * no F row for that slam is present. durationSec -> on-court seconds (Math.round(minutes*60)) or null.
  * Bare-`,` split is safe for Sackmann's quote-free schema (header.indexOf for column positions).
  */
 export function parseFinalRow(csv: string, slam: string): FinalRow | null {
@@ -84,27 +84,27 @@ export function parseFinalRow(csv: string, slam: string): FinalRow | null {
       winnerName: cols[iWin] ?? "",
       loserName: cols[iLose] ?? "",
       score: cols[iScore] ?? "",
-      minutes: cols[iMin] && Number.isFinite(min) && min > 0 ? Math.round(min * 60) : null,
+      durationSec: cols[iMin] && Number.isFinite(min) && min > 0 ? Math.round(min * 60) : null,
     };
   }
   return null;
 }
 
 /**
- * Determine which fixed slot (p1/p2) the row's winner occupies, joining by name: exact full-name
- * key first, then surname+initial signature. Returns "p1"/"p2" or null when neither slot matches
- * unambiguously (a signature that matches both slots, or matches neither). Never guesses.
+ * Determine which fixed slot (p1/p2) a name occupies, joining by name: exact full-name key first,
+ * then surname+initial signature. Returns "p1"/"p2" or null when neither slot matches unambiguously
+ * (a signature that matches both slots, or matches neither). Never guesses.
  */
-function winnerSlot(match: Match, players: Record<string, Player>, winnerName: string): "p1" | "p2" | null {
+function resolveSlot(match: Match, players: Record<string, Player>, name: string): "p1" | "p2" | null {
   const n1 = match.p1 ? players[match.p1]?.name ?? "" : "";
   const n2 = match.p2 ? players[match.p2]?.name ?? "" : "";
-  const wFull = fullKey(winnerName);
-  if (wFull && fullKey(n1) === wFull) return "p1";
-  if (wFull && fullKey(n2) === wFull) return "p2";
-  const wSig = sigKey(winnerName);
-  if (!wSig) return null;
-  const s1 = sigKey(n1) === wSig;
-  const s2 = sigKey(n2) === wSig;
+  const full = fullKey(name);
+  if (full && fullKey(n1) === full) return "p1";
+  if (full && fullKey(n2) === full) return "p2";
+  const sig = sigKey(name);
+  if (!sig) return null;
+  const s1 = sigKey(n1) === sig;
+  const s2 = sigKey(n2) === sig;
   if (s1 && !s2) return "p1";
   if (s2 && !s1) return "p2";
   return null; // ambiguous (both) or no match (neither)
@@ -119,20 +119,25 @@ export function applyFinal(match: Match, players: Record<string, Player>, row: F
   if (match.status === "finished" || match.status === "retired" || match.status === "walkover") {
     return false; // already resolved — idempotent no-op
   }
-  const slot = winnerSlot(match, players, row.winnerName);
-  if (slot === null) return false; // ambiguous / no join — never guess
+  const wSlot = resolveSlot(match, players, row.winnerName);
+  if (wSlot === null) return false; // ambiguous / no join — never guess
+  // Sanity-check the loser too: if it resolves to the SAME slot as the winner the row is corrupt
+  // (winner and loser are the same finalist) — reject. An unresolvable loser (abbreviated/ambiguous)
+  // is conservative-OK: the 5 real finals' losers all map to the opposite slot.
+  const lSlot = resolveSlot(match, players, row.loserName);
+  if (lSlot !== null && lSlot === wSlot) return false;
 
-  const parsed = parseSackmannScore(row.score, slot === "p1");
+  const parsed = parseSackmannScore(row.score, wSlot === "p1");
   // An empty/garbled score string parses to "finished" with zero sets. Don't write a finished final
   // that has a declared winner but no score — leave it scheduled (mirrors the ambiguous-join no-op).
   // A genuine walkover (status "walkover", also zero sets) is a real result and is kept.
   if (parsed.status === "finished" && parsed.sets.length === 0) return false;
 
-  match.winner = slot;
+  match.winner = wSlot;
   match.status = parsed.status;
   match.score = parsed.status === "walkover" ? null : parsed.sets;
   match.durationSec =
-    row.minutes != null && row.minutes <= MAX_SANE_SEC ? row.minutes : null;
+    row.durationSec != null && row.durationSec <= MAX_SANE_SEC ? row.durationSec : null;
   match.durationProvisional = false;
   return true;
 }

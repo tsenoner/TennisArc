@@ -5,8 +5,9 @@ import { fetchMatchesCsv } from "./durations";
 import { TOURNEY } from "./names";
 import {
   applyHistoricalElo,
-  computeRatingsAsOf,
+  computeRatingsAsOfSorted,
   parseEloMatchesCsv,
+  sortEloRows,
   type EloMatchRow,
 } from "./historical-elo";
 
@@ -21,7 +22,8 @@ const OUT_DIR = resolve(process.cwd(), "public/data");
 const SLAMS_DIR = resolve(OUT_DIR, "slams");
 const START_YEAR = 2000;
 
-/** Fetch + parse Sackmann CSVs START_YEAR..maxYear for one tour into a single EloMatchRow[]. */
+/** Fetch + parse Sackmann CSVs START_YEAR..maxYear for one tour into a single EloMatchRow[], sorted
+ *  ONCE into replay order so every per-snapshot recompute reuses it via computeRatingsAsOfSorted. */
 async function loadTourRows(tour: Tour, maxYear: number): Promise<EloMatchRow[]> {
   const rows: EloMatchRow[] = [];
   for (let year = START_YEAR; year <= maxYear; year++) {
@@ -31,7 +33,7 @@ async function loadTourRows(tour: Tour, maxYear: number): Promise<EloMatchRow[]>
     });
     if (csv) rows.push(...parseEloMatchesCsv(csv));
   }
-  return rows;
+  return sortEloRows(rows);
 }
 
 /** The shared tourney_date for a (year, slam) in the fetched rows, or null if Sackmann has no such
@@ -80,7 +82,7 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const { byName } = computeRatingsAsOf(rows, cutoff);
+      const { byName } = computeRatingsAsOfSorted(rows, cutoff);
       // Snapshot the prior elo so we can detect a true no-op (idempotent re-runs leave git clean).
       const before = JSON.stringify(Object.values(snap.players).map((p) => p.elo ?? null));
       const { matched, unmatched } = applyHistoricalElo(snap.players, byName);

@@ -200,15 +200,23 @@ export interface ComputedRatings {
 }
 
 /**
- * Compute frozen ratings as of `cutoffDate`: feed every row with `tourneyDate < cutoffDate` (strict)
- * into a fresh engine, in deterministic order, then resolve per-surface values. Rows are sorted by
- * (tourneyDate, original input index) so a shuffled input yields byte-identical output — Sackmann
- * shares one date across a whole tournament, so input order is the only intra-date signal we have.
+ * Sort rows into the deterministic replay order: (tourneyDate, original input index). Returns a NEW
+ * array (input untouched). Sackmann shares one date across a whole tournament, so the original input
+ * index is the only intra-date signal we have — a shuffled input must yield byte-identical output.
  */
-export function computeRatingsAsOf(rows: EloMatchRow[], cutoffDate: number): ComputedRatings {
-  const indexed = rows.map((row, idx) => ({ row, idx }));
-  indexed.sort((a, b) => a.row.tourneyDate - b.row.tourneyDate || a.idx - b.idx);
+export function sortEloRows(rows: EloMatchRow[]): EloMatchRow[] {
+  return rows
+    .map((row, idx) => ({ row, idx }))
+    .sort((a, b) => a.row.tourneyDate - b.row.tourneyDate || a.idx - b.idx)
+    .map(({ row }) => row);
+}
 
+/**
+ * Compute frozen ratings as of `cutoffDate` from rows ALREADY in `sortEloRows` order: feed every row
+ * with `tourneyDate < cutoffDate` (strict) into a fresh engine, then resolve per-surface values.
+ * The backfill pre-sorts each tour's rows once and reuses this across ~113 snapshots.
+ */
+export function computeRatingsAsOfSorted(sortedRows: EloMatchRow[], cutoffDate: number): ComputedRatings {
   const engine = new EloEngine();
   // Track distinct ids per fullKey so an ambiguous name (two players, one fullKey) can be dropped.
   const idsByName = new Map<string, Set<string>>();
@@ -223,7 +231,7 @@ export function computeRatingsAsOf(rows: EloMatchRow[], cutoffDate: number): Com
     set.add(id);
   };
 
-  for (const { row } of indexed) {
+  for (const row of sortedRows) {
     if (row.tourneyDate >= cutoffDate) continue;
     engine.update(row);
     noteName(row.winnerName, row.winnerId);
@@ -248,10 +256,21 @@ export function computeRatingsAsOf(rows: EloMatchRow[], cutoffDate: number): Com
 }
 
 /**
+ * Compute frozen ratings as of `cutoffDate`: sort rows into deterministic order, then replay. Thin
+ * wrapper so a shuffled input yields byte-identical output via `sortEloRows`; equal to
+ * `computeRatingsAsOfSorted(sortEloRows(rows), cutoffDate)`.
+ */
+export function computeRatingsAsOf(rows: EloMatchRow[], cutoffDate: number): ComputedRatings {
+  return computeRatingsAsOfSorted(sortEloRows(rows), cutoffDate);
+}
+
+/**
  * Mutate `players`: attach each matched player's frozen ComputedElo by `fullKey(name)`, falling back
- * to `sigKey(name)` (surname+initial). The sigKey fallback joins nothing when its key is ambiguous
- * within `byName` (two snapshot-resolvable names sharing one signature) — never a wrong rating.
- * Unmatched players keep their existing `elo` (the caller decides whether to null it).
+ * to `sigKey(name)` (surname+initial). The sigKey fallback joins only when the signature is
+ * unambiguous on BOTH sides — within `byName` (two distinct CSV fullKeys sharing one signature map to
+ * null) AND within the snapshot (two still-unmatched players sharing one signature: we can't tell
+ * which is which, so neither joins). Unmatched players keep their existing `elo` (the caller decides
+ * whether to null it).
  */
 export function applyHistoricalElo(
   players: Record<string, Player>,
@@ -275,17 +294,34 @@ export function applyHistoricalElo(
 
   let matched = 0;
   const unmatched: string[] = [];
+
+  // Pass 1 — exact fullKey join. Players with no direct hit become sig-fallback candidates.
+  const sigCandidates: Player[] = [];
   for (const p of Object.values(players)) {
     const fk = fullKey(p.name);
     const direct = fk ? byName.get(fk) : undefined;
     if (direct) {
       p.elo = eloOf(direct);
       matched++;
-      continue;
+    } else {
+      sigCandidates.push(p);
     }
+  }
+
+  // How many candidates share each signature: when two collide we can't tell which one the CSV's sig
+  // owner is, so neither may inherit it (the snapshot-side guard, mirroring seeds.ts applySeeds).
+  const sigCandCount = new Map<string, number>();
+  for (const p of sigCandidates) {
+    const sk = sigKey(p.name);
+    if (sk) sigCandCount.set(sk, (sigCandCount.get(sk) ?? 0) + 1);
+  }
+
+  // Pass 2 — surname+initial fallback for everything still unmatched after pass 1. A candidate joins
+  // only when its sig is unambiguous on the CSV side (bySig non-null) AND on the snapshot side (count 1).
+  for (const p of sigCandidates) {
     const sk = sigKey(p.name);
     const hit = sk ? bySig.get(sk) : undefined;
-    if (hit) {
+    if (hit && (sigCandCount.get(sk) ?? 0) === 1) {
       p.elo = eloOf(hit);
       matched++;
     } else {

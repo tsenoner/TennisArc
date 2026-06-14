@@ -9,6 +9,8 @@ import {
   parseEloMatchesCsv,
   EloEngine,
   computeRatingsAsOf,
+  computeRatingsAsOfSorted,
+  sortEloRows,
   applyHistoricalElo,
   type EloMatchRow,
 } from "./historical-elo";
@@ -169,6 +171,29 @@ describe("computeRatingsAsOf — freeze cutoff", () => {
   });
 });
 
+describe("sortEloRows / computeRatingsAsOfSorted", () => {
+  it("pre-sorting once and replaying matches computeRatingsAsOf for multiple cutoffs", () => {
+    const sorted = sortEloRows(rows);
+    for (const cutoff of [20160500, 99999999]) {
+      const fromSorted = computeRatingsAsOfSorted(sorted, cutoff);
+      const inline = computeRatingsAsOf(rows, cutoff);
+      expect([...fromSorted.byId.entries()]).toEqual([...inline.byId.entries()]);
+      expect([...fromSorted.byName.entries()]).toEqual([...inline.byName.entries()]);
+    }
+  });
+
+  it("sortEloRows returns a new array sorted by (tourneyDate, original index) without mutating input", () => {
+    const shuffled = [...rows].reverse();
+    const snapshot = [...shuffled];
+    const out = sortEloRows(shuffled);
+    expect(out).not.toBe(shuffled);
+    expect(shuffled).toEqual(snapshot); // input untouched
+    for (let i = 1; i < out.length; i++) {
+      expect(out[i].tourneyDate).toBeGreaterThanOrEqual(out[i - 1].tourneyDate);
+    }
+  });
+});
+
 describe("computeRatingsAsOf — name join", () => {
   it("keys byName on fullKey and drops an ambiguous fullKey (two ids, one name)", () => {
     const all = computeRatingsAsOf(rows, 99999999);
@@ -216,6 +241,22 @@ describe("applyHistoricalElo", () => {
     const res = applyHistoricalElo(players, all.byName);
     expect(res.matched).toBe(0);
     expect(players.p.elo).toBeNull(); // ambiguous name dropped from byName -> no join
+  });
+
+  it("skips a sigKey fallback when two snapshot players share one signature (snapshot-side guard)", () => {
+    // "rafaelnadal" is unambiguous on the CSV side (bySig.get('nadal:r') is non-null), but two snapshot
+    // players collide on sigKey 'nadal:r' and neither exact-matches 'rafaelnadal'. We can't tell which
+    // one is Rafael, so NEITHER may inherit his rating — both stay null with matched === 0.
+    const all = computeRatingsAsOf(rows, 20160500);
+    const players: Record<string, Player> = {
+      p1: player("p1", "R. Nadal"),        // sigKey nadal:r, no direct fullKey hit
+      p2: player("p2", "Ricardo Nadal"),   // sigKey nadal:r, no direct fullKey hit
+    };
+    const res = applyHistoricalElo(players, all.byName);
+    expect(res.matched).toBe(0);
+    expect(players.p1.elo).toBeNull();
+    expect(players.p2.elo).toBeNull();
+    expect(res.unmatched.sort()).toEqual(["R. Nadal", "Ricardo Nadal"]);
   });
 
   it("writes a plain PlayerElo (no leaked source-name field)", () => {

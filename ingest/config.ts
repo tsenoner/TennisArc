@@ -30,6 +30,10 @@ export const DRAW_SIZE = 128;
  * any season (the windows are intra-year and never hit Feb-29, so substituting the year is safe).
  * Approximate to the week (a slam's exact start drifts a few days year to year) — fine for the only
  * caller that needs it: classifying a snapshot as upcoming / live / complete by event recency.
+ * Irregular editions — e.g. the COVID-shifted Australian Open 2021 (played in February) or the late
+ * US Open 2020 — can fall partly or wholly outside the reparametrized window; this is harmless for
+ * classifying historical slams (`now` is far past `to`, so they resolve `complete` regardless) and
+ * only matters for the current-year in-progress slam, whose real dates track the template closely.
  */
 export function eventWindow(slam: string, year: number): { from: number; to: number } | null {
   const cfg = SLAMS[slam];

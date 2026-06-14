@@ -72,14 +72,14 @@ describe("parseFinalRow", () => {
     const row = parseFinalRow(csv, "australian-open");
     expect(row).toEqual({
       winnerName: "Novak Djokovic", loserName: "Daniil Medvedev",
-      score: "7-5 6-2 6-2", minutes: 113 * 60,
+      score: "7-5 6-2 6-2", durationSec: 113 * 60,
     });
   });
 
   it("matches the 'Us Open' casing for us-open", () => {
     const row = parseFinalRow(csv, "us-open");
     expect(row?.winnerName).toBe("Daniil Medvedev");
-    expect(row?.minutes).toBe(135 * 60);
+    expect(row?.durationSec).toBe(135 * 60);
   });
 
   it("returns null when no F row exists for the slam", () => {
@@ -92,7 +92,7 @@ describe("applyFinal", () => {
     const players = { a: player("a", "Novak Djokovic"), b: player("b", "Daniil Medvedev") };
     const m = finalMatch("a", "b");
     const row: FinalRow = {
-      winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score: "7-5 6-2 6-2", minutes: 113 * 60,
+      winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score: "7-5 6-2 6-2", durationSec: 113 * 60,
     };
     expect(applyFinal(m, players, row)).toBe(true);
     expect(m.winner).toBe("p1");
@@ -107,7 +107,7 @@ describe("applyFinal", () => {
     const m = finalMatch("a", "b");
     const row: FinalRow = {
       winnerName: "Dominic Thiem", loserName: "Alexander Zverev",
-      score: "2-6 4-6 6-4 6-3 7-6(6)", minutes: 250 * 60,
+      score: "2-6 4-6 6-4 6-3 7-6(6)", durationSec: 250 * 60,
     };
     expect(applyFinal(m, players, row)).toBe(true);
     expect(m.winner).toBe("p2");
@@ -124,7 +124,7 @@ describe("applyFinal", () => {
     const m = finalMatch("a", "b");
     const row: FinalRow = {
       winnerName: "Barbora Krejcikova", loserName: "Anastasia Pavlyuchenkova",
-      score: "6-1 2-6 6-4", minutes: 116 * 60,
+      score: "6-1 2-6 6-4", durationSec: 116 * 60,
     };
     expect(applyFinal(m, players, row)).toBe(true);
     expect(m.winner).toBe("p1");
@@ -135,7 +135,7 @@ describe("applyFinal", () => {
     const players = { a: player("a", "Naomi Osaka"), b: player("b", "Petra Kvitová") };
     const m = finalMatch("a", "b");
     const row: FinalRow = {
-      winnerName: "Naomi Osaka", loserName: "Petra Kvitova", score: "7-6(2) 5-7 6-4", minutes: 167 * 60,
+      winnerName: "Naomi Osaka", loserName: "Petra Kvitova", score: "7-6(2) 5-7 6-4", durationSec: 167 * 60,
     };
     expect(applyFinal(m, players, row)).toBe(true);
     expect(m.winner).toBe("p1");
@@ -145,7 +145,7 @@ describe("applyFinal", () => {
   it("sets null score for a walkover final", () => {
     const players = { a: player("a", "Some One"), b: player("b", "Other Two") };
     const m = finalMatch("a", "b");
-    const row: FinalRow = { winnerName: "Some One", loserName: "Other Two", score: "W/O", minutes: null };
+    const row: FinalRow = { winnerName: "Some One", loserName: "Other Two", score: "W/O", durationSec: null };
     expect(applyFinal(m, players, row)).toBe(true);
     expect(m.status).toBe("walkover");
     expect(m.score).toBeNull();
@@ -159,7 +159,7 @@ describe("applyFinal", () => {
       score: [{ p1: 7, p2: 5 }, { p1: 6, p2: 2 }, { p1: 6, p2: 2 }],
     };
     const row: FinalRow = {
-      winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score: "6-0 6-0 6-0", minutes: 60,
+      winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score: "6-0 6-0 6-0", durationSec: 60,
     };
     expect(applyFinal(m, players, row)).toBe(false);
     // untouched
@@ -171,7 +171,7 @@ describe("applyFinal", () => {
     // match for the abbreviated CSV winner, so the join is ambiguous and must not guess.
     const players = { a: player("a", "Serena Williams"), b: player("b", "Steffi Williams") };
     const m = finalMatch("a", "b");
-    const row: FinalRow = { winnerName: "S. Williams", loserName: "Other", score: "6-4 6-4", minutes: 60 };
+    const row: FinalRow = { winnerName: "S. Williams", loserName: "Other", score: "6-4 6-4", durationSec: 60 };
     expect(applyFinal(m, players, row)).toBe(false);
     expect(m.status).toBe("scheduled");
     expect(m.winner).toBeNull();
@@ -180,8 +180,20 @@ describe("applyFinal", () => {
   it("returns false when the winner matches neither slot", () => {
     const players = { a: player("a", "Novak Djokovic"), b: player("b", "Daniil Medvedev") };
     const m = finalMatch("a", "b");
-    const row: FinalRow = { winnerName: "Rafael Nadal", loserName: "Roger Federer", score: "6-4 6-4", minutes: 60 };
+    const row: FinalRow = { winnerName: "Rafael Nadal", loserName: "Roger Federer", score: "6-4 6-4", durationSec: 60 };
     expect(applyFinal(m, players, row)).toBe(false);
+    expect(m.winner).toBeNull();
+  });
+
+  it("returns false when the loser resolves to the SAME slot as the winner (corrupt row)", () => {
+    // A mismatched row whose loserName is actually the p1 player's name resolves both sides to p1.
+    const players = { a: player("a", "Novak Djokovic"), b: player("b", "Daniil Medvedev") };
+    const m = finalMatch("a", "b");
+    const row: FinalRow = {
+      winnerName: "Novak Djokovic", loserName: "Novak Djokovic", score: "6-4 6-4", durationSec: 60,
+    };
+    expect(applyFinal(m, players, row)).toBe(false);
+    expect(m.status).toBe("scheduled");
     expect(m.winner).toBeNull();
   });
 
@@ -189,7 +201,7 @@ describe("applyFinal", () => {
     const players = { a: player("a", "Novak Djokovic"), b: player("b", "Daniil Medvedev") };
     for (const score of ["", "   ", "ABN", "UNK"]) {
       const m = finalMatch("a", "b");
-      const row: FinalRow = { winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score, minutes: 60 };
+      const row: FinalRow = { winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score, durationSec: 60 };
       expect(applyFinal(m, players, row)).toBe(false);
       expect(m.status).toBe("scheduled"); // left for a human / next scrape, not a winner with no score
       expect(m.winner).toBeNull();
@@ -199,7 +211,7 @@ describe("applyFinal", () => {
   it("still applies a genuine walkover (zero sets, status walkover, null score)", () => {
     const players = { a: player("a", "Novak Djokovic"), b: player("b", "Daniil Medvedev") };
     const m = finalMatch("a", "b");
-    const row: FinalRow = { winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score: "W/O", minutes: null };
+    const row: FinalRow = { winnerName: "Novak Djokovic", loserName: "Daniil Medvedev", score: "W/O", durationSec: null };
     expect(applyFinal(m, players, row)).toBe(true);
     expect(m.status).toBe("walkover");
     expect(m.winner).toBe("p1");
