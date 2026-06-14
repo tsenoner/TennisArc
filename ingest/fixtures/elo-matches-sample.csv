@@ -1,0 +1,11 @@
+tourney_id,tourney_name,surface,draw_size,tourney_level,tourney_date,match_num,winner_id,winner_seed,winner_entry,winner_name,winner_hand,winner_ht,winner_ioc,winner_age,loser_id,loser_seed,loser_entry,loser_name,loser_hand,loser_ht,loser_ioc,loser_age,score,best_of,round,minutes,w_ace,w_df,w_svpt,w_1stIn,w_1stWon,w_2ndWon,w_SvGms,w_bpSaved,w_bpFaced,l_ace,l_df,l_svpt,l_1stIn,l_1stWon,l_2ndWon,l_SvGms,l_bpSaved,l_bpFaced,winner_rank,winner_rank_points,loser_rank,loser_rank_points
+2016-001,Monte Carlo Masters,Clay,64,M,20160101,1,100,1,,Rafael Nadal,L,185,ESP,29.8,200,2,,Novak Djokovic,R,188,SRB,28.8,6-3 6-3,3,F,120,3,1,60,40,30,15,12,2,3,2,4,58,38,25,12,11,3,7,1,9000,2,8000
+2016-002,Dubai,Hard,32,A,20160201,1,200,1,,Novak Djokovic,R,188,SRB,28.9,100,2,,Rafael Nadal,L,185,ESP,29.9,7-6 6-4,3,F,110,8,2,70,45,35,18,13,1,2,4,3,65,40,30,16,12,4,6,2,8000,1,9000
+2016-003,Davis Cup,Clay,4,D,20160301,1,100,,,Rafael Nadal,L,185,ESP,30.0,200,,,Novak Djokovic,R,188,SRB,29.0,6-2 6-2,3,RR,95,5,1,55,38,30,12,10,1,1,2,3,52,35,24,10,9,2,5,1,9000,2,8000
+2016-004,Stuttgart,Grass,32,A,20160401,1,200,1,,Novak Djokovic,R,188,SRB,29.1,100,2,,Rafael Nadal,L,185,ESP,30.1,6-4 6-4,3,RR,90,9,1,60,40,32,14,12,2,2,3,2,58,38,28,12,11,2,6,1,9000,2,8000
+2016-005,Madrid,Clay,64,G,20160501,1,100,1,,Rafael Nadal,L,185,ESP,30.2,300,5,,Roger Federer,R,185,SUI,34.7,W/O,3,SF,,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,5000,3,7000
+2016-006,Madrid,Hard,64,G,20160502,2,300,5,,Roger Federer,R,185,SUI,34.7,400,4,,Andy Murray,R,190,GBR,29.0,6-3 2-1 RET,3,F,75,6,1,40,28,22,8,7,0,1,2,2,42,30,20,7,6,1,5,3,7000,4,6000
+2016-007,Rome,Clay,32,M,20160503,3,400,1,,Andy Murray,R,190,GBR,29.0,500,2,,Stan Wawrinka,R,183,SUI,31.2,6-4 7-5,3,RR,105,7,2,65,42,33,15,11,2,3,3,3,60,38,27,13,10,3,6,4,6000,5,5500
+2016-008,Halle,Grass,32,A,20160601,1,500,1,,Stan Wawrinka,R,183,SUI,31.3,400,2,,Andy Murray,R,190,GBR,29.1,7-5 6-4,3,F,100,8,1,58,40,32,12,11,1,2,4,2,55,36,26,11,10,2,6,5,5500,4,6000
+2016-009,Geneva,,32,A,20160605,1,600,1,,Sam Smith,R,180,USA,25.0,601,2,,Sam Smith,L,182,AUS,27.0,6-1 6-1,3,SF,80,5,0,45,32,26,10,8,0,0,1,2,43,30,22,8,7,1,5,1,3000,2,2900
+2016-010,Geneva,Clay,32,A,20160606,2,600,1,,Sam Smith,R,180,USA,25.0,700,3,,Tim Brown,R,185,USA,26.0,6-2 6-3,3,F,85,6,1,48,33,27,11,9,1,1,2,2,46,32,23,9,8,2,5,1,3000,3,2800
