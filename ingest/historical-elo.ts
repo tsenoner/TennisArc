@@ -23,25 +23,17 @@ export function kFactor(priorMatches: number): number {
 }
 
 /**
- * Blend a thin-sample surface rating toward the overall rating. A player with few surface matches has
- * a noisy, near-1500 surface number; leaning on `overall` (a far larger sample) is more honest than
- * shipping that noise. With `surfaceCount >= burnIn` the surface rating stands on its own.
- *   surfaceCount === 0        -> null (never played this surface; no signal at all)
- *   0 < surfaceCount < burnIn -> w*surface + (1-w)*overall, w = surfaceCount/burnIn
- *   surfaceCount >= burnIn    -> surface (pure)
+ * Tennis Abstract's surface Elo is a flat 50/50 blend of overall and a pure single-surface rating
+ * (TA report page + Heavy Topspin 2017/2019: "50/50 worked for each surface"), applied at ALL sample
+ * sizes. `surfaceCount === 0` means the player has never played the surface -> no signal -> null.
  */
 export function resolveSurfaceElo(
   surfaceRating: number,
   surfaceCount: number,
   overall: number,
-  burnIn = 10,
 ): number | null {
   if (surfaceCount === 0) return null;
-  if (surfaceCount < burnIn) {
-    const w = surfaceCount / burnIn;
-    return w * surfaceRating + (1 - w) * overall;
-  }
-  return surfaceRating;
+  return 0.5 * overall + 0.5 * surfaceRating;
 }
 
 export type EloSurface = "Hard" | "Clay" | "Grass";

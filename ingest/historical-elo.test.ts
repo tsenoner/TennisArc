@@ -107,15 +107,14 @@ describe("resolveSurfaceElo", () => {
   it("returns null for an unplayed surface (count 0)", () => {
     expect(resolveSurfaceElo(1700, 0, 1500)).toBeNull();
   });
-  it("blends a thin sample toward overall (w = count/burnIn)", () => {
-    // count 1, burnIn 10 -> w = 0.1: 0.1*surface + 0.9*overall
-    expect(resolveSurfaceElo(1700, 1, 1500)).toBeCloseTo(0.1 * 1700 + 0.9 * 1500, 10);
-    // a near-1500 surface with little data should sit close to overall, not the noisy surface value
-    expect(resolveSurfaceElo(1505, 2, 1600)).toBeCloseTo(0.2 * 1505 + 0.8 * 1600, 10);
+  it("is a flat 50/50 blend of overall and surface at any nonzero count", () => {
+    // TA methodology: 0.5*overall + 0.5*surface regardless of sample size.
+    expect(resolveSurfaceElo(1700, 1, 1500)).toBeCloseTo(0.5 * 1700 + 0.5 * 1500, 10); // 1600
+    expect(resolveSurfaceElo(1505, 2, 1600)).toBeCloseTo(0.5 * 1505 + 0.5 * 1600, 10); // 1552.5
   });
-  it("returns the pure surface rating once the sample reaches burnIn", () => {
-    expect(resolveSurfaceElo(1700, 10, 1500)).toBe(1700);
-    expect(resolveSurfaceElo(1700, 25, 1500)).toBe(1700);
+  it("uses the same 50/50 blend at high counts (no burn-in, no pure-surface mode)", () => {
+    expect(resolveSurfaceElo(1700, 10, 1500)).toBe(0.5 * 1700 + 0.5 * 1500); // 1600
+    expect(resolveSurfaceElo(1700, 25, 1500)).toBe(0.5 * 1700 + 0.5 * 1500); // 1600
   });
 });
 
@@ -275,4 +274,10 @@ test("parseEloMatchesCsv carries round and level for seeding", () => {
   const rows = parseEloMatchesCsv(csv);
   expect(rows[0].round).toBe("Q1");
   expect(rows[0].level).toBe("C");
+});
+
+test("resolveSurfaceElo is a flat 50/50 blend (TA methodology)", () => {
+  expect(resolveSurfaceElo(1500, 0, 2000)).toBeNull();
+  expect(resolveSurfaceElo(1600, 1, 2000)).toBe(1800);   // 0.5*2000 + 0.5*1600
+  expect(resolveSurfaceElo(1600, 50, 2000)).toBe(1800);  // identical at high count
 });
