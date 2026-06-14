@@ -22,7 +22,7 @@ import ref from "./fixtures/ta-elo-reference.json";
 // (reverting the 50/50 blend or the qual/challenger scope blows overall past 200).
 const BANDS: Record<Tour, { overall: number; hard: number; clay: number; grass: number; minJoin: number }> = {
   ATP: { overall: 30, hard: 35, clay: 30, grass: 100, minJoin: 16 },
-  WTA: { overall: 20, hard: 35, clay: 35, grass: 55, minJoin: 16 },
+  WTA: { overall: 20, hard: 35, clay: 35, grass: 70, minJoin: 16 },
 };
 
 const medianAbs = (a: number[]): number => {

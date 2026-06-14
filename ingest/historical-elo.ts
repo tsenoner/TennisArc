@@ -34,21 +34,45 @@ export const DEFAULT_ELO_CONFIG: EloConfig = { seedFor: () => 1500 };
  * the penalties "end up bringing down the current Elo ratings of the players who are in the middle of long
  * breaks ... giving us ranking tables that come closer to what we expect" — and during COVID he had to
  * explicitly *suspend* "that penalty" board-wide (2021-03-08), which proves it is normally ON the board.
- * Applying it per-match ON RETURN instead deflates the whole pool, since routine season gaps are
- * indistinguishable from injuries by length alone. IDENTICAL for ATP and WTA (TA carries one curve to both;
- * no per-gender scale). The 100/150 endpoints are Sackmann's; the linear shape between them is our
- * assumption. NOTE the curve is measured in active-season days, so a true ~1-calendar-year layoff (~242
- * active days) reaches ~130, not 150 — a deliberate consequence of faithful active-season counting.
- * SEPARATE & NOT modelled here: the on-return K-multiplier (x1.5 decaying to x1 over 20 matches) that
- * depresses currently-ACTIVE injury returnees (e.g. Djokovic/Fritz) — a path-dependent schedule an
- * extraction-time scalar cannot reproduce; see docs/elo-investigation-findings.md.
+ * IMPLEMENTED FAITHFULLY (verified against Sackmann's text + a month-by-month reconstruction):
+ *  • ON RETURN, in the replay, we DOCK THE STATE and open a boosted-K recovery window (K ×`recoveryMult`
+ *    decaying linearly to ×1 over `recoveryMatches` matches). Recovery is therefore via RESULTS (winning),
+ *    not an automatic time-decay — a returnee who keeps losing stays docked, exactly as TA's board shows
+ *    (Zheng/Hurkacz sat docked all season; an auto-decay overlay wrongly let them drift back up).
+ *  • COMBINE-AND-DIFFERENTIAL for serial layoffs (verbatim: "if the second layoff is within two years of
+ *    the previous comeback, combine the length of the two layoffs, find the penalty for that combined
+ *    length, and apply the difference"). We track the cluster's combined active-layoff days + the dock
+ *    already charged, and at each return charge only `curve(combinedDays) − alreadyCharged`. This BOUNDS a
+ *    multi-gap veteran near the −150 ceiling instead of stacking a fresh −100 per gap (the bug that dragged
+ *    Djokovic ~100 too low). Clusters reset after `comebackResetYears` clean years.
+ *  • A still-open trailing gap (a player absent right now, not yet returned) extends the cluster at
+ *    EXTRACTION: it docks `curve(combinedDays + openGap) − alreadyCharged` on the output.
+ * Gated on the pre-dock rating >=`ratingFloor` so only the elite cohort TA docks is touched (an ungated
+ * dock deflates the pool ~−820). IDENTICAL for ATP and WTA. The 100/150 endpoints, the ≥1900 gate, the
+ * 20-match recovery and the 2-year combine window are Sackmann's; the linear curve shape between the
+ * endpoints is our only assumption. NOTE active-season counting means a true ~1-calendar-year layoff
+ * (~242 active days) reaches ~130, not 150 — a deliberate consequence of excluding the offseason.
  */
 export interface LayoffDock {
-  triggerDays: number; // active-season days before any dock (~8 weeks = 56)
+  triggerDays: number; // active-season days before a gap counts as a layoff (~8 weeks = 56)
   minPenalty: number; // dock at the trigger (100)
   maxPenalty: number; // dock at >= maxDays (150)
   maxDays: number; // active-season days at which the dock plateaus (365)
   ratingFloor: number; // only dock players whose pre-dock rating >= this (1900)
+  recoveryMatches: number; // boosted-K window after a return (Sackmann: 20)
+  recoveryMult: number; // peak K-multiplier on the first match back (Sackmann: 1.5), decays linearly to 1
+  comebackResetYears: number; // a layoff within this many years of the last comeback combines with it (2)
+  // COVID-19 suspension: Sackmann SUSPENDED the absence penalty board-wide during the pandemic
+  // (2021-03-08: "Because the pandemic caused all sorts of absences for all sorts of reasons, I've
+  // suspended that penalty until things are a bit more normal."). Within [suspendFrom, suspendTo] we apply
+  // no dock — a comeback in the window charges nothing, and a board in the window shows un-docked values.
+  suspendFrom?: number; // YYYYMMDD inclusive (omit to never suspend)
+  suspendTo?: number; // YYYYMMDD inclusive
+}
+
+/** True if `date` falls inside the dock's COVID suspension window. */
+function dockSuspended(dock: LayoffDock, date: number): boolean {
+  return dock.suspendFrom !== undefined && date >= dock.suspendFrom && date <= (dock.suspendTo ?? dock.suspendFrom);
 }
 
 /** Logistic Elo expectation for A beating B. winProbability(r,r) === 0.5, monotonic in (rA - rB). */
@@ -86,12 +110,19 @@ export function activeLayoffDays(lastDate: number, asOf: number): number {
   return active;
 }
 
+/** The raw dock curve for a (combined) layoff of `days` active-season days: minPenalty at the trigger,
+ *  rising linearly to maxPenalty at maxDays, clamped both ends. No rating/trigger gate — callers gate. */
+export function layoffCurve(dock: LayoffDock, days: number): number {
+  const t = Math.min(1, Math.max(0, (days - dock.triggerDays) / (dock.maxDays - dock.triggerDays)));
+  return dock.minPenalty + (dock.maxPenalty - dock.minPenalty) * t;
+}
+
 /** Elo dock for `activeDays` of competitive-season inactivity given a player's pre-dock `rating`. Zero
- *  below the ~8-week trigger OR below the rating floor (TA docks only players who were rated ~1900+). */
+ *  below the ~8-week trigger OR below the rating floor (TA docks only players who were rated ~1900+).
+ *  This is the SINGLE-layoff form; serial layoffs use the combine-and-differential logic in the engine. */
 export function layoffPenalty(dock: LayoffDock, activeDays: number, rating: number): number {
   if (rating < dock.ratingFloor || activeDays < dock.triggerDays) return 0;
-  const t = Math.min(1, (activeDays - dock.triggerDays) / (dock.maxDays - dock.triggerDays));
-  return dock.minPenalty + (dock.maxPenalty - dock.minPenalty) * t;
+  return layoffCurve(dock, activeDays);
 }
 
 /**
@@ -185,6 +216,10 @@ interface RatingState {
   grassN: number;
   name: string;
   lastDate: number; // YYYYMMDD of the player's most recent match (0 until first) — for the layoff dock
+  recoveryLeft: number; // matches remaining in the boosted-K post-return window (0 = normal)
+  clusterDays: number; // combined active-layoff days in the current cluster (combine-and-differential)
+  clusterDock: number; // total Elo already docked in this cluster
+  lastComeback: number; // YYYYMMDD of the last qualifying return (for the comeback-reset window)
 }
 
 const freshState = (name: string, seed: number): RatingState => ({
@@ -198,6 +233,10 @@ const freshState = (name: string, seed: number): RatingState => ({
   grassN: 0,
   name,
   lastDate: 0,
+  recoveryLeft: 0,
+  clusterDays: 0,
+  clusterDock: 0,
+  lastComeback: 0,
 });
 
 /**
@@ -227,24 +266,70 @@ export class EloEngine {
     const w = this.state(row.winnerId, row.winnerName, row.level, row.round);
     const l = this.state(row.loserId, row.loserName, row.level, row.round);
 
-    // Overall: symmetric update, each side with its own K from its own prior count.
+    // On-return injury dock (combine-and-differential): dock the STATE and open a boosted-K window.
+    this.detectReturn(w, row.tourneyDate);
+    this.detectReturn(l, row.tourneyDate);
+    const mW = this.recoveryMult(w);
+    const mL = this.recoveryMult(l);
+
+    // Overall: symmetric update, each side with its own K from its own prior count (× recovery boost).
     const eW = winProbability(w.overall, l.overall);
-    const kW = kFactor(w.overallN);
-    const kL = kFactor(l.overallN);
+    const kW = kFactor(w.overallN) * mW;
+    const kL = kFactor(l.overallN) * mL;
     w.overall += kW * (1 - eW);
     l.overall += kL * (0 - (1 - eW)); // expectation for the loser is (1 - eW)
     w.overallN += 1;
     l.overallN += 1;
 
     const surf = row.surface;
-    if (surf === "Hard") this.surfaceUpdate(w, l, "hard", "hardN");
-    else if (surf === "Clay") this.surfaceUpdate(w, l, "clay", "clayN");
-    else if (surf === "Grass") this.surfaceUpdate(w, l, "grass", "grassN");
+    if (surf === "Hard") this.surfaceUpdate(w, l, "hard", "hardN", mW, mL);
+    else if (surf === "Clay") this.surfaceUpdate(w, l, "clay", "clayN", mW, mL);
+    else if (surf === "Grass") this.surfaceUpdate(w, l, "grass", "grassN", mW, mL);
     // Unknown/empty surface: overall-only (already applied above).
 
-    // Record activity so rating extraction can dock a player who is inactive as of the cutoff.
+    // Count this match toward each side's recovery window, then record activity for the extraction dock.
+    if (w.recoveryLeft > 0) w.recoveryLeft -= 1;
+    if (l.recoveryLeft > 0) l.recoveryLeft -= 1;
     w.lastDate = row.tourneyDate;
     l.lastDate = row.tourneyDate;
+  }
+
+  /** On a return from a >= trigger active-season gap by a player whose pre-dock rating is >= ratingFloor,
+   *  dock the STATE by the COMBINE-AND-DIFFERENTIAL amount and open a boosted-K recovery window. Serial
+   *  layoffs within `comebackResetYears` of the last comeback combine: we charge only
+   *  `curve(combinedDays) − alreadyCharged`, bounding the cluster near the −maxPenalty ceiling instead of
+   *  stacking a fresh penalty per gap. No-op without a dock config, on a debut, or below trigger/floor. */
+  private detectReturn(s: RatingState, date: number): void {
+    const dock = this.config.dock;
+    if (!dock || s.lastDate === 0) return;
+    if (dockSuspended(dock, date)) return; // COVID: no penalty for pandemic-era comebacks
+    const gap = activeLayoffDays(s.lastDate, date);
+    if (gap < dock.triggerDays) return; // routine play, not a layoff
+    const preDockRating = s.overall + s.clusterDock; // the player's level before any cluster docking
+    if (preDockRating < dock.ratingFloor) return;
+    // A layoff long after the last comeback starts a fresh cluster (clean-recovery reset).
+    if (s.lastComeback !== 0 && yearsBetween(s.lastComeback, date) > dock.comebackResetYears) {
+      s.clusterDays = 0;
+      s.clusterDock = 0;
+    }
+    s.clusterDays += gap;
+    s.lastComeback = date;
+    const differential = layoffCurve(dock, s.clusterDays) - s.clusterDock;
+    if (differential <= 0) return; // combined penalty already fully charged
+    s.overall -= differential;
+    s.hard -= differential;
+    s.clay -= differential;
+    s.grass -= differential;
+    s.clusterDock += differential;
+    s.recoveryLeft = dock.recoveryMatches;
+  }
+
+  /** K multiplier for a player inside the post-return window: decays linearly from `recoveryMult` (first
+   *  match back) to 1 over `recoveryMatches` matches; 1 outside the window. */
+  private recoveryMult(s: RatingState): number {
+    const dock = this.config.dock;
+    if (!dock || s.recoveryLeft <= 0) return 1;
+    return 1 + (dock.recoveryMult - 1) * (s.recoveryLeft / dock.recoveryMatches);
   }
 
   private surfaceUpdate(
@@ -252,15 +337,36 @@ export class EloEngine {
     l: RatingState,
     rk: "hard" | "clay" | "grass",
     nk: "hardN" | "clayN" | "grassN",
+    mW = 1,
+    mL = 1,
   ): void {
     const eW = winProbability(w[rk], l[rk]);
-    const kW = kFactor(w[nk]);
-    const kL = kFactor(l[nk]);
+    const kW = kFactor(w[nk]) * mW;
+    const kL = kFactor(l[nk]) * mL;
     w[rk] += kW * (1 - eW);
     l[rk] += kL * (0 - (1 - eW));
     w[nk] += 1;
     l[nk] += 1;
   }
+}
+
+/** Whole-and-fractional years between two YYYYMMDD dates (for the comeback-combine window). */
+function yearsBetween(from: number, to: number): number {
+  return (dayNumber(to) - dayNumber(from)) / 365.25;
+}
+
+/** The OUTPUT dock for a player who is absent RIGHT NOW (open trailing gap, not yet returned): the open
+ *  gap extends the current cluster, so we charge `curve(clusterDays + openGap) − clusterDock` on top of
+ *  what state already carries. Zero below trigger/floor. Used at extraction. */
+export function openGapDock(
+  dock: LayoffDock,
+  openGapDays: number,
+  clusterDays: number,
+  clusterDock: number,
+  preDockRating: number,
+): number {
+  if (openGapDays < dock.triggerDays || preDockRating < dock.ratingFloor) return 0;
+  return Math.max(0, layoffCurve(dock, clusterDays + openGapDays) - clusterDock);
 }
 
 export interface ComputedElo extends PlayerElo {
@@ -317,14 +423,22 @@ export function computeRatingsAsOfSorted(
   // ids with comparable counts stay ambiguous and are dropped (we can't tell which is which).
   const best = new Map<string, { elo: ComputedElo; n: number; runnerUp: number }>();
   for (const [id, s] of engine.players) {
-    // Injury/absence dock (extraction time): TA's published rating for a player inactive a long
-    // competitive-season stretch as of the cutoff is already docked. Gated on the pre-dock overall
-    // (s.overall = the rating at the player's last match, i.e. at injury, since the engine applies no
-    // time-decay) so only the >=ratingFloor cohort TA docks is touched; active players get a 0 dock,
-    // so this never deflates the field. Applied uniformly to overall + each surface.
-    const dock = config.dock
-      ? layoffPenalty(config.dock, activeLayoffDays(s.lastDate, cutoffDate), s.overall)
-      : 0;
+    // Injury/absence dock at EXTRACTION. For a board DURING the COVID suspension we un-dock everyone
+    // (add back the in-state clusterDock), since TA suspended the penalty board-wide then. Otherwise dock a
+    // player absent RIGHT NOW (open trailing gap, not yet returned): the open gap extends their cluster,
+    // docking the marginal curve amount on the output. A player who has already returned carries their dock
+    // IN STATE (applied during replay); active, settled players get 0 — the field is never deflated.
+    const dock = !config.dock
+      ? 0
+      : dockSuspended(config.dock, cutoffDate)
+        ? -s.clusterDock
+        : openGapDock(
+            config.dock,
+            activeLayoffDays(s.lastDate, cutoffDate),
+            s.clusterDays,
+            s.clusterDock,
+            s.overall + s.clusterDock,
+          );
     const surf = (raw: number, n: number): number | null => {
       const r = resolveSurfaceElo(raw, n, s.overall);
       return r === null ? null : r - dock;

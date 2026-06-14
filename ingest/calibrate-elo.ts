@@ -26,8 +26,8 @@ const START_YEAR = Number(process.env.ELO_START_YEAR) || 1968;
 // during calibration (seedConfig carries it), so the seed is no longer pulled down to mask docked
 // absentees. We choose by the HEADLINE overall meanAbs but also REPORT the single largest |deviation|
 // and the worst offenders, because a few injury-history players dominate the tail (the user's ask).
-const SEED_TOURS = [1300, 1350, 1400, 1450, 1500, 1550];
-const SEED_SUBS = [1010, 1050, 1090, 1130, 1170, 1210];
+const SEED_TOURS = [1250, 1300, 1350, 1400, 1450, 1500, 1550];
+const SEED_SUBS = [1050, 1090, 1130, 1170, 1210, 1250, 1290];
 const TOP_N = 50;
 // "As of today" cutoff (a real date) — gates rows to <= today.
 const TODAY = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ""));

@@ -35,6 +35,11 @@ export const TA_LAYOFF_DOCK: LayoffDock = {
   maxPenalty: 150, // Elo dock at >= maxDays (Sackmann: "not-quite-one-year break ... drop of 150 points")
   maxDays: 365, // active-season days at which the dock plateaus
   ratingFloor: 1900, // dock only players rated >= this pre-layoff (Sackmann's tuning cohort)
+  recoveryMatches: 20, // boosted-K window after a return (Sackmann: "back to 1x over the next 20 matches")
+  recoveryMult: 1.5, // peak K-multiplier on the first match back (Sackmann: "increase ... by a factor of 1.5")
+  comebackResetYears: 2, // serial layoffs within 2yr of the last comeback combine (Sackmann's verbatim rule)
+  suspendFrom: 20200301, // COVID shutdown — Sackmann suspended the absence penalty board-wide (2021-03-08)
+  suspendTo: 20211231, // "until things are a bit more normal" — the disrupted 2020-2021 seasons
 };
 
 export const seedConfig = (seedTour: number, seedSub: number): EloConfig => ({
@@ -42,5 +47,5 @@ export const seedConfig = (seedTour: number, seedSub: number): EloConfig => ({
   dock: TA_LAYOFF_DOCK,
 });
 
-export const ATP_ELO_CONFIG: EloConfig = seedConfig(1450, 1130);
-export const WTA_ELO_CONFIG: EloConfig = seedConfig(1350, 1050);
+export const ATP_ELO_CONFIG: EloConfig = seedConfig(1550, 1170);
+export const WTA_ELO_CONFIG: EloConfig = seedConfig(1400, 1090);

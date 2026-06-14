@@ -362,7 +362,7 @@ describe("activeLayoffDays (TA injury/absence: off-season is not counted)", () =
 });
 
 describe("layoffPenalty (100 @ 8wk -> 150 @ ~1yr, gated at >=1900)", () => {
-  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1900 };
+  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1900, recoveryMatches: 20, recoveryMult: 1.5, comebackResetYears: 2 };
   it("is 0 below the 8-week trigger", () => {
     expect(layoffPenalty(dock, 55, 2200)).toBe(0);
     expect(layoffPenalty(dock, 56, 2200)).toBe(100); // exactly at the trigger
@@ -381,7 +381,7 @@ describe("layoffPenalty (100 @ 8wk -> 150 @ ~1yr, gated at >=1900)", () => {
 
 test("the dock is applied at extraction only to absent players >= the rating floor", () => {
   // A low ratingFloor (1400) so a seeded-1500 player triggers, isolating the wiring from a 1900 climb.
-  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1400 };
+  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1400, recoveryMatches: 20, recoveryMult: 1.5, comebackResetYears: 2 };
   const cfg: EloConfig = { seedFor: () => 1500, dock };
   const noDock: EloConfig = { seedFor: () => 1500 };
   const r = [seedRow({ winnerId: "1", winnerName: "Abs Ent", loserId: "2", loserName: "Op P", tourneyDate: 20200201 })];
@@ -401,4 +401,43 @@ test("the dock is applied at extraction only to absent players >= the rating flo
   const recent = computeRatingsAsOf(r, 20200301, cfg).byId.get("1")!.overall; // only ~4 weeks out
   const recentNo = computeRatingsAsOf(r, 20200301, noDock).byId.get("1")!.overall;
   expect(recent).toBeCloseTo(recentNo, 6); // below the 8-week trigger -> no dock
+});
+
+describe("on-return dock + combine-and-differential", () => {
+  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1400, recoveryMatches: 20, recoveryMult: 1.5, comebackResetYears: 2 };
+  const cfg: EloConfig = { seedFor: () => 1500, dock };
+  const win = (id: string, opp: string, date: number) => row({ winnerId: id, loserId: opp, tourneyDate: date, surface: null });
+
+  it("docks the STATE on a return from a >= trigger in-season gap and opens the boosted-K window", () => {
+    const e = new EloEngine(cfg);
+    e.update(win("1", "2", 20200201)); // debut win, no prior gap
+    expect(e.players.get("1")!.clusterDock).toBe(0);
+    e.update(win("1", "3", 20200601)); // return from a ~121 active-day gap -> dock fires
+    const c1 = e.players.get("1")!.clusterDock;
+    expect(c1).toBeGreaterThan(100); // above the curve's 100 floor
+    expect(c1).toBeLessThan(125); // ~110 for 121 days, well under the 150 cap
+    expect(e.players.get("1")!.recoveryLeft).toBe(19); // 20-match window opened, the return match consumed 1
+  });
+
+  it("charges only the DIFFERENTIAL for a second layoff within the combine window", () => {
+    const e = new EloEngine(cfg);
+    e.update(win("1", "2", 20200201));
+    e.update(win("1", "3", 20200601)); // first return ~121d
+    const c1 = e.players.get("1")!.clusterDock;
+    e.update(win("1", "4", 20200901)); // second return ~92d, combines (within 2yr)
+    const c2 = e.players.get("1")!.clusterDock;
+    expect(c2).toBeGreaterThan(c1); // the cluster grew
+    expect(c2 - c1).toBeLessThan(c1); // ...but only by the differential, far less than a fresh ~110 dock
+    expect(c2).toBeLessThanOrEqual(dock.maxPenalty); // bounded by the curve cap, never stacks past 150
+  });
+
+  it("starts a FRESH cluster for a layoff > comebackResetYears after the last comeback", () => {
+    const e = new EloEngine(cfg);
+    e.update(win("1", "2", 20200201));
+    e.update(win("1", "3", 20200601)); // first cluster (~121d), lastComeback = 20200601
+    e.update(win("1", "4", 20230601)); // 3 years later (> 2yr) -> reset: cluster = the new gap ONLY
+    const s = e.players.get("1")!;
+    expect(s.clusterDays).toBe(activeLayoffDays(20200601, 20230601)); // reset, NOT cumulative (121 + gap)
+    expect(s.clusterDock).toBeGreaterThan(100); // a full fresh dock (curve caps at 150 for this long gap)
+  });
 });
