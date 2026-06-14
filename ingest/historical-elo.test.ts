@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Player } from "../src/model";
@@ -265,4 +265,14 @@ describe("applyHistoricalElo", () => {
     applyHistoricalElo(players, all.byName);
     expect(Object.keys(players.p.elo!).sort()).toEqual(["clay", "grass", "hard", "overall"]);
   });
+});
+
+test("parseEloMatchesCsv carries round and level for seeding", () => {
+  const csv = [
+    "tourney_name,surface,tourney_date,winner_id,loser_id,winner_name,loser_name,round,tourney_level",
+    "Some Challenger,Hard,20240101,1,2,A B,C D,Q1,C",
+  ].join("\n");
+  const rows = parseEloMatchesCsv(csv);
+  expect(rows[0].round).toBe("Q1");
+  expect(rows[0].level).toBe("C");
 });
