@@ -22,7 +22,10 @@ import { ATP_ELO_CONFIG, WTA_ELO_CONFIG } from "./elo-config";
 //   pnpm backfill-elo 2016 2017  # specific years
 const OUT_DIR = resolve(process.cwd(), "public/data");
 const SLAMS_DIR = resolve(OUT_DIR, "slams");
-const START_YEAR = 2000;
+// Full Sackmann history. Tour-level exists 1968+ (Challengers only 2008+, qualifying 2011+, so the deep
+// past is tour-level only). The deeper burn-in matures the rating scale; the entrant seed is re-fit for
+// this start in elo-config.ts. ELO_START_YEAR overrides for experiments.
+const START_YEAR = Number(process.env.ELO_START_YEAR) || 1968;
 
 /** Fetch + parse Sackmann CSVs START_YEAR..maxYear for one tour into a single EloMatchRow[], sorted
  *  ONCE into replay order so every per-snapshot recompute reuses it via computeRatingsAsOfSorted. */
