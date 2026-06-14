@@ -316,3 +316,28 @@ test("seedFor controls the entrant rating; default is 1500", () => {
   expect(q.byId.get("2")!.overall).toBeLessThan(1200);
   expect(q.byId.get("2")!.overall).toBeGreaterThan(1100); // 1200 - 65.66 ≈ 1134.34
 });
+
+test("byName prefers the dominant Sackmann id over a same-name low-match phantom", () => {
+  // Two ids share fullKey "starplayer": id "1" plays 4 matches, id "2" a single phantom match
+  // (mirrors Mensik: 212 real matches under one id, 11 under a qual/challenger duplicate id).
+  const rows: EloMatchRow[] = [
+    seedRow({ winnerId: "1", winnerName: "Star Player", loserId: "9a", loserName: "Opp A", tourneyDate: 20240101 }),
+    seedRow({ winnerId: "1", winnerName: "Star Player", loserId: "9b", loserName: "Opp B", tourneyDate: 20240108 }),
+    seedRow({ winnerId: "1", winnerName: "Star Player", loserId: "9c", loserName: "Opp C", tourneyDate: 20240115 }),
+    seedRow({ winnerId: "9d", winnerName: "Opp D", loserId: "1", loserName: "Star Player", tourneyDate: 20240122 }),
+    seedRow({ winnerId: "2", winnerName: "Star Player", loserId: "9e", loserName: "Opp E", tourneyDate: 20240129 }),
+  ];
+  const { byId, byName } = computeRatingsAsOf(rows, 20240201);
+  expect(byName.get("starplayer")).toBe(byId.get("1")); // dominant id (4 matches) wins over phantom (1)
+});
+
+test("byName still drops genuinely ambiguous same-name ids with comparable match counts", () => {
+  const rows: EloMatchRow[] = [
+    seedRow({ winnerId: "10", winnerName: "Twin Name", loserId: "8a", loserName: "X A", tourneyDate: 20240101 }),
+    seedRow({ winnerId: "10", winnerName: "Twin Name", loserId: "8b", loserName: "X B", tourneyDate: 20240108 }),
+    seedRow({ winnerId: "11", winnerName: "Twin Name", loserId: "8c", loserName: "X C", tourneyDate: 20240115 }),
+    seedRow({ winnerId: "11", winnerName: "Twin Name", loserId: "8d", loserName: "X D", tourneyDate: 20240122 }),
+  ];
+  const { byName } = computeRatingsAsOf(rows, 20240201);
+  expect(byName.get("twinname")).toBeUndefined(); // 2 vs 2 matches -> ambiguous -> dropped
+});

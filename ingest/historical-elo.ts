@@ -222,6 +222,12 @@ export function sortEloRows(rows: EloMatchRow[]): EloMatchRow[] {
     .map(({ row }) => row);
 }
 
+/** A same-name id must hold >= this multiple of the runner-up id's match count to be trusted as the
+ *  real player. Sackmann's qual/challenger files sometimes record a player under a second, low-match
+ *  duplicate id (e.g. Mensik: 212 matches under one id, 11 under another); without this, the shared
+ *  fullKey is ambiguous and BOTH get dropped, leaving a current top player with no Elo in the snapshot. */
+const AMBIGUITY_DOMINANCE = 4;
+
 /**
  * Compute frozen ratings as of `cutoffDate` from rows ALREADY in `sortEloRows` order: feed every row
  * with `tourneyDate < cutoffDate` (strict) into a fresh engine, then resolve per-surface values.
@@ -233,28 +239,16 @@ export function computeRatingsAsOfSorted(
   config: EloConfig = DEFAULT_ELO_CONFIG,
 ): ComputedRatings {
   const engine = new EloEngine(config);
-  // Track distinct ids per fullKey so an ambiguous name (two players, one fullKey) can be dropped.
-  const idsByName = new Map<string, Set<string>>();
-  const noteName = (name: string, id: string): void => {
-    const k = fullKey(name);
-    if (!k) return;
-    let set = idsByName.get(k);
-    if (!set) {
-      set = new Set();
-      idsByName.set(k, set);
-    }
-    set.add(id);
-  };
-
   for (const row of sortedRows) {
     if (row.tourneyDate >= cutoffDate) continue;
     engine.update(row);
-    noteName(row.winnerName, row.winnerId);
-    noteName(row.loserName, row.loserId);
   }
 
   const byId = new Map<string, ComputedElo>();
-  const byName = new Map<string, ComputedElo>();
+  // Per fullKey, keep the dominant id's rating + its match count + the runner-up's count. A name shared
+  // by two ids resolves to the dominant record when it clearly outweighs the other (a phantom/duplicate);
+  // ids with comparable counts stay ambiguous and are dropped (we can't tell which is which).
+  const best = new Map<string, { elo: ComputedElo; n: number; runnerUp: number }>();
   for (const [id, s] of engine.players) {
     const computed: ComputedElo = {
       name: s.name,
@@ -265,7 +259,15 @@ export function computeRatingsAsOfSorted(
     };
     byId.set(id, computed);
     const k = fullKey(s.name);
-    if (k && idsByName.get(k)?.size === 1) byName.set(k, computed);
+    if (!k) continue;
+    const cur = best.get(k);
+    if (!cur) best.set(k, { elo: computed, n: s.overallN, runnerUp: 0 });
+    else if (s.overallN > cur.n) best.set(k, { elo: computed, n: s.overallN, runnerUp: cur.n });
+    else if (s.overallN > cur.runnerUp) best.set(k, { elo: cur.elo, n: cur.n, runnerUp: s.overallN });
+  }
+  const byName = new Map<string, ComputedElo>();
+  for (const [k, v] of best) {
+    if (v.runnerUp === 0 || v.n >= v.runnerUp * AMBIGUITY_DOMINANCE) byName.set(k, v.elo);
   }
   return { byId, byName };
 }
