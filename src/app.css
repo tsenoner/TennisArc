@@ -1,6 +1,7 @@
 :root {
   --bg: #0d1014; --panel: #161b23; --text: #d7dee6; --dim: #8b95a3;
   --line: #2a323d; --accent: #e0683c; --teal: #36b3a8; --seed: #a98bf0;
+  --teal-text: #36b3a8;  /* teal that meets AA (4.5:1) as small text on --bg; dark theme = --teal (~7.4:1) */
   /* sunken surfaces + in-panel chrome (hairlines/hover sit a step off --panel, not --line) */
   --inset: #0e151d; --inset-2: #1d2a36; --hairline: #1b2430; --hover: #1b2733;
   /* semantic accents tuned per theme for contrast on their actual surfaces */
@@ -10,6 +11,7 @@
 :root[data-theme="light"] {
   --bg: #f6f4ef; --panel: #ffffff; --text: #21262d; --dim: #5b6470;
   --line: #d8dce2; --accent: #c9542b; --teal: #2a8f86; --seed: #6d4bbd;
+  --teal-text: #167a70;  /* darker than --teal: small teal text (.ms-rnd/.ms-zoom) hits 4.5:1 on #f6f4ef */
   --inset: #f1efe9; --inset-2: #e3dfd5; --hairline: #e9ebee; --hover: #f2f4f6;
   --upset: #a8431d; --champ: #85610a; --country: #1b63b4; --bar-muted: #6f7b89;
   color-scheme: light;
@@ -58,13 +60,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .panel-fab, .lens-scrim, .sheet-bar { display: none; }
 
 .stage { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 10px 14px; }
-/* the side column stacks the lens panel and, when a match is selected, its insight card;
-   it hugs its content instead of stretching to the full stage height */
+/* the side column holds the lens panel alone (a selected match renders as a strip above the
+   wheel instead); it hugs its content instead of stretching to the full stage height */
 .side { display: flex; flex-direction: column; gap: 12px; width: 280px; max-width: 38vw;
   align-self: flex-start; max-height: 100%; min-height: 0; }
 .side > .leaderboard, .side > .panel { width: auto; max-width: none; min-height: 0; }
 .sunburst { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .chart { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
+/* programmatic keyboard-focus landing spot (tabindex="-1") after the strip's ✕ removes
+   the element that held focus — never tab-reachable, never a visible ring */
+.chart:focus { outline: none; }
 /* touch-action: none — a finger dragged across the bracket explores it (pointermove
    readout/highlight) instead of grabbing the page; the shell never scrolls anyway */
 .sunburst svg { width: 100%; height: 100%; display: block; touch-action: none; }
@@ -98,22 +103,68 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   background: linear-gradient(90deg, #2f6f8f, #d9a441, #e0683c); }
 .legend-grad.seed { background: linear-gradient(90deg, #352170, #6d3fd4, #a36bff, #e2cdff); }
 
-/* match insight (in the panel column) */
-.match-insight { display: flex; flex-direction: column; gap: 10px; }
-.mi-hd { display: flex; align-items: center; justify-content: space-between; }
-.mi-back { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 12px; padding: 0; }
-.mi-rnd { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--teal); font-weight: 600; }
+/* match context strip — slim, frosted, in-flow at the top of the wheel column on EVERY
+   viewport (the readout's ≤960px dock pattern, generalised). Two rows: caption + actions,
+   then the matchup; the heavy tail lives one tap away in the .mi-detail tier below. */
+.match-strip { padding: 8px 12px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--panel);  /* opaque fallback for browsers without color-mix() */
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  margin: 0 0 6px; }
+.ms-hd { display: flex; align-items: center; gap: 6px; }
+.ms-rnd { margin-right: auto; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--teal-text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--teal);
+  margin: 0 4px 0 1px; animation: ms-pulse 1.6s ease-in-out infinite; }
+@keyframes ms-pulse { 50% { opacity: .25; } }
+.ms-more, .ms-close { background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px;
+  cursor: pointer; padding: 4px 8px; border-radius: 8px; white-space: nowrap; }
+/* the zoom action is deliberately accented — it replaces the old buried ghost Focus button */
+.ms-zoom { position: relative; background: transparent; border: 1px solid var(--teal); color: var(--teal-text);
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 10px;
+  border-radius: 8px; white-space: nowrap; }
+.ms-mu { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; margin-top: 6px; }
+.ms-side { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 15px; font-weight: 700; }
+.ms-side .ms-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-fl { font-size: 15px; line-height: 1; } /* sizes only the emoji fallback; the bundled <img> is sized inline */
+/* nowrap: a marathon tiebreak score must never wrap into 2-3 short centred lines mid-cell
+   (breaking the two-row strip) — the name columns (min-width: 0, ellipsis) shrink first */
+.ms-score { text-align: center; font-variant-numeric: tabular-nums; font-weight: 700;
+  letter-spacing: .5px; font-size: 14px; min-width: 0; white-space: nowrap; }
+.ms-score sup { font-size: 9px; color: var(--dim); }
+.mi-chk { color: var(--teal); }
+/* full name vs surname is a pure CSS switch (≤960px media block) — both spans always render, no resize JS */
+.ms-name .nm-short { display: none; }
+
+/* focus breadcrumbs — a slim in-flow chip row at the very top of the wheel column (above
+   the match strip), rendered only while a section is focused. In-flow on purpose: an
+   overlay pinned to the chart's top edge would sit on the 12-o'clock round-axis tab.
+   nowrap keeps the row PROVABLY one line (a deep-focus trail can outgrow a ~550px wheel
+   column; a wrapped second row would slide under the float card pinned 44px down) —
+   overflow scrolls instead, with the "‹ Full draw" exit always visible at the left. */
+.crumbs { display: flex; align-items: center; flex-wrap: nowrap; overflow-x: auto; gap: 6px; margin: 0 0 6px; }
+.crumb { font: inherit; font-size: 11px; font-weight: 600; line-height: 1; padding: 5px 10px;
+  border-radius: 999px; background: var(--panel); border: 1px solid var(--line);
+  color: var(--text); cursor: pointer; white-space: nowrap; }
+.crumb.cur { color: var(--dim); border-color: transparent; background: none; }
+/* while the crumb row occupies the top edge, the float card waits below it so a hover/pin
+   card never covers the exit chips (the chips stay clickable regardless — the card is
+   pointer-events: none — but the owner verifies by screenshot). 44px assumes ONE crumb
+   line, which the row's flex-wrap: nowrap above makes an invariant, not a hope. */
+.sunburst:has(.crumbs) .ro-float { top: 44px; }
+
+/* match detail tier — on demand behind the strip's "Details ▾": in-flow under the strip on
+   desktop, a fixed bottom sheet with the standard grip/✕ chrome on phones (media block below) */
+.mi-detail { display: flex; flex-direction: column; gap: 10px; max-width: 520px;
+  padding: 10px 12px; margin: 0 0 6px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--panel); animation: mi-rise .22s ease-out; }
 .mi-mu { display: grid; gap: 6px; }
 .mi-pl { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; background: var(--inset); }
 .mi-pl.mi-win { box-shadow: inset 2px 0 0 var(--teal); }
 .mi-fl { font-size: 17px; } /* sizes only the emoji fallback; the bundled <img> is sized inline */
 .mi-who b { font-size: 13.5px; } .mi-who small { display: block; color: var(--dim); font-size: 11px; }
-.mi-chk { color: var(--teal); }
-.mi-score { text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: 1px; }
-.mi-score sup { font-size: 9px; color: var(--dim); }
 .mi-badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .mi-bdg { font-size: 11px; padding: 3px 8px; border-radius: 7px; background: var(--inset); border: 1px solid var(--line); }
-.mi-bdg.up { border-color: var(--accent); color: var(--upset); }
 .mi-stat { display: grid; grid-template-columns: 26px 1fr 26px; gap: 6px; align-items: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 .mi-stat .mi-slab { grid-column: 1 / -1; text-align: center; font-size: 10px; text-transform: uppercase; color: var(--dim); }
 .mi-bar { display: flex; height: 7px; background: var(--inset); border-radius: 4px; overflow: hidden; }
@@ -122,13 +173,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    so the teal|slate boundary never rests on hue alone */
 .mi-bar i:first-child { background: var(--teal); margin-right: auto; border-right: 2px solid var(--inset); }
 .mi-elo { font-size: 12px; color: var(--dim); background: var(--inset); border-radius: 8px; padding: 8px 10px; }
+/* the single upset signal (the redundant badge and "— upset" suffix are gone) */
+.mi-elo.upset { color: var(--upset); box-shadow: inset 2px 0 0 var(--upset); }
 .mi-dur { font-size: 12px; color: var(--dim); }
-.mi-acts { display: flex; gap: 8px; margin-top: 2px; }
-.mi-link, .mi-focus { flex: 1; text-align: center; font-size: 12px; padding: 9px; border-radius: 9px; cursor: pointer; text-decoration: none; }
-.mi-link { background: var(--teal); color: #04211f; font-weight: 700; }
-.mi-focus { background: transparent; border: 1px solid var(--line); color: var(--dim); }
+.mi-link { display: block; text-align: center; font-size: 12px; padding: 9px; border-radius: 9px;
+  cursor: pointer; text-decoration: none; background: var(--teal); color: #04211f; font-weight: 700; }
 
-/* match-insight scrim: inert on desktop; a tap-to-dismiss dimmer on phones (see media query) */
+/* detail-tier scrim: inert on desktop; a tap-to-collapse dimmer on phones (see media query) */
 .mi-scrim { display: none; }
 
 @keyframes mi-rise { from { transform: translateY(14%); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
@@ -153,6 +204,40 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 
 /* faded + dashed projections (extends existing .arc.projected opacity) */
 .arc.projected { stroke: var(--dim); stroke-width: .8px; stroke-dasharray: 3 2; }
+
+/* quarter-owner corner labels — quiet cartographic annotations in the circle-in-square
+   dead corners, doubling as tap-to-focus quarter handles. No chip/box chrome on purpose;
+   the name reuses the .ring-label halo recipe so it reads over any theme background. */
+.q-owner { cursor: pointer; }
+.q-owner text, .q-flag { pointer-events: none; } /* the transparent hit rect is the whole target */
+.q-name { font-size: 14px; font-weight: 700; fill: var(--text); paint-order: stroke;
+  stroke: var(--bg); stroke-width: 2.6px; }
+.q-name-sm { font-size: 11.5px; }                /* >16-char surnames shrink, never truncate */
+.q-cap { font-size: 8.5px; font-weight: 600; letter-spacing: .04em; fill: var(--dim); }
+/* eliminated owner: the name dims but stays — "out" lives in the aria-label, never as text */
+.q-out .q-name { fill: var(--dim); }
+.q-owner:hover .q-name { fill: var(--accent); }
+/* hovering a label lights its owner's path (data-occupant → highlightPath), which engages
+   arc-dim-mode — the other three corners fade with the arcs, but the label under the
+   cursor must never self-dim */
+.sunburst.arc-dim-mode .q-owner { opacity: .35; transition: opacity .12s; }
+.sunburst.arc-dim-mode .q-owner:hover { opacity: 1; }
+/* …and the lit player's OWN corner stays legible on every input — touch has no hover,
+   and the single-tap grammar pins on every arc tap (highlightPath adds .q-hl) */
+.sunburst.arc-dim-mode .q-owner.q-hl { opacity: 1; }
+/* sighted-keyboard focus indicator (WCAG 2.4.7): the sr-only twin's own ring is clipped to
+   1px and invisible, so a focusin listener mirrors focus onto the matching corner handle
+   (.q-focus, same data-id) — an accent outline on its hit rect + accent text shows which
+   quarter Enter will zoom. The handle stays full-opacity even under arc-dim-mode. */
+.sunburst .q-owner.q-focus { opacity: 1; }
+.q-owner.q-focus .q-hit { stroke: var(--accent); stroke-width: 2; }
+.q-owner.q-focus .q-name, .q-owner.q-focus .q-cap { fill: var(--accent); }
+
+/* visually-hidden keyboard/SR twins of SVG-only controls: the chart svg is role="img",
+   so the corner handles (and their aria-labels) are presentational — these buttons are
+   the tab-reachable entry into quarter focus (see renderQuarterFocusButtons) */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
 /* readout card — a legible frosted card naming the hovered/pinned player; on desktop it
    waits at the chart's top-left corner (the finalist pill holds the centre), on phones it
@@ -185,11 +270,18 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   font-size: 12px; font-weight: 700; pointer-events: none; }
 .center-id.projected span { font-style: italic; }
+/* focused-section fallback pill (no occupant known yet): quieter than a player identity */
+.center-id.center-sec span { color: var(--dim); }
 
 /* the float card waits at the chart's top-left corner; idle (nothing hovered, pinned, or
    focused) it would only duplicate the finalist pill, so it blanks out */
 .ro-float { top: 10px; left: 10px; transform: none; }
 .ro-float.ro-idle { visibility: hidden; }
+/* while a match is selected the strip already names both players — the readout would only
+   duplicate it (corner card over the strip >960px; a SECOND stacked strip ≤960px), so it
+   hides on every viewport. roCls re-emits the class on each outerHTML rewrite, so a
+   mid-gesture pointermove swap can never drop it. */
+.readout.has-match { display: none; }
 /* narrow windows: the corner would sit on the wheel itself, so the card docks as a strip
    above the chart instead (visibility still blanks it idle — the box holds the row's
    height so the chart never jumps; phones refine the strip further in the block below) */
@@ -197,6 +289,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .ro-float { position: static; order: -1; width: auto; min-height: 40px;
     display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
     column-gap: 8px; row-gap: 0; margin: 0 0 4px; text-align: left; }
+  /* tighter strip band: surnames take over from full names (both are always in the markup) */
+  .ms-name .nm-full { display: none; }
+  .ms-name .nm-short { display: inline; }
 }
 
 /* lens panels share the leaderboard column */
@@ -292,7 +387,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .legend { padding-right: 140px; font-size: 11px; }
   .legend-grad { width: 90px; }
 
-  /* lens panel becomes a bottom drawer opened by the FAB; sits BELOW the match sheet (z 38/39 < 40/41).
+  /* lens panel becomes a bottom drawer opened by the FAB; sits BELOW the match detail sheet
+     (z 38/39 < 40/41), so the peek drawer can stay open under a selected match's strip.
      It opens at PEEK height (chart stays visible above it, no scrim) and expands via the grip;
      only the expanded state dims the bracket behind it. */
   .panel-fab { display: inline-flex; position: fixed; right: 14px; z-index: 37;
@@ -301,9 +397,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
     background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600;
     cursor: pointer; box-shadow: 0 6px 22px rgba(0, 0, 0, .38); }
   .lens-scrim.open { display: block; position: fixed; inset: 0; z-index: 38; background: rgba(4, 8, 12, .55); }
-  /* every lens panel (leaderboard/seed/country) is a bottom drawer — but NOT the match sheet,
-     which has its own fixed positioning + higher z-band below. */
-  .side > .leaderboard, .side > .panel:not(.match-insight) {
+  /* every lens panel (leaderboard/seed/country) is a bottom drawer — the match detail tier
+     lives in .sunburst with its own fixed positioning + higher z-band below. */
+  .side > .leaderboard, .side > .panel {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
     width: auto; max-width: none; max-height: 40dvh; align-self: auto;
     overflow-y: auto; overscroll-behavior: contain;
@@ -311,8 +407,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
     padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
     box-shadow: 0 -12px 40px rgba(0, 0, 0, .5);
     transform: translateY(100%); transition: transform .22s ease-out, max-height .22s ease-out; }
-  .side > .leaderboard.open, .side > .panel:not(.match-insight).open { transform: translateY(0); }
-  .side > .leaderboard.expanded, .side > .panel:not(.match-insight).expanded { max-height: 78dvh; }
+  .side > .leaderboard.open, .side > .panel.open { transform: translateY(0); }
+  .side > .leaderboard.expanded, .side > .panel.expanded { max-height: 78dvh; }
 
   /* bottom-sheet chrome: grip pill toggles peek/expanded, ✕ closes */
   .sheet-bar { display: flex; align-items: center; }
@@ -322,11 +418,44 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .sheet-close { background: none; border: 0; color: var(--dim); font: inherit; font-size: 14px;
     padding: 0 4px 8px 12px; cursor: pointer; }
 
-  /* tapping a player → match detail as a bottom sheet over the bracket (was off-screen below) */
+  /* match strip, phone-tightened: smaller type, and the action buttons keep their small
+     visual size but gain ≥40px effective tap targets (padding for the borderless pair,
+     an invisible ::after halo for the bordered Zoom — its padding IS its visible chrome) */
+  .match-strip { padding: 6px 10px; }
+  .ms-side { font-size: 13px; }
+  .ms-score { font-size: 12px; }
+  .ms-more, .ms-close { padding: 11px 10px; margin: -7px 0; }
+  /* the lone ✕ glyph is ~12px — wider side padding takes the ✕ to a ~40px square target */
+  .ms-close { padding-left: 14px; padding-right: 14px; }
+  .ms-zoom::after { content: ""; position: absolute; inset: -7px -4px; }
+
+  /* crumb chips — the primary focus exit on touch — meet the ≥40px tap bar via
+     min-height + centring (9px padding alone left them ~31px tall) */
+  .crumb { padding: 9px 12px; min-height: 40px; display: inline-flex; align-items: center; }
+
+  /* corner labels go name-only on phones: at the ~0.52 SVG scale the caption and flag
+     would paint under 6px (illegible smudges); the name bumps to 17 SVG units (~9px
+     effective) — possible only because the sizes live in CSS, not SVG attributes */
+  .q-name { font-size: 17px; }
+  /* the >16-char shrink must survive that bump (same 0,1,0 specificity — this later rule
+     would otherwise lose silently); 14 SVG units ≈ 7.3px effective, above the caption floor */
+  .q-name-sm { font-size: 14px; }
+  .q-cap, .q-flag { display: none; }
+
+  /* "Details ▾" → the detail tier rises as a bottom sheet over the bracket, with the same
+     grip/✕ grammar as the lens drawers; the scrim (rendered only while expanded) dims behind it */
   .mi-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(4, 8, 12, .55); }
-  .stage .match-insight { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
-    width: auto; max-width: none; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
+  .stage .mi-detail { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
+    max-width: none; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
     margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
-    padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
     box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); animation: mi-rise .22s ease-out; }
+}
+
+/* Honour prefers-reduced-motion: suppress the only continuous motion (the live dot's infinite
+   pulse) and the detail tier's entrance rise. Placed LAST so it overrides the ≤720px bottom-sheet
+   rule above by source order (same specificity). The dot stays visible (opacity reset to full). */
+@media (prefers-reduced-motion: reduce) {
+  .ms-dot { animation: none; opacity: 1; }
+  .mi-detail, .stage .mi-detail { animation: none; }
 }
