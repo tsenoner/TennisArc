@@ -24,3 +24,6 @@ dist/
 ingest/.cache/
 .vercel
 .scratch/
+
+# Wayback raw HTML — extracted from data/wayback/*.tar.gz (the tarball is the committed copy)
+data/wayback/raw/
