@@ -8,9 +8,12 @@ reasoning isn't lost.
 **Goal of issue #25:** reproduce Tennis Abstract's (TA) published singles Elo board
 (`tennisabstract.com/reports/{atp,wta}_elo_ratings.html`) from Jeff Sackmann's match CSVs, as closely as
 public data allows. **Verdict: byte-exact is provably impossible; we reproduce the top of the board within
-~5–10 Elo median, with documented limitations for injury-history players and the deep historical scale.**
+~9 (ATP) / ~6 (WTA) Elo median. History runs from 1968. We DO apply TA's documented injury/absence dock
+(re-added 2026-06-15 after an earlier wrong removal — see §5). The one remaining large-residual cohort is
+currently-active injury returnees (TA's separate on-return K-multiplier, which we don't yet simulate).**
 
-Investigation date: 2026-06-14. All numbers measured against TA as-of 2026-06-08 unless noted.
+Investigation dates: 2026-06-14 (initial) + **2026-06-15 (dock re-instated, history → 1968, max-deviation
+reporting, Wayback formalized)**. "Today" numbers measured against the live TA board as-of 2026-06-14.
 
 ---
 
@@ -36,96 +39,130 @@ existence. Do **not** cite an external repo as a board-matching reference — no
 | Surface Elo | flat `0.5·overall + 0.5·pureSurface`, every surface, every sample size | Heavy Topspin 2017/2019 *"50/50 worked for each surface"*; **archive-confirmed** (see §6): on the 2019-12-02 board `hElo = 0.5·overall + 0.5·HardRaw` holds exactly (0.95) |
 | Match inclusion | all tour-level (G/M/A/F) + Davis/team (D) + tour-level qualifying + Challenger main draw (ATP); + ITF **≥ $50K** (WTA). Walkovers/retirements **counted** (Sackmann lists a winner). | 2025-11-28 verbatim scope (0.95). Excludes ATP Futures (level S), sub-$50K ITF, exhibitions, juniors. |
 | Entrant seed | new entrants seeded in the **"low 1200s"**, level- & gender-dependent — **value never published** | "Intro to Tennis Elo" 2019: *"I replaced 1500 with a number in the low 1200s (it depends a bit on tournament level and gender)"* (0.93). The low seed exists to cancel the inflation from adding Challengers/qualifying. |
-| Injury/absence | dock on **return** only (≈100 @ 8wk → 150 @ ~1yr; K×1.5 decaying over 20 matches). **Currently-absent listed players are published FROZEN/un-docked.** Cause-blind (injury = suspension = rest). | 2018 "Handling Injuries" + 2025-11-28 posts (0.97 on cause-blindness; 0.85 on frozen-display) |
+| Injury/absence | **Two distinct mechanisms.** (a) An absence **dock** on the PUBLISHED board: ~100 Elo @ 8 active-season weeks → ~150 @ ~1yr, for players rated **≥1900**. (b) On **return**, a K-multiplier ×1.5 decaying to ×1 over 20 matches. Cause-blind (injury = suspension = rest). | 2018 "Handling Injuries" — endpoints + ≥1900 gate + offseason-excluded verbatim (0.9); display-time confirmed by the COVID-suspension footnote (2021-03-08) (0.92). **We implement (a); (b) is not yet simulated.** |
 | Board eligibility | listed iff ≥10 counting matches in a **trailing 52-week** window (rolling count, not a last-match clock). Doubles excluded. | report-page footnote, verbatim |
-| History start | not documented; data-bounded (tour-level 1968+, Challengers 2008+, qualifying 2011+) | (0.5) |
+| History start | TA from 1968; **we now also start 1968** (deeper burn-in matures the scale). Data-bounded: tour-level 1968+, Challengers 2008+, qualifying 2011+ (deep past is tour-level only). | (0.9) |
 
 ## 3. Why byte-exact is impossible
 
 Three unrecoverable unknowns: (a) the **per-level/gender entrant seed** (only "low 1200s" is published);
-(b) the **injury-dock curve + the in-career docks** baked into TA's history; (c) whether K was re-tuned
-since 2016. The generation code itself is private. So the ±1–2 / "ideally exact" goal from the brief is
-**retired**; we target a calibrated approximation.
+(b) the **dock curve shape** between its two published endpoints, and the **on-return K-multiplier path**
+(×1.5→×1 over 20 matches) baked into each returnee's history — path-dependent, so not reproducible by a
+static extraction-time adjustment; (c) whether K was re-tuned since 2016. The generation code itself is
+private. So the ±1–2 / "ideally exact" goal from the brief is **retired**; we target a calibrated
+approximation. (Note what is NOW recoverable vs the prior writeup: the dock's *endpoints* and *≥1900 gate*
+are published verbatim and implemented — see §5.)
 
 ## 4. Our implementation & calibration
 
-Engine: `ingest/historical-elo.ts`. Per-tour config: `ingest/elo-config.ts`. Calibration harness:
-`ingest/calibrate-elo.ts` (runs the engine to "today", scrapes the live board via `ingest/elo.ts`,
-**dominant-id join**, grid-searches the seed to minimise median |overall error| over the top-50).
+Engine: `ingest/historical-elo.ts` (now incl. the dock — `LayoffDock` + `activeLayoffDays` + `layoffPenalty`).
+Per-tour config: `ingest/elo-config.ts` (`TA_LAYOFF_DOCK`, identical both tours). Calibration harness:
+`ingest/calibrate-elo.ts` (runs the engine to "today" over the full 1968+ set with the **dock ON**, scrapes
+the live board via `ingest/elo.ts`, **dominant-id join**, grid-searches the seed, and reports the **single
+largest |deviation| + worst-12 offenders**, not just the mean).
 
-**Fitted seeds** (2026-06-14): ATP `seedTour 1500 / seedSub 1170`; WTA `1400 / 1090`. Sub-tour =
-Challenger (`level C`) or qualifying (`round Q*`). ATP's 1500 lands exactly on TA's documented tour-level
-tradition; WTA seeds lower (consistent with the gender note).
+**Fitted seeds** (2026-06-15, 1968 history, dock ON): ATP `seedTour 1450 / seedSub 1130`; WTA `1350 / 1050`.
+Sub-tour = Challenger (`level C`) or qualifying (`round Q*`). Both dropped ~−50/−40 vs the old 2000-start
+fit, because 35 extra years of burn-in inflate the pool.
 
-**Coupling that matters:** adding Challengers while seeding at 1500 inflates the pool by ~+260 Elo; the
-low-1200s reseed cancels that. **Inclusion and seed must change together.** Likewise WTA's $60K ITF tier
-slightly *helps* once the seed is re-fit (it's part of TA's ≥$50K scope).
+**Couplings that matter:** (1) adding Challengers while seeding high inflates the pool ~+260 Elo; the
+low-1200s reseed cancels that. (2) extending the history start 2000→1968 inflates it ~+40, re-absorbed by
+the lower seed. (3) the dock lets the seed stop being dragged down to mask docked absentees. **Inclusion,
+history-start, seed, and dock must change together.** WTA's $60K ITF tier is part of TA's ≥$50K scope.
 
-**Achieved accuracy** (dominant-id join, top-50): **ATP overall meanAbs ~20 (median −1), WTA ~10 (median
-+2)**; the top-18 reproduce within **~8 (ATP) / ~5 (WTA)** median. The median ≪ meanAbs because a few
-injury-history players are large outliers (see §5).
+**Achieved accuracy** (dominant-id join, top-50, dock ON): **ATP overall meanAbs 15.4 (median −3), WTA 11.1
+(median +2)**; top-18 within **~9 (ATP) / ~6 (WTA)** median. The dock cut ATP meanAbs ~21→15 and removed the
+absent-player outliers (Alcaraz/Korda). The median ≪ meanAbs because the surviving outliers are
+currently-active injury returnees (see §5).
 
-## 5. The injury/absence dock saga (tried, then removed) — and the per-individual analysis
+## 5. The injury/absence dock saga: removed (wrong), then RE-INSTATED with the ≥1900 gate
 
-This consumed the most effort and ended in a **removal**, which is the correct, research-validated state.
+This consumed the most effort. It first ended in a **removal** that **was wrong**, and is now correctly
+**re-instated** as an extraction-time dock with a ≥1900 gate. The correction was driven by re-reading the
+primary source verbatim + a COVID natural experiment + an empirical fit judged by *max deviation*, not mean.
 
-**What we tried, in order:**
-1. **On-return dock** (dock when a player returns from a ≥8wk gap). → **Deflated the whole pool by ~820.**
-   A match-gap can't distinguish a genuine injury from a sparse/part-time schedule, so it tanks every
-   irregular-schedule journeyman, dragging the opponent pool (and thus everyone) down. Even with an
-   off-season-excluding "active layoff" window, it still deflated ~820. **Not viable.**
-2. **Extraction-time dock** (dock players inactive ≥8wk *as of the cutoff*). Targeted only currently-absent
-   players, no historical deflation. It *appeared* to help ATP (meanAbs 20.1→14.5 by fixing Alcaraz/Draper)
-   but hurt WTA (10.0→16.5). We briefly added a `layoffScale` (ATP 1.0, WTA 0.5, then 0).
-3. **Removed entirely.** Research (TA's 2018 + 2025 posts) established TA **publishes a currently-absent
-   listed player's frozen, un-docked value** — it docks only on *return*. So docking absent players
-   under-rates exactly the cohort TA shows at full strength. We now show frozen values, like TA.
+**The full arc:**
+1. **On-return dock** (dock when a player returns from a ≥8wk gap). → **Deflated the whole pool by ~820**
+   (a match-gap can't tell a genuine injury from a sparse schedule, so it tanks every irregular-schedule
+   journeyman). **Not viable** — and not what TA does for the published board anyway.
+2. **Extraction-time dock, no gate.** Helped ATP but "hurt WTA" *by the mean* → we added a per-gender
+   `layoffScale`, then removed the whole dock, concluding "TA publishes absentees FROZEN/un-docked."
+   **Both moves were mistakes:** (a) judging by the WTA *mean* (dominated by one over-docked player) hid a
+   per-player win; (b) the build had **no ≥1900 gate**, so it docked sub-1900 WTA players TA never docks.
+3. **RE-INSTATED (2026-06-15), gated at ≥1900.** A verification workflow (4 primary-source agents + 3
+   adversarial skeptics, all refuted) overturned the "frozen" reading:
+   - **Verbatim, 2018:** the penalties *"bring down the current Elo ratings of the players who are in the
+     middle of long breaks … giving us ranking tables that come closer to what we expect."* "Current Elo
+     ratings" + "ranking tables" + "in the middle of long breaks" = the **displayed board is docked**.
+     Murray (the cited −150 example) was *currently absent* when written.
+   - **COVID natural experiment (decisive):** 2021-03-08 footnote — *"Because the pandemic caused all sorts
+     of absences … I've suspended that penalty until things are a bit more normal."* You can't *suspend* a
+     penalty that was never on the board. So the dock is normally-on at display time.
+   - **Endpoints + gate + offseason are verbatim:** −100 @ 8wk, −150 @ ~1yr; players **≥1900**; "the
+     eight-week threshold doesn't count the offseason." Implemented exactly (linear shape between endpoints
+     is our only assumption). **Identical ATP/WTA** — no per-gender scale (that was the unprincipled knob).
 
-**The `layoffScale` was mean-tuning, not science.** It improved the WTA *mean* by masking a misdiagnosis,
-and was removed. There is **no research basis** for a per-gender dock magnitude — TA's method is identical
-across tours.
+**The empirical fit (judged by max deviation, the metric that matters):** docking currently-absent ≥1900
+players collapses the absent cohort onto TA — 5 of 7 within ±10, where they were +48…+189 before:
 
-**Per-individual root-cause classification of the largest deviations** (the lens that mattered — the "mean"
-we'd chased was inflated by name-join artifacts; the dominant-id join cut ATP from a fake ~30 to a real ~14
-once Mensik et al. joined correctly):
+| Player (absent) | frozen | wk | ≥1900? | dock | TA | resid after dock |
+|---|---|---|---|---|---|---|
+| Korda (ATP) | 1921 | 13 | Y | 105 | 1809 | **+7** |
+| Alcaraz (ATP) | 2257 | 9 | Y | 101 | 2167 | **−10** |
+| Kartal (WTA) | 1884 | 15 | n | 0 | 1874 | **+10** |
+| Kudermetova (WTA) | 1842 | 19 | n | 0 | 1836 | **+6** |
+| Danilovic (WTA) | 1822 | 19 | n | 0 | 1819 | **+2** |
+| Draper (ATP) | 1994 | 9 | Y | 101 | 1808 | +85 (also a returnee — see §9) |
+| Vondrousova (WTA) | 1955 | 19 | Y | 112 | 1907 | −65 (over-docked; N=1 above gate) |
+
+**Lesson the user flagged:** report the **largest |deviation| per player**, never the mean. The WTA mean
+"hurt" verdict that justified removal was an artifact of one over-docked point in a small absent tail.
+`calibrate-elo.ts` now prints max|dev| + the worst-12 offenders.
+
+**Per-individual root-cause classification (post-dock):**
 
 | Cause | Examples | Status |
 |---|---|---|
-| **Injury-interrupted careers** | Djokovic +107, Fritz +99, Alcaraz, Draper (ATP); Anisimova +110, Zheng +91 (WTA) | **Fundamental.** TA bakes a dock at each career return into its history; we can't (deflates the pool). Bounded, documented. |
-| **Currently absent (genuine)** | Alcaraz (skipped RG); Kudermetova (surgery), Kartal/Vondrousova (injured) | **Match.** TA shows them frozen/un-docked; so do we (no dock). Confirmed genuine absences (§7), not data gaps. |
-| **Name fragmentation** | Mensik (was `null`) | **Fixed** — dominant-id join → 1893. |
+| **Currently absent, ≥1900** | Alcaraz, Korda (ATP) | **Mapped** by the documented dock (resid ~±10). |
+| **Currently absent, <1900** | Kudermetova, Kartal, Danilovic (WTA) | **Match** — below TA's ≥1900 gate, correctly un-docked. |
+| **Active injury RETURNEES** | Djokovic +114, Fritz +100 (ATP); Anisimova +112, Zheng +95 (WTA) | **Bounded limit** — TA's separate on-return K-multiplier (×1.5→×1 over 20 matches), path-dependent, not yet simulated (§9/§11). |
+| **Over-docked (N=1)** | Vondrousova −65 (WTA) | TA's single curve is too steep for her; a per-gender fix would overfit. Accepted. |
+| **Name fragmentation** | Mensik (was `null`) | **Fixed** — dominant-id join. |
 | **ATP thin grass** | players with few grass matches | Large per-surface, small overall impact. |
 
-## 6. Historical validation against archived TA boards (Wayback)
+## 6. Historical validation against archived TA boards (Wayback) — now FORMALIZED
 
-We fetched archived board captures (`web.archive.org`) and diffed our **frozen** engine at each board's own
-`Last update` date. Harness: `.scratch/validate-archived.ts`. Schema varies by era (overall is `cells[3]`
-in all: 2016 = 8 cells/overall-only; 2017–18 = blended surfaces; 2019+ = raw + blended at `[9,10,11]`;
-current = 17 cells). Coverage: **2016–2020** (TA's reports don't predate ~2016 on Wayback; the recent-year
-captures are structurally broken snapshots).
+We enumerated **every** distinct monthly capture of both board pages on `web.archive.org` (CDX API; ~120
+per tour back to Feb 2016 — none predate it) and committed the extracted top-40 (name, overall) per board
+date as a fixture: **`ingest/fixtures/ta-elo-historical.json`** (ATP 77 + WTA 88 board dates, 2016–2026).
+Builder: `.scratch/wayback-fixture.ts`. Validator: `.scratch/burnin.ts` replays the **production** engine
+(1968 history + dock + fitted seeds) frozen at each board's own `Last update` date and reports the offset
+(ours − TA) per board, aggregated by year. (Overall is `cells[3]` in every schema era — 2016 = 8 cells,
+2017–18 blended, 2019+ raw+blended, current = 17.)
 
-**Key finding — a time-varying historical scale offset invisible in the "today" check:**
+**Result — the 1968 start roughly halved the historical offset and stabilized 2018+ to within ±10:**
 
-| Year | ATP median err | WTA median err |
-|---|---|---|
-| 2016 | **−132** | −142 |
-| 2017 | −131 | −127 |
-| 2018 | −16 | −18 |
-| 2019 | −15 | −9 |
-| 2020 | — | −21 |
+| Year | ATP median err (old 2000-start) | ATP (now, 1968+dock) | WTA (old) | WTA (now) |
+|---|---|---|---|---|
+| 2016 | −132 | **−101** | −142 | **−91** |
+| 2017 | −131 | −103 | −127 | −96 |
+| 2018 | −16 | **+6** | −18 | −96 |
+| 2019 | −15 | +6 | −9 | **+12** |
+| 2020–2026 | −21… | **+2 … +9** | −21… | **−4 … +7** |
 
-**Our 2016–17 freezes run ~130 Elo low** (the *whole board*), converging to ~0 by 2019. This is the
-**burn-in / history-truncation** signature: we start at 2000, TA from 1968, so by 2016 our scale hasn't
-matured. Independent confirmation that TA's top sat higher then: TA's 2016 Djokovic was **2556.2** (an
-all-time peak), vs ~2320 for today's #1.
+From **2018 (ATP) / 2019 (WTA) onward the scale is stable within ~±10** — a clean improvement over the old
+−15…−21 drift, and the dock no longer leaves absent-player holes in the historical boards.
 
-**Fix attempted (extend history to 1985):** lifts 2016 (−132 → −82) but **overshoots 2018+** (−15 → +25)
-and would push 2026 over TA → breaking the live calibration. The offset is *time-varying*, so no single
-(start-year, seed) fixes all years. **Left as a documented limitation.** (Note: Challenger data only exists
-from 2008, so pre-2008 extension is tour-level only anyway.)
+**The residual ~−95…−100 at the 2016–17 (ATP) / 2016–18 (WTA) peak is NOT pure burn-in.** It survives even
+with the full 1968 history present, and it's a *step* (−100 → +6), not a gradual convergence — so it tracks
+the **all-time Big-Four / Serena-era peak compression**: TA's 2016 Djokovic was **2556.2** (an all-time
+high) vs ~2320 today, and our engine under-reaches such extreme top-of-distribution peaks (regression
+toward the field). It's isolated to those peak years; reproducing it would need TA's exact K behaviour at
+the extreme. **Documented limitation, not chased** (inflating the seed to lift 2016 overshoots 2018+, as
+the earlier 1985 experiment already showed — the offset is time-varying).
 
-This validation should be formalised (commit the extracted top-N reference values per year as a fixture) if
-historical accuracy becomes a priority.
+*(A committed opt-in regression test over this fixture is the natural next step if historical accuracy
+becomes a priority; the fixture + validator are in place.)*
 
 ## 7. Data sources — verdict: keep Sackmann as the single source of truth
 
@@ -158,32 +195,46 @@ a future explicit alias map would harden this.
 
 ## 9. Bounded limitations (what is NOT fixable from public data)
 
-1. **Injury-history players** (~5 ATP / 2 WTA top-50) over-rated by +30…+110 — TA's private in-career
-   docks; replicating deflates the pool.
-2. **2016–17 historical scale** ~130 low — burn-in; can't fix without breaking other years.
-3. **ATP thin-grass** surface noise — TA's thin-sample surface handling is the one undocumented gap.
-4. **The entrant seed / K-current-value** — empirically fit, not derived.
+1. **On-return K-multiplier (the dominant remaining residual).** Currently-active injury returnees
+   (Djokovic +114, Fritz +100; Anisimova +112, Zheng +95) are over-rated because TA depresses them via a
+   *separate* path-dependent mechanism — a K-multiplier ×1.5→×1 over their 20 post-return matches — that a
+   static extraction-time dock cannot reproduce. The proper fix is to simulate that schedule in the engine
+   (§11); not fixable by tuning the absence dock.
+2. **2016–17 peak scale** ~−95 low — top-of-distribution compression at the all-time Big-Four/Serena peak,
+   not pure burn-in (survives the full 1968 history); time-varying, so no single seed fixes all years.
+3. **One over-docked absentee (Vondrousova −65)** — TA's single curve is too steep for the one ≥1900 WTA
+   absentee; a per-gender fix would overfit N=1.
+4. **ATP thin-grass** surface noise — TA's thin-sample surface handling is the one undocumented gap.
+5. **The entrant seed / dock-shape / K-current-value** — empirically fit or assumed (linear dock shape
+   between published endpoints), not derived.
 
 ## 10. Tooling & re-derivation
 
 ```bash
-npx tsx ingest/calibrate-elo.ts          # re-fit the seed vs the live board (network); dominant-id join
+npx tsx ingest/calibrate-elo.ts          # re-fit seed vs live board (network, 1968+dock); prints max|dev|
 # transcribe winning seeds into ingest/elo-config.ts
 pnpm backfill-elo && pnpm reindex         # recompute all 113 snapshots (network), rebuild the index
 ELO_FIXTURE=1 TZ=UTC npx vitest run ingest/historical-elo.fixture.test.ts   # opt-in regression guard
-npx tsx .scratch/validate-archived.ts     # historical validation vs archived TA boards (scratch)
-npx tsx .scratch/individuals.ts           # per-individual largest-deviation classifier (scratch)
+npx tsx .scratch/wayback-fixture.ts       # rebuild ingest/fixtures/ta-elo-historical.json from .scratch/wayback/all
+npx tsx .scratch/burnin.ts                # burn-in offset per year vs the committed historical fixture
+npx tsx .scratch/dock-models.ts ATP       # compare dock models / inspect the absent + injury cohorts
 ```
 
-- The fixture (`ingest/fixtures/ta-elo-reference.json`) pins ~30 live-TA values **with their as-of date**;
-  re-capture deliberately via `.scratch/capture-ta-reference.ts` when TA drifts.
-- `ELO_START_YEAR` env overrides the 2000 history start in `calibrate-elo.ts` for burn-in experiments.
+- `ingest/fixtures/ta-elo-reference.json` pins ~30 live-TA values **with their as-of date** (re-capture via
+  `.scratch/capture-ta-reference.ts` when TA drifts). `ingest/fixtures/ta-elo-historical.json` pins the
+  archived top-40 per board date (2016–2026) for burn-in validation.
+- `ELO_START_YEAR` overrides the 1968 history start in `calibrate-elo.ts`/`backfill-elo.ts`. `ELO_SEED_TOUR`/
+  `ELO_SEED_SUB` override the dock-model harness seeds.
 - Acceptance sanity (issue #20): RG 2016 frozen → Djokovic #1 overall **and** clay, Nadal #2 clay (holds).
 
 ## 11. Open / future
 
-- **Formalise the archived-board validation** into a committed historical fixture (extracted top-N per year)
-  — the one substantive avenue left for *historical* (not "today") quality.
+- **Simulate the on-return K-multiplier** (×1.5→×1 over 20 matches) in the engine — the single biggest
+  remaining accuracy lever (it's what over-rates active injury returnees Djokovic/Fritz/Anisimova/Zheng;
+  §9.1). Requires tracking each player's post-return match count and scaling K accordingly; larger than the
+  extraction-time dock but the next substantive step.
+- **Commit an opt-in regression test** over `ta-elo-historical.json` (assert per-year burn-in bands) — the
+  fixture + `.scratch/burnin.ts` validator are already in place; just needs a vitest wrapper.
 - **Explicit player alias map** for same-surname / fragmented ids beyond the dominant-id heuristic.
 - The Elo work is independent of **issue #25 Part B (storage normalization)**, which remains unstarted
   (plan: `docs/superpowers/plans/2026-06-14-data-storage-normalization.md`).
