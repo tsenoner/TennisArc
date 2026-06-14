@@ -29,10 +29,17 @@ const START_YEAR = 2000;
 async function loadTourRows(tour: Tour, maxYear: number): Promise<EloMatchRow[]> {
   const rows: EloMatchRow[] = [];
   const itfFilter = tour === "WTA" ? keepWtaQualItf : undefined;
+  // A 404 means Sackmann hasn't published that file yet (the current year before publication; pre-2008
+  // challengers) — skip it. ANY other failure (429/5xx/network) must ABORT: silently dropping a year
+  // would truncate the replayed history and ship wrong ratings for every snapshot after it.
+  const skip404 = (label: string) => (e: unknown): null => {
+    if (e instanceof Error && /HTTP 404/.test(e.message)) { console.warn(`${tour} ${label}: not published (404) — skipping`); return null; }
+    throw e;
+  };
   for (let year = START_YEAR; year <= maxYear; year++) {
-    const main = await fetchMatchesCsv(tour, year).catch((e) => (console.warn(`${tour} ${year} main: ${e}`), null));
+    const main = await fetchMatchesCsv(tour, year).catch(skip404(`${year} main`));
     if (main) rows.push(...parseEloMatchesCsv(main));
-    const qc = await fetchQualChallCsv(tour, year).catch((e) => (console.warn(`${tour} ${year} qual: ${e}`), null));
+    const qc = await fetchQualChallCsv(tour, year).catch(skip404(`${year} qual`));
     if (qc) rows.push(...parseEloMatchesCsv(qc, itfFilter));
   }
   return sortEloRows(rows);

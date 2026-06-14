@@ -30,8 +30,8 @@ For the **current** slam, the exact published numbers remain available by scrapi
 
 | Tour | seedTour | seedSub | overall (median / meanAbs) | hard | clay | grass |
 |---|---|---|---|---|---|---|
-| ATP | 1500 | 1170 | −0.9 / 32 | 37 | 35 | **77** |
-| WTA | 1450 | 1090 | +2.7 / 11 | 21 | 19 | 34 |
+| ATP | 1500 | 1170 | −1.2 / 32 | 37 | 35 | **77** |
+| WTA | 1450 | 1090 | +2.5 / 11 | 21 | 19 | 34 |
 
 ATP's `seedTour` landing exactly on TA's documented tour-level tradition (1500) is a strong validation; WTA needing a lower seed confirms TA's gender-dependence note. The **top-18** players reproduce overall Elo within ~10 Elo median (ATP 10, WTA 7) — see the fixture. **ATP grass is the weakest surface** (thin grass samples + an unmodeled injury/absence penalty + our 2000 history start); accept it as the public-data ceiling.
 

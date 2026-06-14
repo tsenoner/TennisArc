@@ -49,7 +49,12 @@ export async function loadSorted(tour: Tour, maxYear: number): Promise<EloMatchR
   return sortEloRows(rows);
 }
 
-const median = (a: number[]): number => { const s = [...a].sort((x, y) => x - y); return s.length ? s[s.length >> 1] : NaN; };
+const median = (a: number[]): number => {
+  const s = [...a].sort((x, y) => x - y);
+  if (!s.length) return NaN;
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
 const meanAbs = (a: number[]): number => (a.length ? a.reduce((p, c) => p + Math.abs(c), 0) / a.length : NaN);
 
 async function calibrate(tour: Tour): Promise<void> {

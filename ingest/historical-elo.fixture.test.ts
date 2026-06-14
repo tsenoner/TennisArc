@@ -24,7 +24,9 @@ const BANDS: Record<Tour, { overall: number; hard: number; clay: number; grass: 
 
 const medianAbs = (a: number[]): number => {
   const s = a.map(Math.abs).sort((x, y) => x - y);
-  return s.length ? s[s.length >> 1] : NaN;
+  if (!s.length) return NaN;
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 };
 
 const run = process.env.ELO_FIXTURE === "1" ? describe : describe.skip;
