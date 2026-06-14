@@ -19,23 +19,34 @@ For the **current** slam, the exact published numbers remain available by scrapi
 | Margin-of-victory | **none** (binary win/loss) | TA 2025-11-28: *"Elo looks at match results — period."* Exact (0.97). |
 | Surface Elo | flat `0.5·overall + 0.5·pureSurface`, every surface, every sample size; `null` if 0 surface matches | TA report page + Heavy Topspin 2017/2019: *"50/50 worked for each surface."* (0.92) |
 | Match inclusion | tour-level + tour-level qualifying + Challenger main draw (ATP); + ITF ≥ $50K (WTA). Walkovers/retirements **counted** (Sackmann lists a winner). | TA 2025-11-28, verbatim scope (0.95). Davis Cup/team `D` included. Excludes sub-$50K ITF, exhibitions, juniors. |
-| Entrant seed | **fitted** per tour: ATP `seedTour 1500 / seedSub 1170`, WTA `1450 / 1090`. Sub-tour = Challenger (`level C`) or qualifying (`round Q*`). | TA: *"a number in the low 1200s … depends a bit on tournament level and gender"* — value never published, so empirically fit (0.93). |
+| Entrant seed | **fitted** per tour: ATP `seedTour 1500 / seedSub 1170`, WTA `1400 / 1090`. Sub-tour = Challenger (`level C`) or qualifying (`round Q*`). | TA: *"a number in the low 1200s … depends a bit on tournament level and gender"* — value never published, so empirically fit (0.93). |
+| Injury/absence dock | dock a player inactive ≥8 competitive-season weeks **as of the cutoff** by ~100 (8wk) → ~150 (~1yr). Applied to **ATP only** (see below). | TA 2018 "Handling Injuries" post: −100 @ 8wk, −150 @ ~1yr (ATP-derived). Applied at extraction (TA docks *currently-absent* players), not on return. |
 | History start | 2000 | Pragmatic: Challenger data only begins 2008, qualifying 2011. Pushing to 1968 only affects deep-historical/peak Elo. |
 
 **Walkover/retirement handling is deliberately unchanged.** Search-engine summaries claiming "TA excludes them" were shown to be hallucinations — no primary source says so — so we keep counting them (Sackmann's CSVs list a winner). Don't flip this without a primary source.
 
 ## Calibration & achieved accuracy
 
-`ingest/calibrate-elo.ts` runs the engine forward to "today" over the TA-scoped match set, scrapes the live TA board, joins by name, and grid-searches the entrant seed to minimize median |overall error| over the top-50 TA players. Fitted 2026-06-14 vs TA as-of 2026-06-08:
+`ingest/calibrate-elo.ts` runs the engine forward to "today" over the TA-scoped match set, scrapes the live TA board, joins by the **dominant-id** key (same as production — so fragmented players aren't residual-inflating artifacts), and grid-searches the entrant seed to minimize median |overall error| over the top-50 TA players. Fitted 2026-06-14 vs TA as-of 2026-06-08:
 
-| Tour | seedTour | seedSub | overall (median / meanAbs) | hard | clay | grass |
-|---|---|---|---|---|---|---|
-| ATP | 1500 | 1170 | −1.2 / 32 | 37 | 35 | **77** |
-| WTA | 1450 | 1090 | +2.5 / 11 | 21 | 19 | 34 |
+| Tour | seedTour | seedSub | dock | overall (median / meanAbs) | hard | clay | grass |
+|---|---|---|---|---|---|---|---|
+| ATP | 1500 | 1170 | on | −1.7 / **14.5** | 19 | 18 | **75** |
+| WTA | 1400 | 1090 | off | +1.8 / **10.0** | 19 | 19 | 37 |
 
-ATP's `seedTour` landing exactly on TA's documented tour-level tradition (1500) is a strong validation; WTA needing a lower seed confirms TA's gender-dependence note. The **top-18** players reproduce overall Elo within ~10 Elo median (ATP 10, WTA 7) — see the fixture. **ATP grass is the weakest surface** (thin grass samples + an unmodeled injury/absence penalty + our 2000 history start); accept it as the public-data ceiling.
+The **top-18** reproduce overall Elo within ~8 (ATP) / ~5 (WTA) median (the fixture). The coupling that matters: including Challengers while seeding new entrants at 1500 inflates the whole pool by ~+260 Elo; the low-1200s reseed cancels that. **Inclusion and seed must change together.**
 
-The coupling that matters: including Challengers while seeding new entrants at 1500 inflates the whole pool by ~+260 Elo; the low-1200s reseed exists precisely to cancel that. **Inclusion and seed must change together** — never ship one without the other.
+## Per-individual residuals — what's left, and why
+
+Optimizing individuals (not the mean) shows the field is well-fit (most players ~5–7 Elo); the large deviations cluster into three causes:
+
+1. **Injury-interrupted careers (the dominant residual; not cleanly fixable).** Djokovic +107, Fritz +99 (ATP); Anisimova +110, Zheng +91 (WTA) — players with many career gaps. TA docks each past injury; we can't, because a match-gap can't distinguish a genuine injury from a sparse/part-time schedule. An on-return (in-career) dock was tried and **deflates the whole pool by ~820** (it tanks every irregular-schedule journeyman). Replicating this needs TA's injury list, which is not public.
+2. **Current absence — fixed for ATP.** Players inactive ≥8 competitive-season weeks as of the cutoff (Alcaraz/Draper, who skipped RG 2026) are over-rated without a dock (+88…+184). The **extraction-time dock** corrects them: ATP all-50 meanAbs **20.1 → 14.5**.
+3. **ATP thin-grass samples.** Large per-surface grass errors for players with few grass matches; small impact on overall.
+
+### Why the dock is ATP-only (a data-quality switch, not a per-gender magnitude)
+
+The injury-dock *method* is identical for both tours — there is **no research basis** for a per-gender magnitude. But the dock needs reliable recent-activity data, and **Sackmann's 2026 WTA file is materially incomplete**: verified per-player, Kudermetova has **zero** 2026 matches in our data while TA shows her active (1836), and Kartal/Vondrousova/Danilovic are missing their entire clay seasons. So the dock false-fires on WTA players who are actually playing, making WTA *worse* (meanAbs 10.0 → 16.5). We therefore apply it to ATP (complete data) and disable it for WTA (`layoffScale: 0`) until the WTA data fills in. An earlier `layoffScale=0.5` was **mean-tuning that masked this data gap** and has been removed.
 
 ## Re-deriving
 
