@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:host": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "TZ=UTC vitest run",

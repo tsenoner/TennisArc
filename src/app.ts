@@ -539,7 +539,15 @@ export function createApp(root: HTMLElement): () => void {
   }, { signal });
 
   root.addEventListener("pointermove", (e) => {
-    const el = (e.target as HTMLElement).closest<HTMLElement>("[data-occupant]");
+    // Resolve the element under the pointer by COORDINATES, not e.target. On touch the browser
+    // implicitly captures the pointer to the pointerdown arc, so e.target stays pinned to the
+    // first arc for the whole drag — the lit path would freeze there instead of following the
+    // finger. elementFromPoint hit-tests the node actually under the pointer; on desktop it
+    // returns the same node e.target already was, so mouse hover is unchanged. (labels/flags/
+    // corners are pointer-events:none, so it lands on the arc <path>.) Fallback to e.target
+    // covers a null return — point off-viewport, or a test env without elementFromPoint.
+    const hit = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const el = (hit ?? (e.target as HTMLElement))?.closest<HTMLElement>("[data-occupant]");
     updateReadout(el?.dataset.occupant || null);
     // hovering an arc or a panel row previews that player's path through the sunburst
     // (the float card names them too); off-target, a pinned path stays lit
