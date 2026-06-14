@@ -9,6 +9,30 @@ const MATCHES_URL = (tour: Tour, year: number): string => {
   return `https://raw.githubusercontent.com/JeffSackmann/tennis_${t}/master/${t}_matches_${year}.csv`;
 };
 
+/** Qualifying + Challenger (ATP) / qualifying + ITF (WTA) file. ATP: challengers from 2008, quallies
+ *  from 2011; early years 404 (handled by fetchQualChallCsv). TA's published Elo includes these. */
+export const qualChallUrl = (tour: Tour, year: number): string => {
+  const t = tour.toLowerCase();
+  const stem = tour === "ATP" ? "qual_chall" : "qual_itf";
+  return `https://raw.githubusercontent.com/JeffSackmann/tennis_${t}/master/${t}_matches_${stem}_${year}.csv`;
+};
+
+/** Fetch the qual/challenger file; returns null on 404 (some early years are absent) rather than throw. */
+export async function fetchQualChallCsv(tour: Tour, year: number): Promise<string | null> {
+  const res = await fetch(qualChallUrl(tour, year), { headers: { "User-Agent": "Mozilla/5.0 TennisArc/1.0" } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`qual_chall CSV HTTP ${res.status} for ${tour} ${year}`);
+  return res.text();
+}
+
+/** WTA ITF tiers we count (>= $50K). ATP qual_chall needs no prize filter (all challengers count). */
+export const WTA_ITF_MIN_TIERS = new Set(["50", "75", "80", "100", "125"]);
+
+/** Keep a WTA qual_itf row only if its tourney_level is a >= $50K ITF tier, OR a non-ITF level
+ *  (letters like W/P/PM/I/G/M — i.e. not a bare dollar-tier number). Sub-$50K numeric tiers drop. */
+export const keepWtaQualItf = (level: string): boolean =>
+  WTA_ITF_MIN_TIERS.has(level) || !/^\d+$/.test(level);
+
 // Plausibility ceiling for trustworthy on-court time (Jeff Sackmann's `minutes`). The longest match in
 // tennis history is Isner–Mahut 2010 (665 min ≈ 11h05), so nothing genuine exceeds 12h; this caps the
 // CSV merge so a poisoned upstream `minutes` can't ship an absurd duration. Isner–Mahut's 39 900s and
