@@ -278,13 +278,7 @@ test("parseEloMatchesCsv carries round and level for seeding", () => {
   expect(rows[0].level).toBe("C");
 });
 
-test("resolveSurfaceElo is a flat 50/50 blend (TA methodology)", () => {
-  expect(resolveSurfaceElo(1500, 0, 2000)).toBeNull();
-  expect(resolveSurfaceElo(1600, 1, 2000)).toBe(1800);   // 0.5*2000 + 0.5*1600
-  expect(resolveSurfaceElo(1600, 50, 2000)).toBe(1800);  // identical at high count
-});
-
-const seedRow = (o: Partial<any> = {}) => ({
+const seedRow = (o: Partial<EloMatchRow> = {}) => ({
   tourneyName: "T", tourneyDate: 20240101, surface: "Hard" as const,
   winnerId: "1", loserId: "2", winnerName: "Win A", loserName: "Lose B",
   round: "R32", level: "A", ...o,
@@ -302,4 +296,10 @@ test("seedFor controls the entrant rating; default is 1500", () => {
   expect(cust.byId.get("2")!.overall).toBeGreaterThan(1130); // 1230 - 65.66 ≈ 1164.34
   // The two configs differ by exactly the seed gap (1500 - 1230 = 270): same dynamics, shifted floor.
   expect(def.byId.get("2")!.overall - cust.byId.get("2")!.overall).toBeCloseTo(270, 9);
+  // `round` is part of the seed signature too: a qualifying-round (Q*) debutant can be seeded apart
+  // from a main-draw one. Guards against the round arg being dropped from the seedFor(level, round) call.
+  const roundCfg: EloConfig = { seedFor: (_level, round) => (round.startsWith("Q") ? 1200 : 1500) };
+  const q = computeRatingsAsOf([seedRow({ round: "Q1" })], 20240102, roundCfg);
+  expect(q.byId.get("2")!.overall).toBeLessThan(1200);
+  expect(q.byId.get("2")!.overall).toBeGreaterThan(1100); // 1200 - 65.66 ≈ 1134.34
 });

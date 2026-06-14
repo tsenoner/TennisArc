@@ -13,8 +13,9 @@ import { fullKey, sigKey } from "./names";
 /**
  * Tunable entrant seeding. `seedFor(level, round)` returns the starting rating for a player's first-ever
  * appearance, given the level (tourney_level) and round of that debut match. Tennis Abstract seeds new
- * entrants below 1500 (a "low 1200s" value that depends on debut level); the default keeps 1500 so
- * nothing changes until a config is passed.
+ * entrants below 1500 (a "low 1200s" value that depends on debut level) — and rates qualifying-round
+ * debutants lower than main-draw debutants, so BOTH level and round are exposed to match that
+ * granularity. The default keeps 1500 for every debut, so nothing changes until a config is passed.
  */
 export interface EloConfig {
   seedFor: (level: string, round: string) => number;
@@ -135,7 +136,8 @@ const freshState = (name: string, seed: number): RatingState => ({
  * Incremental surface-aware Elo. Each `update(row)` applies an overall update to both players (each
  * side using its OWN dynamic K from its own prior count) and, if the surface is known, a separate
  * same-surface update with separate per-surface counts. Walkovers/retirements are real results —
- * Sackmann lists a winner, so they move ratings like any other win.
+ * Sackmann lists a winner, so they move ratings like any other win. The optional `config` controls how
+ * a new entrant's seed is assigned on first appearance (default: 1500 for every debut).
  */
 export class EloEngine {
   readonly players = new Map<string, RatingState>();
