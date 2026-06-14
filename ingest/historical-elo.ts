@@ -19,9 +19,37 @@ import { fullKey, sigKey } from "./names";
  */
 export interface EloConfig {
   seedFor: (level: string, round: string) => number;
+  /** Injury/absence dock applied at rating-extraction time (see {@link LayoffDock}). Omit for no dock. */
+  dock?: LayoffDock;
 }
 
 export const DEFAULT_ELO_CONFIG: EloConfig = { seedFor: () => 1500 };
+
+/**
+ * Tennis Abstract's injury/absence penalty ("Handling Injuries and Absences with Tennis Elo", 2018-05-15).
+ * A player inactive for >= ~8 competitive-season weeks is docked ON THE PUBLISHED BOARD — ~100 Elo at 8
+ * weeks rising toward ~150 at ~1 year — but ONLY if their pre-layoff rating was >= `ratingFloor` (Sackmann
+ * tuned the curve on layoffs by players rated >= 1900; below it he does not dock). We apply this at rating-
+ * EXTRACTION time, because TA's published number for a CURRENTLY-absent player already reflects it. Verbatim:
+ * the penalties "end up bringing down the current Elo ratings of the players who are in the middle of long
+ * breaks ... giving us ranking tables that come closer to what we expect" — and during COVID he had to
+ * explicitly *suspend* "that penalty" board-wide (2021-03-08), which proves it is normally ON the board.
+ * Applying it per-match ON RETURN instead deflates the whole pool, since routine season gaps are
+ * indistinguishable from injuries by length alone. IDENTICAL for ATP and WTA (TA carries one curve to both;
+ * no per-gender scale). The 100/150 endpoints are Sackmann's; the linear shape between them is our
+ * assumption. NOTE the curve is measured in active-season days, so a true ~1-calendar-year layoff (~242
+ * active days) reaches ~130, not 150 — a deliberate consequence of faithful active-season counting.
+ * SEPARATE & NOT modelled here: the on-return K-multiplier (x1.5 decaying to x1 over 20 matches) that
+ * depresses currently-ACTIVE injury returnees (e.g. Djokovic/Fritz) — a path-dependent schedule an
+ * extraction-time scalar cannot reproduce; see docs/elo-investigation-findings.md.
+ */
+export interface LayoffDock {
+  triggerDays: number; // active-season days before any dock (~8 weeks = 56)
+  minPenalty: number; // dock at the trigger (100)
+  maxPenalty: number; // dock at >= maxDays (150)
+  maxDays: number; // active-season days at which the dock plateaus (365)
+  ratingFloor: number; // only dock players whose pre-dock rating >= this (1900)
+}
 
 /** Logistic Elo expectation for A beating B. winProbability(r,r) === 0.5, monotonic in (rA - rB). */
 export function winProbability(rA: number, rB: number): number {
@@ -31,6 +59,39 @@ export function winProbability(rA: number, rB: number): number {
 /** Dynamic K-factor: 250/(priorMatches+5)^0.4 — large when a player is new, shrinking as they settle. */
 export function kFactor(priorMatches: number): number {
   return 250 / (priorMatches + 5) ** 0.4;
+}
+
+/** YYYYMMDD -> integer UTC day number, for layoff gap arithmetic. */
+const dayNumber = (yyyymmdd: number): number =>
+  Math.round(Date.UTC(Math.floor(yyyymmdd / 10000), (Math.floor(yyyymmdd / 100) % 100) - 1, yyyymmdd % 100) / 86_400_000);
+
+/**
+ * Competitive-season days a player has been inactive between `lastDate` and `asOf`, counting only the part
+ * of each year's ~Feb 1 – Oct 1 window. Sackmann: "the eight-week threshold doesn't count the offseason,
+ * so an eight-week layoff might really mean ~16 weeks between events." This treats the winter off-season
+ * (and a player's own early end / late start to a season) as normal, so only genuine mid-season or
+ * multi-month absences accrue toward the trigger. Returns 0 for an absurd `asOf` (all-rows sentinel) so
+ * callers can stay date-agnostic.
+ */
+export function activeLayoffDays(lastDate: number, asOf: number): number {
+  if (lastDate === 0 || asOf > 30_000_000 || asOf <= lastDate) return 0;
+  const last = dayNumber(lastDate);
+  const cur = dayNumber(asOf);
+  let active = 0;
+  for (let y = Math.floor(lastDate / 10000); y <= Math.floor(asOf / 10000); y++) {
+    const seasonStart = Math.round(Date.UTC(y, 1, 1) / 86_400_000); // Feb 1
+    const seasonEnd = Math.round(Date.UTC(y, 9, 1) / 86_400_000); // Oct 1
+    active += Math.max(0, Math.min(cur, seasonEnd) - Math.max(last, seasonStart));
+  }
+  return active;
+}
+
+/** Elo dock for `activeDays` of competitive-season inactivity given a player's pre-dock `rating`. Zero
+ *  below the ~8-week trigger OR below the rating floor (TA docks only players who were rated ~1900+). */
+export function layoffPenalty(dock: LayoffDock, activeDays: number, rating: number): number {
+  if (rating < dock.ratingFloor || activeDays < dock.triggerDays) return 0;
+  const t = Math.min(1, (activeDays - dock.triggerDays) / (dock.maxDays - dock.triggerDays));
+  return dock.minPenalty + (dock.maxPenalty - dock.minPenalty) * t;
 }
 
 /**
@@ -123,6 +184,7 @@ interface RatingState {
   grass: number;
   grassN: number;
   name: string;
+  lastDate: number; // YYYYMMDD of the player's most recent match (0 until first) — for the layoff dock
 }
 
 const freshState = (name: string, seed: number): RatingState => ({
@@ -135,6 +197,7 @@ const freshState = (name: string, seed: number): RatingState => ({
   grass: seed,
   grassN: 0,
   name,
+  lastDate: 0,
 });
 
 /**
@@ -178,6 +241,10 @@ export class EloEngine {
     else if (surf === "Clay") this.surfaceUpdate(w, l, "clay", "clayN");
     else if (surf === "Grass") this.surfaceUpdate(w, l, "grass", "grassN");
     // Unknown/empty surface: overall-only (already applied above).
+
+    // Record activity so rating extraction can dock a player who is inactive as of the cutoff.
+    w.lastDate = row.tourneyDate;
+    l.lastDate = row.tourneyDate;
   }
 
   private surfaceUpdate(
@@ -250,12 +317,24 @@ export function computeRatingsAsOfSorted(
   // ids with comparable counts stay ambiguous and are dropped (we can't tell which is which).
   const best = new Map<string, { elo: ComputedElo; n: number; runnerUp: number }>();
   for (const [id, s] of engine.players) {
+    // Injury/absence dock (extraction time): TA's published rating for a player inactive a long
+    // competitive-season stretch as of the cutoff is already docked. Gated on the pre-dock overall
+    // (s.overall = the rating at the player's last match, i.e. at injury, since the engine applies no
+    // time-decay) so only the >=ratingFloor cohort TA docks is touched; active players get a 0 dock,
+    // so this never deflates the field. Applied uniformly to overall + each surface.
+    const dock = config.dock
+      ? layoffPenalty(config.dock, activeLayoffDays(s.lastDate, cutoffDate), s.overall)
+      : 0;
+    const surf = (raw: number, n: number): number | null => {
+      const r = resolveSurfaceElo(raw, n, s.overall);
+      return r === null ? null : r - dock;
+    };
     const computed: ComputedElo = {
       name: s.name,
-      overall: s.overall,
-      hard: resolveSurfaceElo(s.hard, s.hardN, s.overall),
-      clay: resolveSurfaceElo(s.clay, s.clayN, s.overall),
-      grass: resolveSurfaceElo(s.grass, s.grassN, s.overall),
+      overall: s.overall - dock,
+      hard: surf(s.hard, s.hardN),
+      clay: surf(s.clay, s.clayN),
+      grass: surf(s.grass, s.grassN),
     };
     byId.set(id, computed);
     const k = fullKey(s.name);

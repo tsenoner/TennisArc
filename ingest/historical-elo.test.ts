@@ -12,9 +12,12 @@ import {
   computeRatingsAsOfSorted,
   sortEloRows,
   applyHistoricalElo,
+  activeLayoffDays,
+  layoffPenalty,
   DEFAULT_ELO_CONFIG,
   type EloConfig,
   type EloMatchRow,
+  type LayoffDock,
 } from "./historical-elo";
 
 const csv = readFileSync(resolve(__dirname, "fixtures/elo-matches-sample.csv"), "utf8");
@@ -340,4 +343,62 @@ test("byName still drops genuinely ambiguous same-name ids with comparable match
   ];
   const { byName } = computeRatingsAsOf(rows, 20240201);
   expect(byName.get("twinname")).toBeUndefined(); // 2 vs 2 matches -> ambiguous -> dropped
+});
+
+describe("activeLayoffDays (TA injury/absence: off-season is not counted)", () => {
+  it("counts only the Feb 1–Oct 1 competitive window", () => {
+    // Last match 1 Feb, asOf 1 Oct same year => the whole ~Feb1-Oct1 window (~242 days).
+    expect(activeLayoffDays(20200201, 20201001)).toBeGreaterThan(230);
+    expect(activeLayoffDays(20200201, 20201001)).toBeLessThan(250);
+  });
+  it("excludes the winter off-season between two seasons", () => {
+    // Last match 1 Oct 2020, asOf 1 Feb 2021: the entire gap is off-season => 0 active days.
+    expect(activeLayoffDays(20201001, 20210201)).toBe(0);
+  });
+  it("is 0 for the all-rows sentinel cutoff and for no prior match", () => {
+    expect(activeLayoffDays(20200201, 99999999)).toBe(0); // sentinel > 30,000,000
+    expect(activeLayoffDays(0, 20210101)).toBe(0); // never played
+  });
+});
+
+describe("layoffPenalty (100 @ 8wk -> 150 @ ~1yr, gated at >=1900)", () => {
+  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1900 };
+  it("is 0 below the 8-week trigger", () => {
+    expect(layoffPenalty(dock, 55, 2200)).toBe(0);
+    expect(layoffPenalty(dock, 56, 2200)).toBe(100); // exactly at the trigger
+  });
+  it("is 0 below the rating floor, regardless of layoff length", () => {
+    expect(layoffPenalty(dock, 300, 1899)).toBe(0);
+    expect(layoffPenalty(dock, 300, 1900)).toBeGreaterThan(100); // exactly at the floor -> docked
+  });
+  it("rises linearly to the 150 plateau and clamps there", () => {
+    const mid = layoffPenalty(dock, Math.round((56 + 365) / 2), 2000);
+    expect(mid).toBeCloseTo(125, 0); // halfway between 100 and 150
+    expect(layoffPenalty(dock, 365, 2000)).toBeCloseTo(150, 6);
+    expect(layoffPenalty(dock, 10_000, 2000)).toBeCloseTo(150, 6); // clamped, never exceeds maxPenalty
+  });
+});
+
+test("the dock is applied at extraction only to absent players >= the rating floor", () => {
+  // A low ratingFloor (1400) so a seeded-1500 player triggers, isolating the wiring from a 1900 climb.
+  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1400 };
+  const cfg: EloConfig = { seedFor: () => 1500, dock };
+  const noDock: EloConfig = { seedFor: () => 1500 };
+  const r = [seedRow({ winnerId: "1", winnerName: "Abs Ent", loserId: "2", loserName: "Op P", tourneyDate: 20200201 })];
+  const cutoff = 20210101; // long after the Feb-2020 match -> absent
+
+  const undockedRec = computeRatingsAsOf(r, cutoff, noDock).byId.get("1")!;
+  const undocked = undockedRec.overall;
+  const docked = computeRatingsAsOf(r, cutoff, cfg).byId.get("1")!;
+  const expected = layoffPenalty(dock, activeLayoffDays(20200201, cutoff), undocked);
+  expect(expected).toBeGreaterThan(100); // a real dock got applied
+  expect(docked.overall).toBeCloseTo(undocked - expected, 6); // overall docked by exactly the penalty
+  expect(docked.hard!).toBeCloseTo(undockedRec.hard! - expected, 6); // surface docked by the same penalty
+
+  // Gate: a floor above the player's rating -> no dock. Active player (recent match) -> no dock.
+  const highFloor: EloConfig = { seedFor: () => 1500, dock: { ...dock, ratingFloor: 9999 } };
+  expect(computeRatingsAsOf(r, cutoff, highFloor).byId.get("1")!.overall).toBeCloseTo(undocked, 6);
+  const recent = computeRatingsAsOf(r, 20200301, cfg).byId.get("1")!.overall; // only ~4 weeks out
+  const recentNo = computeRatingsAsOf(r, 20200301, noDock).byId.get("1")!.overall;
+  expect(recent).toBeCloseTo(recentNo, 6); // below the 8-week trigger -> no dock
 });
