@@ -71,4 +71,5 @@ injury-returnees ~+100 too low; TA simply removes the round dock at display.
 **Board-replay (board[prev] + window matches → board[cur]):** per-transition median |err| = median-of-medians
 **3.0 (ATP) / 1.4 (WTA)**, **byte-exact in clean windows** (WTA 24/65 transitions ≤1 Elo). The older
 from-scratch engine reaches only meanAbs ~11 (ATP) / ~7 (WTA) vs today's board — that is the weaker path, not
-the achievable ceiling. Re-run: `npx tsx .scratch/elo-reverse/replay.ts {ATP|WTA} --clean`.
+the achievable ceiling. Re-run: `npx tsx ingest/elo-reverse/replay.ts {ATP|WTA} --clean` (tooling +
+interactive scatter in [`ingest/elo-reverse/`](../ingest/elo-reverse/); `pnpm elo:scatter` builds the scatter).

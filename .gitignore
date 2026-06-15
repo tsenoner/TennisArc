@@ -27,3 +27,7 @@ ingest/.cache/
 
 # Wayback raw HTML — extracted from data/wayback/*.tar.gz (the tarball is the committed copy)
 data/wayback/raw/
+
+# elo-reverse generated artifacts (rebuilt by `pnpm elo:scatter`)
+ingest/elo-reverse/boards.json
+ingest/elo-reverse/elo-scatter.html

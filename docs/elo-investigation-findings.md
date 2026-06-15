@@ -21,7 +21,7 @@ reporting, Wayback formalized)**. "Today" numbers measured against the live TA b
 > **2026-06-15 — §0 below SUPERSEDES parts of §2/§5 via a stronger method.** The from-scratch
 > reconstruction (§1–§11) approximated TA's board from Sackmann CSVs over deep history. A second,
 > independent attack — replaying TA's *own published monthly boards* forward one window at a time
-> (`.scratch/elo-reverse/`, full writeup `.scratch/elo-reverse/FINDINGS.md`) — reproduces the board to a
+> (committed tooling [`ingest/elo-reverse/`](../ingest/elo-reverse/), `pnpm elo:scatter`) — reproduces the board to a
 > few Elo per month, **byte-exact in clean windows**, and pins several parameters the reconstruction could
 > only guess. Where §0 and the older sections conflict, §0 is the measured truth.
 
@@ -39,7 +39,7 @@ dynamic workflow.
 the mid-2018 recompute boundary): whole-span per-transition median |err| = median-of-medians 3.0 (ATP) /
 1.4 (WTA)** — ATP 11/62 transitions ≤1 Elo, WTA **24/65 ≤1 (essentially exact), 41/65 ≤2**. **Many windows are
 BYTE-EXACT** (median |err| 0.00; one quiet window froze 441/444 players to within 0.1). Far tighter than the
-from-scratch meanAbs 11/7 (which was vs *today's* board only). Run `npx tsx .scratch/elo-reverse/replay.ts
+from-scratch meanAbs 11/7 (which was vs *today's* board only). Run `npx tsx ingest/elo-reverse/replay.ts
 {ATP|WTA} --clean`.
 
 **Confirmed directly (each adversarially re-derived):**
