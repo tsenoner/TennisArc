@@ -10,12 +10,11 @@ import { loadSorted } from "./calibrate-elo";
 import { computeRatingsAsOfSorted } from "./historical-elo";
 import { ATP_ELO_CONFIG, WTA_ELO_CONFIG } from "./elo-config";
 import { fullKey } from "./names";
+import { median } from "./elo-reverse/lib"; // even length = average of the two middle elements
 
 interface Board { date: number; players: { name: string; overall: number }[] }
 const fixture: Record<string, Board[]> = JSON.parse(
   readFileSync(resolve(process.cwd(), "ingest/fixtures/ta-elo-historical.json"), "utf8"));
-
-const median = (a: number[]) => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : NaN; };
 
 (async () => {
   for (const tour of ["ATP", "WTA"] as const) {

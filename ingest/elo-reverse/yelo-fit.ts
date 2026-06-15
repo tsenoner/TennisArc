@@ -15,7 +15,7 @@
 //   npx tsx ingest/elo-reverse/yelo-fit.ts ATP --pgrid    # K/D/seed grid
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadMatches, nameIndex, fullKey, keepForElo, roundRank, dayNum, isRetirement, RET_ERA_START, type Match } from "./lib";
+import { loadMatches, nameIndex, fullKey, keepForElo, roundRank, dayNum, addDays, isRetirement, medianUpper, round1, RET_ERA_START, type Match } from "./lib";
 import { parseBoard } from "./parse-boards";
 import type { YeloBoard } from "./parse-yelo";
 
@@ -86,7 +86,23 @@ const FULL_BOARDS = ANCHOR ? loadFullEloBoards() : [];
 // 2026 ATP boards) is the least-biased stand-in. Carry-forward/back still applies to anyone on ≥1 board.
 const EVER_ON_BOARD = new Set<string>();
 for (const b of FULL_BOARDS) for (const id of b.overall.keys()) EVER_ON_BOARD.add(id);
+// FITTED REPRODUCTION CONSTANT (tooling-only — NOT a production Elo param, so it stays here rather than in
+// elo-config.ts, which holds the shipped engine's config): flat stand-in for opponents who appear on no
+// captured full-Elo board (verified to zero out the off-board signed bias on the 2026 ATP boards; see
+// oppRatingAt's doc-comment for the rationale).
 const OFF_BOARD_SEED = 1325;
+
+// PERF: precompute, per opponent id, the chronologically-sorted list of [lastUpdate, overall] for the boards
+// that list them (FULL_BOARDS is already sorted by lastUpdate, so push order is sorted). oppRatingAt then
+// binary-searches this per-opp list by date instead of linearly rescanning all of FULL_BOARDS every call —
+// the dominant cost. The values produced are byte-identical to the old full-board scan.
+const OPP_TL = new Map<string, { d: number[]; v: number[] }>(); // d = lastUpdate (asc), v = overall, parallel
+for (const b of FULL_BOARDS)
+  for (const [id, ov] of b.overall) {
+    let e = OPP_TL.get(id);
+    if (!e) OPP_TL.set(id, (e = { d: [], v: [] }));
+    e.d.push(b.lastUpdate); e.v.push(ov);
+  }
 
 /** Opponent's "actual rating at the time" (Sackmann's phrase), estimated by LINEARLY INTERPOLATING the
  *  opponent's full-Elo between the two published boards that bracket the match date and that both list them.
@@ -106,16 +122,17 @@ const OFF_BOARD_SEED = 1325;
  *  (tlSeed 1500 is the least-biased there — those opponents are mid-strength ~1400, not weak-near-floor). */
 function oppRatingAt(oppId: string, date: number, fallback: number): number {
   if (!ANCHOR) return fallback;
-  let pi = -1, ni = -1;
-  for (let i = 0; i < FULL_BOARDS.length; i++) {
-    if (!FULL_BOARDS[i].overall.has(oppId)) continue;
-    if (FULL_BOARDS[i].lastUpdate <= date) pi = i;
-    else { ni = i; break; }
-  }
-  const pv = pi >= 0 ? FULL_BOARDS[pi].overall.get(oppId)! : undefined;
-  const nv = ni >= 0 ? FULL_BOARDS[ni].overall.get(oppId)! : undefined;
+  const tl = OPP_TL.get(oppId);
+  if (!tl) return EVER_ON_BOARD.has(oppId) ? fallback : OFF_BOARD_SEED; // never-on-board → flat off-board stand-in
+  // pi = last entry with lastUpdate <= date; ni = pi+1 (earliest entry with lastUpdate > date). Binary-search
+  // the split: lo lands on the first index with d[i] > date, so pi = lo-1, ni = lo. (Equivalent to the old scan.)
+  let lo = 0, hi = tl.d.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (tl.d[mid] <= date) lo = mid + 1; else hi = mid; }
+  const pi = lo - 1, ni = lo < tl.d.length ? lo : -1;
+  const pv = pi >= 0 ? tl.v[pi] : undefined;
+  const nv = ni >= 0 ? tl.v[ni] : undefined;
   if (pv !== undefined && nv !== undefined) {
-    const t0 = dayNum(FULL_BOARDS[pi].lastUpdate), t1 = dayNum(FULL_BOARDS[ni].lastUpdate);
+    const t0 = dayNum(tl.d[pi]), t1 = dayNum(tl.d[ni]);
     const f = Math.max(0, Math.min(1, (dayNum(date) - t0) / (t1 - t0)));
     return pv + f * (nv - pv);
   }
@@ -157,12 +174,6 @@ for (const m of counted) {
   (byId.get(m.loserId) ?? byId.set(m.loserId, []).get(m.loserId)!).push(m);
 }
 
-const addD = (date: number, n: number): number => {
-  const y = Math.floor(date / 10000), mo = (Math.floor(date / 100) % 100) - 1, d = date % 100;
-  const dt = new Date(Date.UTC(y, mo, d) + n * 86_400_000);
-  return dt.getUTCFullYear() * 10000 + (dt.getUTCMonth() + 1) * 100 + dt.getUTCDate();
-};
-
 /** PASS 2 — yElo for ONE player id over a season up to asOf (whole-tournament gating, end-year season). */
 function yeloFor(id: string, year: number, asOf: number, cfg: Cfg, tl = TL): St {
   const countRet = asOf >= RET_ERA_START; // retirements only count on boards from the spring-2025 recompute on
@@ -192,14 +203,16 @@ function scoreBoard(b: YeloBoard, cfg: Cfg): { resids: Resid[]; unmatched: numbe
     if (!id) { unmatched++; continue; }
     const s = yeloFor(id, b.year, b.lastUpdate, cfg);
     resids.push({
-      name: p.name, dY: Math.round((s.yelo - p.yelo) * 10) / 10, wlOk: s.wins === p.wins && s.losses === p.losses,
-      rW: p.wins, cW: s.wins, rL: p.losses, cL: s.losses, rY: p.yelo, cY: Math.round(s.yelo * 10) / 10,
+      name: p.name, dY: round1(s.yelo - p.yelo), wlOk: s.wins === p.wins && s.losses === p.losses,
+      rW: p.wins, cW: s.wins, rL: p.losses, cL: s.losses, rY: p.yelo, cY: round1(s.yelo),
     });
   }
   return { resids, unmatched };
 }
 
-const med = (a: number[]) => (a.length ? a.slice().sort((x, y) => x - y)[a.length >> 1] : 0);
+// Upper-middle median (shared `medianUpper` from ./lib), but 0 (not NaN) on empty — yelo-fit prints/pushes a
+// median for W/L-ok-empty boards (e.g. WTA 20211227), so the empty→0 guard must stay to keep output identical.
+const med = (a: number[]) => (a.length ? medianUpper(a) : 0);
 
 // NOTE: "centered" subtracts each board's signed-median offset, isolating the per-player SPREAD from a
 // uniform per-board shift. It is NOT seed-invariant (changing the target seed changes E non-linearly since
@@ -261,31 +274,26 @@ if (TRACE && ONE) {
   res.sort((a, b) => a.c - b.c);
   for (const r of res) console.log(`  ${r.s}: centered ${r.c.toFixed(2)}, byte-exact ${r.e}`);
 } else if (process.argv.includes("--scatter")) {
-  // Export per-board computed-vs-retrieved yElo for the scatter viz (both tours), into yelo-scatter.json.
-  const out: Record<string, unknown> = {};
-  for (const t of ["ATP", "WTA"] as const) {
-    const bs: YeloBoard[] = JSON.parse(readFileSync(resolve(process.cwd(), "ingest/elo-reverse/yelo-boards.json"), "utf8"))[t];
-    // re-run for the requested tour only (module is per-tour); guard: only emit for the CLI tour, merge later.
-    if (t !== tour) { out[t] = null; continue; }
-    out[t] = bs.map((b) => {
-      const { resids } = scoreBoard(b, BASE);
-      const ok = resids.filter((r) => r.wlOk);
-      const abs = ok.map((r) => Math.abs(r.dY)).sort((a, b) => a - b);
-      const pts = resids.map((r) => ({ name: r.name, ret: r.rY, comp: r.cY, d: r.dY, m: r.cW + r.cL, status: r.wlOk ? "played" : "wl" }));
-      return {
-        date: b.lastUpdate, prevDate: b.year * 10000 + 101, gap: 0, pts,
-        stats: {
-          n: ok.length, exact: abs.filter((x) => x <= 0.1).length, medAbs: Math.round((abs[abs.length >> 1] ?? 0) * 10) / 10, // <=0.1 to match the scatter legend
-          w5: ok.length ? Math.round((100 * abs.filter((x) => x <= 5).length) / ok.length) : 0,
-          w10: ok.length ? Math.round((100 * abs.filter((x) => x <= 10).length) / ok.length) : 0,
-          debuts: resids.length - ok.length,
-        },
-      };
-    }).reverse();
-  }
+  // Export per-board computed-vs-retrieved yElo for the scatter viz, into yelo-scatter-<tour>.json. The module
+  // is per-tour, so emit only the CLI tour from the already-loaded `boards` (the dashboard merges the two files).
+  const scatter = boards.map((b) => {
+    const { resids } = scoreBoard(b, BASE);
+    const ok = resids.filter((r) => r.wlOk);
+    const abs = ok.map((r) => Math.abs(r.dY)).sort((a, b) => a - b);
+    const pts = resids.map((r) => ({ name: r.name, ret: r.rY, comp: r.cY, d: r.dY, m: r.cW + r.cL, status: r.wlOk ? "played" : "wl" }));
+    return {
+      date: b.lastUpdate, prevDate: b.year * 10000 + 101, gap: 0, pts,
+      stats: {
+        n: ok.length, exact: abs.filter((x) => x <= 0.1).length, medAbs: round1(abs[abs.length >> 1] ?? 0), // <=0.1 to match the scatter legend
+        w5: ok.length ? Math.round((100 * abs.filter((x) => x <= 5).length) / ok.length) : 0,
+        w10: ok.length ? Math.round((100 * abs.filter((x) => x <= 10).length) / ok.length) : 0,
+        debuts: resids.length - ok.length,
+      },
+    };
+  }).reverse();
   const path = resolve(process.cwd(), `ingest/elo-reverse/yelo-scatter-${tour}.json`);
-  writeFileSync(path, JSON.stringify(out[tour]));
-  console.log(`wrote ${path} (${(out[tour] as unknown[]).length} boards)`);
+  writeFileSync(path, JSON.stringify(scatter));
+  console.log(`wrote ${path} (${scatter.length} boards)`);
 } else if (process.argv.includes("--cutfit")) {
   // For each board, find the data-cutoff offset (vs the "Last update" date) that maximises W/L-exact.
   // Reveals whether residual W/L misses are board-cutoff imprecision (a consistent best offset) vs model error.
@@ -295,7 +303,7 @@ if (TRACE && ONE) {
   for (const b of boards) {
     let best = { off: 0, ok: -1, med: 0 };
     for (let off = -8; off <= 12; off++) {
-      const cut = addD(b.lastUpdate, off);
+      const cut = addDays(b.lastUpdate, off);
       let ok = 0; const abs: number[] = [];
       for (const p of b.players) {
         const id = keyToId.get(fullKey(p.name)); if (!id) continue;

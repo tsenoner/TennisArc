@@ -3,14 +3,13 @@
 // Slam values to VERIFY the mechanics (2023 Wimbledon: champion->W, runner-up->F, etc.).
 //   npx tsx ingest/points/round-extraction.ts ATP 2023 "Wimbledon"
 import { loadMatches, roundRank, type Match } from "../elo-reverse/lib";
+import { isQ } from "./shared";
 
 const tour = (process.argv[2] as "ATP" | "WTA") ?? "ATP";
 const year = Number(process.argv[3] ?? 2023);
 const filterT = process.argv[4];
 
 const all = loadMatches(tour, year - 1).filter((m) => Math.floor(m.date / 10000) === year);
-
-const isQ = (r: string) => /^Q[1-4]$/.test(r);
 
 /** Per (tourneyId, playerId): the round they EXITED (the round of their single knockout loss), or "W" if
  *  they won the title (no main-draw loss), or "Qx" if they never made the main draw. Returns null if no matches. */

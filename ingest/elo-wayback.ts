@@ -10,45 +10,40 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Tour } from "../src/model";
+import { parseBoard as parseFullBoard } from "./elo-reverse/parse-boards";
+import { cdxTimestamps, fetchWaybackCapture } from "./elo-reverse/wayback";
 
 const RAW = resolve(process.cwd(), "data/wayback/raw");
 const OUT = resolve(process.cwd(), "ingest/fixtures/ta-elo-historical.json");
 const TOP_N = 40;
-const boardUrl = (tour: string) => `tennisabstract.com/reports/${tour}_elo_ratings.html`;
+const eloSlug = (tour: string) => `${tour}_elo_ratings`; // tennisabstract.com/reports/{slug}.html
 
 interface Board { date: number; players: { name: string; overall: number }[] }
 
-/** Parse one archived board page into its "Last update" date + top-N (name, overall). */
+/**
+ * Parse one archived board page into its "Last update" date + top-N (name, overall).
+ * Delegates the full parse to elo-reverse/parse-boards (one shared parser) and projects it to this
+ * fixture's thin shape: top-`TOP_N` rows, only (name, overall). The tour/captureDate args are unused
+ * by the projection here, so we pass placeholders. (parse-boards keeps every valid row at overall>800;
+ * the band 800<overall<=1000 never occurs in any archived board, so this is identical to the old
+ * overall>1000 cut.)
+ */
 export function parseBoard(html: string): Board | null {
-  const m = html.match(/Last update:\s*(\d{4})-(\d{2})-(\d{2})/i);
-  if (!m) return null;
-  const date = Number(`${m[1]}${m[2]}${m[3]}`);
-  const players: { name: string; overall: number }[] = [];
-  for (const tr of html.match(/<tr[^>]*>[\s\S]*?<\/tr>/g) ?? []) {
-    const cells = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((c) =>
-      c[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim());
-    if (cells.length < 4) continue;
-    const name = cells[1];
-    const overall = Number.parseFloat(cells[3]);
-    if (name && /[A-Za-z]/.test(name) && Number.isFinite(overall) && overall > 1000 && overall < 3000)
-      players.push({ name, overall });
-  }
-  return players.length >= 30 ? { date, players: players.slice(0, TOP_N) } : null;
+  const b = parseFullBoard(html, "ATP", 0);
+  if (!b) return null;
+  return { date: b.lastUpdate, players: b.players.slice(0, TOP_N).map((p) => ({ name: p.name, overall: p.overall })) };
 }
 
 /** Download every distinct monthly capture of both boards into data/wayback/raw (idempotent). */
 async function fetchCaptures(): Promise<void> {
   mkdirSync(RAW, { recursive: true });
   for (const tour of ["atp", "wta"]) {
-    const cdx = `http://web.archive.org/cdx/search/cdx?url=${boardUrl(tour)}&output=text&fl=timestamp&filter=statuscode:200&collapse=timestamp:6`;
-    const list = (await (await fetch(cdx)).text()).trim().split(/\r?\n/).filter(Boolean);
+    const slug = eloSlug(tour);
+    const cdx = `http://web.archive.org/cdx/search/cdx?url=tennisabstract.com/reports/${slug}.html&output=text&fl=timestamp&filter=statuscode:200&collapse=timestamp:6`;
+    const list = await cdxTimestamps(cdx); // fl=timestamp → identity map, drop only empty lines, no retry
     for (const ts of list) {
-      const out = resolve(RAW, `${tour}_${ts.slice(0, 8)}.html`);
-      if (existsSync(out) && /last update/i.test(readFileSync(out, "utf8"))) continue;
-      try {
-        const html = await (await fetch(`https://web.archive.org/web/${ts}/https://${boardUrl(tour)}`)).text();
-        if (/last update/i.test(html)) writeFileSync(out, html);
-      } catch { /* skip a flaky capture */ }
+      // monthly fixture keeps an 8-digit (YYYYMMDD) filename; single attempt, no UA, status ignored.
+      await fetchWaybackCapture(slug, ts, resolve(RAW, `${tour}_${ts.slice(0, 8)}.html`));
     }
     console.log(`${tour}: ${readdirSync(RAW).filter((f) => f.startsWith(tour)).length} captures on disk`);
   }

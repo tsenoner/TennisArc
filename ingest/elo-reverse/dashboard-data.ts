@@ -5,12 +5,9 @@
 //   npx tsx ingest/elo-reverse/dashboard-data.ts   →  ingest/elo-reverse/dashboard-data.json
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadBoards, loadMatches, nameIndex, windowMatches, fullKey, dayNum, keepForElo } from "./lib";
+import { loadBoards, loadMatches, nameIndex, fullKey, keepForElo, winProbability as winP, kFactor as kOf, round1, priorMatchCounter, replayWindow, isRecomputeBoundary } from "./lib";
 
 const SEED = 1200;
-const winP = (a: number, b: number) => 1 / (1 + 10 ** ((b - a) / 400));
-const kOf = (n: number) => 250 / (n + 5) ** 0.4;
-const round1 = (x: number) => Math.round(x * 10) / 10;
 
 // status codes for the compact point form [nameIdx, ret, comp, m, statusCode]
 //  0 played · 1 idle · 2 new/debut (Elo) · 3 W/L≠TA (yElo)
@@ -74,46 +71,24 @@ function buildElo(tour: "ATP" | "WTA"): Dataset {
   const matches = all.filter(keepForElo);
   const boardIds = boards.map((b) =>
     new Map(b.players.map((p) => [keyToId.get(fullKey(p.name)) ?? "", p] as const).filter(([id]) => id)));
-  const cd = new Map<string, number[]>();
-  for (const m of matches) for (const id of [m.winnerId, m.loserId]) { const a = cd.get(id) ?? []; a.push(m.date); cd.set(id, a); }
-  const prior = (id: string, b: number) => {
-    const a = cd.get(id); if (!a) return 0;
-    let lo = 0, hi = a.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid] < b) lo = mid + 1; else hi = mid; } return lo;
-  };
+  const prior = priorMatchCounter(matches);
 
-  const latest = new Map<string, number>();
   const out: Snap[] = [];
-  for (let i = 0; i < boards.length; i++) {
-    const prev = i > 0 ? boards[i - 1] : null, cur = boards[i];
-    if (prev) {
-      const gap = dayNum(cur.lastUpdate) - dayNum(prev.lastUpdate);
-      if (gap <= 45) {
-        const win = windowMatches(matches, prev.lastUpdate, cur.lastUpdate);
-        const st = new Map<string, { ov: number; n: number }>();
-        const mcount = new Map<string, number>();
-        const get = (id: string) => { let s = st.get(id); if (!s) { s = { ov: latest.get(id) ?? SEED, n: prior(id, prev.lastUpdate) }; st.set(id, s); } return s; };
-        for (const m of win) {
-          const w = get(m.winnerId), l = get(m.loserId);
-          const e = winP(w.ov, l.ov);
-          w.ov += kOf(w.n) * (1 - e); l.ov += kOf(l.n) * (-(1 - e)); w.n++; l.n++;
-          mcount.set(m.winnerId, (mcount.get(m.winnerId) ?? 0) + 1); mcount.set(m.loserId, (mcount.get(m.loserId) ?? 0) + 1);
-        }
-        const pts: RawPt[] = [];
-        for (const [id, p] of boardIds[i]) {
-          const had = latest.has(id);
-          const comp = st.get(id)?.ov ?? latest.get(id) ?? SEED;
-          const status: Status = !had ? "new" : st.has(id) ? "played" : "idle";
-          pts.push({ name: p.name, ret: round1(p.overall), comp: round1(comp), d: round1(comp - p.overall), m: mcount.get(id) ?? 0, status });
-        }
-        if (pts.length) {
-          // recompute-boundary heuristic: idle players shifted en masse (kept, flagged for the timeline)
-          const idleD = pts.filter((p) => p.status === "idle").map((p) => p.d).sort((a, b) => a - b);
-          const boundary = idleD.length >= 5 && Math.abs(idleD[idleD.length >> 1]) > 25;
-          out.push({ date: cur.lastUpdate, prevDate: prev.lastUpdate, gap, boundary, ...bucketise(pts, "new"), pts: pts.map(compact) });
-        }
-      }
+  // fixed-param replay: SEED=1200, 45-day gap, library win-prob/K, no RET-era gate (see lib.replayWindow).
+  for (const { i, prev, cur, gap, st, mcount, latest } of
+    replayWindow(boards, boardIds, matches, prior, { seed: SEED, maxGap: 45, winProb: winP, kFactor: kOf })) {
+    const pts: RawPt[] = [];
+    for (const [id, p] of boardIds[i]) {
+      const had = latest.has(id);
+      const comp = st.get(id)?.ov ?? latest.get(id) ?? SEED;
+      const status: Status = !had ? "new" : st.has(id) ? "played" : "idle";
+      pts.push({ name: p.name, ret: round1(p.overall), comp: round1(comp), d: round1(comp - p.overall), m: mcount.get(id) ?? 0, status });
     }
-    for (const [id, p] of boardIds[i]) latest.set(id, p.overall);
+    if (pts.length) {
+      // recompute-boundary heuristic: idle players shifted en masse (kept, flagged for the timeline)
+      const boundary = isRecomputeBoundary(pts.filter((p) => p.status === "idle").map((p) => p.d));
+      out.push({ date: cur.lastUpdate, prevDate: prev.lastUpdate, gap, boundary, ...bucketise(pts, "new"), pts: pts.map(compact) });
+    }
   }
   return { names, snaps: out };
 }

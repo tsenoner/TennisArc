@@ -6,11 +6,9 @@
 //   npx tsx ingest/elo-reverse/scatter.ts   (or `pnpm elo:scatter` to build + open)
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadBoards, loadMatches, nameIndex, windowMatches, fullKey, dayNum, keepForElo } from "./lib";
+import { loadBoards, loadMatches, nameIndex, fullKey, keepForElo, winProbability as winP, kFactor as kOf, round1, priorMatchCounter, replayWindow, isRecomputeBoundary } from "./lib";
 
 const SEED = 1200, N_TRANSITIONS = 8;
-const winP = (a: number, b: number) => 1 / (1 + 10 ** ((b - a) / 400));
-const kOf = (n: number) => 250 / (n + 5) ** 0.4;
 
 interface Pt { name: string; ret: number; comp: number; d: number; m: number; status: "played" | "idle" | "new" }
 interface Trans { date: number; prevDate: number; gap: number; pts: Pt[]; stats: Record<string, number> }
@@ -21,56 +19,36 @@ function buildTour(tour: "ATP" | "WTA"): Trans[] {
   const { keyToId } = nameIndex(all);
   const matches = all.filter(keepForElo);
   const boardIds = boards.map((b) => new Map(b.players.map((p) => [keyToId.get(fullKey(p.name)) ?? "", p] as const).filter(([id]) => id)));
-  const cd = new Map<string, number[]>();
-  for (const m of matches) for (const id of [m.winnerId, m.loserId]) { const a = cd.get(id) ?? []; a.push(m.date); cd.set(id, a); }
-  const prior = (id: string, b: number) => { const a = cd.get(id); if (!a) return 0; let lo = 0, hi = a.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid] < b) lo = mid + 1; else hi = mid; } return lo; };
+  const prior = priorMatchCounter(matches);
 
-  const latest = new Map<string, number>();
   const out: Trans[] = [];
-  for (let i = 0; i < boards.length; i++) {
-    const prev = i > 0 ? boards[i - 1] : null, cur = boards[i];
-    if (prev) {
-      const gap = dayNum(cur.lastUpdate) - dayNum(prev.lastUpdate);
-      if (gap <= 45) {
-        const win = windowMatches(matches, prev.lastUpdate, cur.lastUpdate);
-        const st = new Map<string, { ov: number; n: number }>();
-        const mcount = new Map<string, number>();
-        const get = (id: string) => { let s = st.get(id); if (!s) { s = { ov: latest.get(id) ?? SEED, n: prior(id, prev.lastUpdate) }; st.set(id, s); } return s; };
-        for (const m of win) {
-          const w = get(m.winnerId), l = get(m.loserId);
-          const e = winP(w.ov, l.ov);
-          w.ov += kOf(w.n) * (1 - e); l.ov += kOf(l.n) * (-(1 - e)); w.n++; l.n++;
-          mcount.set(m.winnerId, (mcount.get(m.winnerId) ?? 0) + 1); mcount.set(m.loserId, (mcount.get(m.loserId) ?? 0) + 1);
-        }
-        const pts: Pt[] = [];
-        for (const [id, p] of boardIds[i]) {
-          const had = latest.has(id);
-          const comp = st.get(id)?.ov ?? latest.get(id) ?? SEED;
-          const status: Pt["status"] = !had ? "new" : (st.has(id) ? "played" : "idle");
-          pts.push({ name: p.name, ret: round1(p.overall), comp: round1(comp), d: round1(comp - p.overall), m: mcount.get(id) ?? 0, status });
-        }
-        // exclude recompute-boundary transitions (idle players shifted en masse)
-        const idleD = pts.filter((p) => p.status === "idle").map((p) => p.d).sort((a, b) => a - b);
-        const boundary = idleD.length >= 5 && Math.abs(idleD[idleD.length >> 1]) > 25;
-        if (!boundary && pts.length) {
-          const scored = pts.filter((p) => p.status !== "new");
-          const abs = scored.map((p) => Math.abs(p.d)).sort((a, b) => a - b);
-          out.push({
-            date: cur.lastUpdate, prevDate: prev.lastUpdate, gap, pts,
-            stats: {
-              n: scored.length, exact: abs.filter((x) => x <= 0.1).length, medAbs: round1(abs[abs.length >> 1] ?? 0),
-              w5: Math.round(100 * abs.filter((x) => x <= 5).length / abs.length),
-              w10: Math.round(100 * abs.filter((x) => x <= 10).length / abs.length), debuts: pts.length - scored.length,
-            },
-          });
-        }
-      }
+  // fixed-param replay: SEED=1200, 45-day gap, library win-prob/K, no RET-era gate (see lib.replayWindow).
+  for (const { i, prev, cur, gap, st, mcount, latest } of
+    replayWindow(boards, boardIds, matches, prior, { seed: SEED, maxGap: 45, winProb: winP, kFactor: kOf })) {
+    const pts: Pt[] = [];
+    for (const [id, p] of boardIds[i]) {
+      const had = latest.has(id);
+      const comp = st.get(id)?.ov ?? latest.get(id) ?? SEED;
+      const status: Pt["status"] = !had ? "new" : (st.has(id) ? "played" : "idle");
+      pts.push({ name: p.name, ret: round1(p.overall), comp: round1(comp), d: round1(comp - p.overall), m: mcount.get(id) ?? 0, status });
     }
-    for (const [id, p] of boardIds[i]) latest.set(id, p.overall);
+    // exclude recompute-boundary transitions (idle players shifted en masse)
+    const boundary = isRecomputeBoundary(pts.filter((p) => p.status === "idle").map((p) => p.d));
+    if (!boundary && pts.length) {
+      const scored = pts.filter((p) => p.status !== "new");
+      const abs = scored.map((p) => Math.abs(p.d)).sort((a, b) => a - b);
+      out.push({
+        date: cur.lastUpdate, prevDate: prev.lastUpdate, gap, pts,
+        stats: {
+          n: scored.length, exact: abs.filter((x) => x <= 0.1).length, medAbs: round1(abs[abs.length >> 1] ?? 0),
+          w5: Math.round(100 * abs.filter((x) => x <= 5).length / abs.length),
+          w10: Math.round(100 * abs.filter((x) => x <= 10).length / abs.length), debuts: pts.length - scored.length,
+        },
+      });
+    }
   }
   return out.slice(-N_TRANSITIONS).reverse();
 }
-const round1 = (x: number) => Math.round(x * 10) / 10;
 
 const data = { ATP: buildTour("ATP"), WTA: buildTour("WTA") };
 // yElo datasets (computed via the season-reset / real-opponent model, ingest/elo-reverse/yelo-fit.ts --scatter)

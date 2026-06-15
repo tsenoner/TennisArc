@@ -89,8 +89,9 @@ export function kFactor(priorMatches: number): number {
   return 250 / (priorMatches + 5) ** 0.4;
 }
 
-/** YYYYMMDD -> integer UTC day number, for layoff gap arithmetic. */
-const dayNumber = (yyyymmdd: number): number =>
+/** YYYYMMDD -> integer UTC day number, for layoff gap arithmetic. Exported (re-exported as `dayNum` from
+ *  ingest/elo-reverse/lib.ts) so the reverse-engineering tooling shares one definition. */
+export const dayNumber = (yyyymmdd: number): number =>
   Math.round(Date.UTC(Math.floor(yyyymmdd / 10000), (Math.floor(yyyymmdd / 100) % 100) - 1, yyyymmdd % 100) / 86_400_000);
 
 /**
@@ -161,8 +162,10 @@ export interface EloMatchRow {
 const SURFACES: Record<string, EloSurface> = { Hard: "Hard", Clay: "Clay", Grass: "Grass" };
 
 // TA's verified full-board inclusion scope, reverse-engineered from TA's own boards (docs/yelo-reproduction.md,
-// docs/elo-investigation-findings.md). These mirror ingest/elo-reverse/lib.ts so the production engine and the
-// reverse-engineering tooling share one definition.
+// docs/elo-investigation-findings.md). The scope rule itself lives in the shared `keepForEloScope` primitive
+// below; ingest/elo-reverse/lib.ts `keepForElo` calls the SAME primitive, so the engine and the reverse-
+// engineering tooling genuinely share one definition (they differ only in how each row shape derives "games
+// played?": a row's UNDEFINED score is treated as played, while a Match always carries a string score).
 
 /** TA began counting RETIREMENTS in the full board at a one-time spring-2025 recompute (retroactive): a board
  *  frozen on/after this date counts RET for the WHOLE history; an earlier board excludes it. Walkovers are never
@@ -170,14 +173,24 @@ const SURFACES: Record<string, EloSurface> = { Hard: "Hard", Clay: "Clay", Grass
 export const RET_ELO_ERA_START = 20250418;
 const isRetirementRow = (r: EloMatchRow): boolean => !!r.score && /\d/.test(r.score) && /\b(RET|DEF|ABD)\b/i.test(r.score);
 
+/** TA's verified inclusion scope, as ONE primitive shared by the reverse-engineering tooling (lib.ts
+ *  `keepForElo`) and this engine (`keepForEloRow`): drop a pure WALKOVER (no games played) and sub-$50K ITF
+ *  (numeric tourney_level < 50). `hasGames` is "were any games played?" — the only walkover discriminator;
+ *  callers decide how to derive it from their row shape (a missing score is play-vs-walkover caller policy). */
+export function keepForEloScope(level: string, hasGames: boolean): boolean {
+  if (!hasGames) return false; // walkover / no games played (W/O, Walkover, empty)
+  const n = /^(\d+)/.exec(level)?.[1];
+  if (n && Number(n) < 50) return false; // sub-$50K ITF
+  return true;
+}
+
 /** Keep a row in the rating replay: drop pure WALKOVERS (no games played — "W/O"/"Walkover"/empty score) and
  *  sub-$50K ITF (numeric tourney_level < 50). Everything contested at tour / Challenger / ITF-$50K+ stays.
  *  A row with no score (hand-built/test) is treated as played. Retirements are kept HERE (era-gated at replay). */
 export function keepForEloRow(r: EloMatchRow): boolean {
-  if (r.score !== undefined && !/\d/.test(r.score)) return false; // walkover / no games played
-  const n = /^(\d+)/.exec(r.level)?.[1];
-  if (n && Number(n) < 50) return false; // sub-$50K ITF
-  return true;
+  // An UNDEFINED score is treated as PLAYED (kept) — hand-built/test rows omit it; a present-but-gameless
+  // score is a walkover. (lib.ts always has a string score, so it has no undefined case.)
+  return keepForEloScope(r.level, r.score === undefined || /\d/.test(r.score));
 }
 
 /** Drop exact-duplicate feed rows (Sackmann's WTA qualifying/Challenger feed re-lists every WTA-125 match
@@ -435,11 +448,12 @@ export interface ComputedRatings {
  *  collapsing every unbeaten run to one value. We must replay in PLAY order: qualifying → round-robin →
  *  R128 → … → F. Verified against TA's own boards (reverse-engineering, docs/yelo-reproduction.md): play
  *  order tightened the board-replay residual measurably. Unknown rounds sort at R16 (mid-draw). */
-const ROUND_RANK: Record<string, number> = {
+// Exported (re-exported from ingest/elo-reverse/lib.ts) so the reverse-engineering tooling shares one rank table.
+export const ROUND_RANK: Record<string, number> = {
   Q1: 1, Q2: 2, Q3: 3, Q4: 4, RR: 5, // qualifying then round-robin group stage (before the knockout)
   R128: 10, R64: 11, R32: 12, R16: 13, QF: 14, SF: 15, BR: 16, F: 17,
 };
-const roundRank = (round: string): number => ROUND_RANK[round] ?? 13;
+export const roundRank = (round: string): number => ROUND_RANK[round] ?? 13;
 
 /**
  * Sort rows into the deterministic replay PLAY order: (tourneyDate, round-within-event, original input

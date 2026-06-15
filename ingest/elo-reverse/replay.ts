@@ -8,7 +8,7 @@
 //   npx tsx ingest/elo-reverse/replay.ts ATP            # baseline (prior params, freeze)
 //   npx tsx ingest/elo-reverse/replay.ts ATP --clean    # exclude recompute boundaries
 //   npx tsx ingest/elo-reverse/replay.ts ATP --grid     # small grid over K numerator/seed
-import { loadBoards, loadMatches, nameIndex, windowMatches, fullKey, dayNum, keepForElo, isRetirement, RET_ERA_START } from "./lib";
+import { loadBoards, loadMatches, nameIndex, fullKey, keepForElo, isRetirement, RET_ERA_START, priorMatchCounter, replayWindow, isRecomputeBoundary, medianUpper } from "./lib";
 
 type Tour = "ATP" | "WTA";
 const tour = (process.argv[2] as Tour) ?? "ATP";
@@ -32,80 +32,38 @@ const inEra = (m: typeof matches[number], curDate: number): boolean => curDate >
 // board player name -> id, per board (cache)
 const boardIds = boards.map((b) => new Map(b.players.map((p) => [keyToId.get(fullKey(p.name)) ?? "", p] as const).filter(([id]) => id)));
 
-// per-id sorted career match dates, for prior-count n via binary search
-const careerDates = new Map<string, number[]>();
-for (const m of matches) {
-  for (const id of [m.winnerId, m.loserId]) {
-    const a = careerDates.get(id) ?? [];
-    a.push(m.date);
-    careerDates.set(id, a);
-  }
-}
-const priorCount = (id: string, before: number): number => {
-  const a = careerDates.get(id);
-  if (!a) return 0;
-  let lo = 0, hi = a.length;
-  while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid] < before) lo = mid + 1; else hi = mid; }
-  return lo;
-};
-
-interface St { ov: number; n: number }
+// per-id sorted career match dates, for prior-count n via binary search (shared lib helper)
+const priorCount = priorMatchCounter(matches);
 
 function evaluate(cfg: Cfg) {
-  // running latest-known board overall per id (carry-forward), updated as we sweep boards forward
-  const latest = new Map<string, number>();
   const absAll: number[] = [];
   const perTransition: { date: number; meanAbs: number; medAbs: number; median: number; n: number; boundary: boolean }[] = [];
 
-  for (let i = 0; i < boards.length; i++) {
-    const prev = i > 0 ? boards[i - 1] : null;
-    const cur = boards[i];
-    if (prev) {
-      const gap = dayNum(cur.lastUpdate) - dayNum(prev.lastUpdate);
-      if (gap <= cfg.maxGap) {
-        const win = windowMatches(matches, prev.lastUpdate, cur.lastUpdate).filter((m) => inEra(m, cur.lastUpdate));
-        const st = new Map<string, St>();
-        const get = (id: string): St => {
-          let s = st.get(id);
-          if (!s) {
-            const ov = latest.get(id) ?? cfg.seed;
-            s = { ov, n: priorCount(id, prev.lastUpdate) };
-            st.set(id, s);
-          }
-          return s;
-        };
-        for (const m of win) {
-          const w = get(m.winnerId), l = get(m.loserId);
-          const e = winP(w.ov, l.ov, cfg.D);
-          w.ov += kOf(w.n, cfg) * (1 - e);
-          l.ov += kOf(l.n, cfg) * (0 - (1 - e));
-          w.n++; l.n++;
-        }
-        // residual on players listed on BOTH prev and cur (idle players: predicted = seeded = prev value)
-        const errs: number[] = [];
-        const idleErrs: number[] = []; // players with NO window match: error = prev - cur (idle drift detector)
-        for (const [id, p] of boardIds[i]) {
-          const predicted = st.get(id)?.ov ?? latest.get(id);
-          if (predicted == null) continue;
-          // only score players we had a prior rating for (on a prior board) — fair test of the update
-          if (!latest.has(id)) continue;
-          const e = predicted - p.overall;
-          errs.push(e);
-          if (!st.has(id)) idleErrs.push(e); // never created state -> played 0 window matches
-        }
-        if (errs.length) {
-          const med = (a: number[]) => a.slice().sort((x, y) => x - y)[a.length >> 1];
-          const abs = errs.map(Math.abs).sort((a, b) => a - b);
-          const meanAbs = abs.reduce((s, x) => s + x, 0) / abs.length;
-          // boundary = a board-wide rescale/recompute: idle players (0 matches) shifted by a big median.
-          const boundary = idleErrs.length >= 5 && Math.abs(med(idleErrs)) > 25;
-          perTransition.push({ date: cur.lastUpdate, meanAbs, medAbs: med(abs), median: med(errs), n: errs.length, boundary });
-          if (!(CLEAN && boundary)) absAll.push(...abs);
-        }
-      }
+  // PARAMETRIC replay: cfg's D/K/seed/maxGap + the RET-era gate (eraGate). The shared windower carries-forward
+  // TA's own board values and applies the window's matches; we score residuals against cur's published values.
+  for (const { i, st, cur, latest } of replayWindow(boards, boardIds, matches, priorCount, {
+    seed: cfg.seed, maxGap: cfg.maxGap, winProb: (a, b) => winP(a, b, cfg.D), kFactor: (n) => kOf(n, cfg), eraGate: inEra,
+  })) {
+    // residual on players listed on BOTH prev and cur (idle players: predicted = seeded = prev value)
+    const errs: number[] = [];
+    const idleErrs: number[] = []; // players with NO window match: error = prev - cur (idle drift detector)
+    for (const [id, p] of boardIds[i]) {
+      const predicted = st.get(id)?.ov ?? latest.get(id);
+      if (predicted == null) continue;
+      // only score players we had a prior rating for (on a prior board) — fair test of the update
+      if (!latest.has(id)) continue;
+      const e = predicted - p.overall;
+      errs.push(e);
+      if (!st.has(id)) idleErrs.push(e); // never created state -> played 0 window matches
     }
-    // update latest-known from THIS board (after scoring it)
-    for (const [id, p] of boardIds[i]) latest.set(id, p.overall);
+    if (errs.length) {
+      const abs = errs.map(Math.abs).sort((a, b) => a - b);
+      const meanAbs = abs.reduce((s, x) => s + x, 0) / abs.length;
+      // boundary = a board-wide rescale/recompute: idle players (0 matches) shifted by a big median.
+      const boundary = isRecomputeBoundary(idleErrs);
+      perTransition.push({ date: cur.lastUpdate, meanAbs, medAbs: medianUpper(abs), median: medianUpper(errs), n: errs.length, boundary });
+      if (!(CLEAN && boundary)) absAll.push(...abs);
+    }
   }
   absAll.sort((a, b) => a - b);
   const meanAbs = absAll.reduce((s, x) => s + x, 0) / absAll.length;

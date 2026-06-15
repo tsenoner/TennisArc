@@ -7,7 +7,8 @@
 //   npx tsx ingest/points/engine.ts ATP 2015        # one season, top-30 table
 //   npx tsx ingest/points/engine.ts --emit          # write points-data.json for the dashboard
 //   npx tsx ingest/points/engine.ts --check         # known-answer gate (ATP 2019/2023)
-import { loadMatches, roundRank, type Match } from "../elo-reverse/lib";
+import { loadMatches, type Match } from "../elo-reverse/lib";
+import { norm as normBase, sig, firstMainRound, mainDrawExit, bestN as bestNShared, type BestNCfg } from "./shared";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -27,18 +28,27 @@ function seasonOf(m: Match): number {
   const mPrefix = /^(\d{4})-/.exec(m.tourneyId);
   return mPrefix ? +mPrefix[1] : Math.floor(m.date / 10000);
 }
+
+// Per-season `loadMatches(tour, year-1)` re-reads+re-parses the overlapping CSV set for every season (~17×/tour
+// in --emit). Parse the full corpus ONCE per tour at the tour's minimum fromYear, then derive each season by
+// `seasonOf` filter — verified row-for-row identical to the per-season load (ordered + as a set, all seasons).
+const TOUR_FROM_YEAR = { ATP: 2008, WTA: 2014 } as const; // (min emitted season − 1): ATP 2009→2008, WTA 2015→2014
+const corpusCache = new Map<"ATP" | "WTA", Match[]>();
+function seasonMatches(tour: "ATP" | "WTA", year: number): Match[] {
+  let corpus = corpusCache.get(tour);
+  if (!corpus) { corpus = loadMatches(tour, TOUR_FROM_YEAR[tour]); corpusCache.set(tour, corpus); }
+  return corpus.filter((m) => seasonOf(m) === year);
+}
 const TL = jsonBlocks("ingest/points/TIER-LISTS.md");
 const ATP500_BY_YEAR: Record<string, string[]> = TL[0];
 const WTA_TIERS_BY_YEAR: Record<string, any> = TL[1];
 
 const GT = JSON.parse(readFileSync(resolve(process.cwd(), "ingest/points/ground-truth.json"), "utf8"));
 
-// ---------------- helpers ----------------
+// ---------------- helpers (mechanics shared with validate.ts via ./shared) ----------------
 type RoundMap = Record<string, number>;
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+\d+$/, "").trim(); // strip trailing " 1"/" 2"
-const isQ = (r: string) => /^Q[1-4]$/.test(r);
-/** Order-insensitive name signature for the ground-truth↔Sackmann join (handles "Wang Qiang"↔"Qiang Wang"). */
-const sig = (name: string) => name.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim().split(/\s+/).filter(Boolean).sort().join(" ");
+const norm = (s: string) => normBase(s, true); // engine strips a trailing " 1"/" 2" from spec-table keys
+// sig imported from ./shared (used in the ground-truth join).
 
 /** Year range a spec era-key covers, parsed from its embedded 4-digit years. "from_2023" → open-ended;
  *  keys with no year → all years. Draw tokens (96D, 48_56D) carry no 4-digit years so are ignored here. */
@@ -191,9 +201,7 @@ function eventsForPlayer(tour: "ATP" | "WTA", year: number, all: Match[]): { eve
       (byP.get(m.loserId) ?? byP.set(m.loserId, { won: [], lost: [] }).get(m.loserId)!).lost.push(m);
     }
     // BYE rule: a player who reaches R2 via a bye then loses scores as a first-round loser.
-    const mainRounds = ms.filter((m) => !isQ(m.round)).map((m) => m.round);
-    const firstRoundLabel = mainRounds.sort((a, b) => roundRank(a) - roundRank(b))[0];
-    const firstRank = firstRoundLabel ? roundRank(firstRoundLabel) : 0;
+    const { firstRoundLabel, firstRank } = firstMainRound(ms);
     for (const [pid, rec] of byP) {
       let pts = 0;
       if ((cls.table as any).OLY) {
@@ -203,17 +211,10 @@ function eventsForPlayer(tour: "ATP" | "WTA", year: number, all: Match[]): { eve
       } else {
         const tbl = resolveTable(cls.table, year, ms[0].drawSize);
         if (!tbl) continue;
-        const mainLost = rec.lost.filter((m) => !isQ(m.round));
-        const mainWon = rec.won.filter((m) => !isQ(m.round));
-        if (mainLost.length === 0 && mainWon.length === 0) continue; // qual-only
-        let exit: string;
-        if (mainLost.length === 0) exit = "W";
-        else {
-          const lossRound = mainLost.sort((a, b) => roundRank(b.round) - roundRank(a.round))[0].round;
-          exit = mainWon.length === 0 && roundRank(lossRound) > firstRank ? firstRoundLabel : lossRound;
-        }
-        pts = tbl[exit] ?? 0;
-        if (rec.won.some((m) => isQ(m.round)) && tbl.Q) pts += tbl.Q; // qualifying bonus
+        const ex = mainDrawExit(rec, firstRoundLabel, firstRank);
+        if (!ex) continue; // qual-only
+        pts = tbl[ex.exit] ?? 0;
+        if (ex.wonQual && tbl.Q) pts += tbl.Q; // qualifying bonus
       }
       (events.get(pid) ?? events.set(pid, []).get(pid)!).push({ tier: cls.tier, pts });
       (evName.get(pid) ?? evName.set(pid, []).get(pid)!).push({ name: ms[0].tourneyName, tier: cls.tier, pts });
@@ -222,20 +223,14 @@ function eventsForPlayer(tour: "ATP" | "WTA", year: number, all: Match[]): { eve
   return { events, idName, evName };
 }
 
-// ---------------- best-N cap ----------------
-function bestNCfg(tour: "ATP" | "WTA", year: number): { otherSlots: number; mandTake: number | null } {
+// ---------------- best-N cap (sum via shared bestN; engine supplies the era-resolved config) ----------------
+function bestNCfg(tour: "ATP" | "WTA", year: number): BestNCfg {
   if (tour === "ATP") return { otherSlots: year >= 2024 && year <= 2025 ? 7 : 6, mandTake: null };
   if (year >= 2024) return { otherSlots: 7, mandTake: 7 }; // 2024-2025: best 7 of the 1000-mandatory pool + best 7 others
   return { otherSlots: 8, mandTake: null }; // 2015-2023: 4 PM + best 8 others
 }
 function bestN(tour: "ATP" | "WTA", year: number, events: PE[]): number {
-  const cfg = bestNCfg(tour, year);
-  const slams = events.filter((e) => e.tier === "SLAM").reduce((s, e) => s + e.pts, 0);
-  const finals = events.filter((e) => e.tier === "FINALS").reduce((s, e) => s + e.pts, 0);
-  const mandEv = events.filter((e) => e.tier === "MAND_M").sort((a, b) => b.pts - a.pts);
-  const mand = cfg.mandTake != null ? mandEv.slice(0, cfg.mandTake).reduce((s, e) => s + e.pts, 0) : mandEv.reduce((s, e) => s + e.pts, 0);
-  const others = events.filter((e) => e.tier === "OTHER").sort((a, b) => b.pts - a.pts).slice(0, cfg.otherSlots).reduce((s, e) => s + e.pts, 0);
-  return slams + mand + others + finals;
+  return bestNShared(events, bestNCfg(tour, year));
 }
 
 // ---------------- compute a season ----------------
@@ -255,7 +250,7 @@ function seasonNote(tour: "ATP" | "WTA", year: number): string {
 export function computeSeason(tour: "ATP" | "WTA", year: number): { rows: Row[]; era: string; note: string } | null {
   const gt = GT[`${tour}_${year}`] as { rank: number; player: string; points: number }[] | undefined;
   if (!gt) return null;
-  const all = loadMatches(tour, year - 1).filter((m) => seasonOf(m) === year);
+  const all = seasonMatches(tour, year);
   const { events, idName } = eventsForPlayer(tour, year, all);
   const sigToId = new Map<string, string>();
   for (const [id, nm] of idName) sigToId.set(sig(nm), id);
@@ -304,7 +299,7 @@ if (arg[0] === "--emit") {
   const tour = (arg[0] as "ATP" | "WTA") ?? "ATP";
   const year = Number(arg[1] ?? 2023);
   const want = sig(arg.find((a) => a.startsWith("--p="))!.slice(4));
-  const all = loadMatches(tour, year - 1).filter((m) => seasonOf(m) === year);
+  const all = seasonMatches(tour, year);
   const { evName, idName } = eventsForPlayer(tour, year, all);
   for (const [id, ev] of evName) {
     if (sig(idName.get(id) ?? "") !== want) continue;

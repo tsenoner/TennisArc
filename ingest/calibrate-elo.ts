@@ -20,6 +20,7 @@ import {
 import { seedConfig } from "./elo-config";
 import { fullKey } from "./names";
 import { fetchElo } from "./elo";
+import { median } from "./elo-reverse/lib";
 
 const CACHE = resolve(process.cwd(), "ingest/.cache/elo");
 mkdirSync(CACHE, { recursive: true });
@@ -56,12 +57,7 @@ export async function loadSorted(tour: Tour, maxYear: number): Promise<EloMatchR
   return sortEloRows(dedupeEloRows(rows.filter(keepForEloRow)));
 }
 
-const median = (a: number[]): number => {
-  const s = [...a].sort((x, y) => x - y);
-  if (!s.length) return NaN;
-  const mid = s.length >> 1;
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-};
+// `median` (even length = average of the two middle elements) is shared from elo-reverse/lib.
 const meanAbs = (a: number[]): number => (a.length ? a.reduce((p, c) => p + Math.abs(c), 0) / a.length : NaN);
 /** The single largest |deviation| in a residual set, with the player it belongs to (the user's metric). */
 const maxAbsDev = (recs: { name: string; err: number }[]): { name: string; err: number } =>

@@ -3,8 +3,9 @@
 // of ATP-2019 top-30). Residual vs year-end RANKING is the 52-week rolling window + rank-scaled team events
 // (United Cup/ATP Cup) — both irreducible from calendar-year match rounds. Era-correct tables in
 // POINTS-TABLES.md; CSV-verified tier lists in TIER-LISTS.md.   npx tsx ingest/points/validate.ts ATP 2023
-import { loadMatches, roundRank, type Match } from "../elo-reverse/lib";
+import { loadMatches, type Match } from "../elo-reverse/lib";
 import { fullKey } from "../names";
+import { norm, firstMainRound, mainDrawExit, bestN as bestNShared } from "./shared";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -15,8 +16,8 @@ const SHOW = Number(process.argv[4] ?? 30);
 const GT = JSON.parse(readFileSync(resolve(process.cwd(), "ingest/points/ground-truth.json"), "utf8"));
 
 const all = loadMatches(tour, year - 1).filter((m) => Math.floor(m.date / 10000) === year);
-const isQ = (r: string) => /^Q[1-4]$/.test(r);
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+// norm (no trailing-num strip) shared via ./shared; the LOGIC below is shared, the TABLES stay hardcoded
+// here as an independent transcription cross-check of the spec-loaded engine tables.
 
 // ---------- POINTS TABLES (Era A: ATP 2009-2023, WTA 2014-2023) ----------
 type Tbl = Record<string, number>;
@@ -113,11 +114,8 @@ for (const [tid, ms] of byT) {
     (byP.get(m.loserId) ?? byP.set(m.loserId, { won: [], lost: [] }).get(m.loserId)!).lost.push(m);
   }
   // BYE RULE (ATP/WTA rulebook): a player who reaches the 2nd round via a BYE and then loses is scored as a
-  // FIRST-ROUND loser. Detect the draw's first main round (shallowest non-qual round present); a player who
-  // never played it (entered above it) and won 0 main matches = bye-then-lose -> first-round value.
-  const mainRounds = ms.filter((m) => !isQ(m.round)).map((m) => m.round);
-  const firstRoundLabel = mainRounds.sort((a, b) => roundRank(a) - roundRank(b))[0];
-  const firstRank = firstRoundLabel ? roundRank(firstRoundLabel) : 0;
+  // FIRST-ROUND loser — handled inside the shared firstMainRound + mainDrawExit mechanics.
+  const { firstRoundLabel, firstRank } = firstMainRound(ms);
   for (const [pid, rec] of byP) {
     let pts = 0;
     if (cls.tier === "FINALS") {
@@ -129,38 +127,22 @@ for (const [tid, ms] of byT) {
       if (tour === "ATP") pts = 200 * rrWins + (sfWin ? 400 : 0) + (fWin ? 500 : 0);
       else pts = 125 * rrPlayed + 125 * rrWins + (sfWin ? 330 : 0) + (fWin ? 420 : 0);
     } else if (cls.tbl) {
-      const mainLost = rec.lost.filter((m) => !isQ(m.round));
-      const mainWon = rec.won.filter((m) => !isQ(m.round));
-      let exit: string;
-      if (mainLost.length === 0 && mainWon.length === 0) continue; // qual-only — 0 for top players
-      else if (mainLost.length === 0) exit = "W";
-      else {
-        const lossRound = mainLost.sort((a, b) => roundRank(b.round) - roundRank(a.round))[0].round;
-        // bye-then-lose: 0 main wins AND entered above the first round -> first-round-loss value
-        exit = mainWon.length === 0 && roundRank(lossRound) > firstRank ? firstRoundLabel : lossRound;
-      }
-      pts = TBL[cls.tbl]?.[exit] ?? 0;
+      const ex = mainDrawExit(rec, firstRoundLabel, firstRank);
+      if (!ex) continue; // qual-only — 0 for top players
+      pts = TBL[cls.tbl]?.[ex.exit] ?? 0;
       // qualifying bonus: a player who won >=1 qual match (reached MD via qualifying) earns the Q column on top
-      if (tour === "ATP" && rec.won.some((m) => isQ(m.round)) && QBONUS[cls.tbl]) pts += QBONUS[cls.tbl];
+      if (tour === "ATP" && ex.wonQual && QBONUS[cls.tbl]) pts += QBONUS[cls.tbl];
     } else continue; // ZERO/EXCLUDE/Challenger/ITF — skip (0 or not in top-N sum)
     (playerEvents.get(pid) ?? playerEvents.set(pid, []).get(pid)!).push({ tourneyId: tid, name: ms[0].tourneyName, tier: cls.tier, pts });
   }
 }
 
-// ---------- best-N ----------
+// ---------- best-N (shared cap; Era-A config supplied here) ----------
+// best-N: 4 slams + 8 mandatory Masters + best 6 others (ATP) / 4 PM + best 8 (WTA), + Finals as a bonus.
+// (Tested "Finals occupies a counting slot": it makes Medvedev 2019 exact but breaks Tsitsipas/Berrettini
+// — net 12->10 exact — so that's a rolling-window coincidence, not a rule. best-6 + Finals-bonus is right.)
 function bestN(events: PE[]): number {
-  const slams = events.filter((e) => e.tier === "SLAM");
-  const mand = events.filter((e) => e.tier === "MAND_M");
-  const finals = events.filter((e) => e.tier === "FINALS");
-  const others = events.filter((e) => e.tier === "OTHER").sort((a, b) => b.pts - a.pts);
-  // best-N: 4 slams + 8 mandatory Masters + best 6 others (ATP) / 4 PM + best 8 (WTA), + Finals as a bonus.
-  // (Tested "Finals occupies a counting slot": it makes Medvedev 2019 exact but breaks Tsitsipas/Berrettini
-  // — net 12->10 exact — so that's a rolling-window coincidence, not a rule. best-6 + Finals-bonus is right.)
-  const otherSlots = tour === "ATP" ? 6 : 8;
-  const forced = slams.reduce((s, e) => s + e.pts, 0) + mand.reduce((s, e) => s + e.pts, 0);
-  const topOthers = others.slice(0, otherSlots).reduce((s, e) => s + e.pts, 0);
-  const finalsBonus = finals.reduce((s, e) => s + e.pts, 0);
-  return forced + topOthers + finalsBonus;
+  return bestNShared(events, { otherSlots: tour === "ATP" ? 6 : 8, mandTake: null });
 }
 
 // ---------- optional per-player event dump ----------

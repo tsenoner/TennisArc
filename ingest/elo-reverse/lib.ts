@@ -7,10 +7,12 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fullKey } from "../names";
-import { winProbability, kFactor } from "../historical-elo";
+import { winProbability, kFactor, dayNumber, roundRank, keepForEloScope } from "../historical-elo";
 import type { Board, BoardPlayer } from "./parse-boards";
 
-export { winProbability, kFactor, fullKey };
+export { winProbability, kFactor, fullKey, roundRank };
+// Re-export the engine's day-number helper under lib's public name (consumers import `dayNum` unchanged).
+export { dayNumber as dayNum };
 export type { Board, BoardPlayer };
 
 const CACHE = resolve(process.cwd(), "ingest/.cache/elo");
@@ -44,10 +46,9 @@ export interface Match {
  *  RET_ERA_START) — that gate lives in the consumers (yelo-fit / replay), keyed by board/window date, because
  *  TA's spring-2025 recompute was retroactive. The discriminator here is just "were any games played?". */
 export function keepForElo(m: Match): boolean {
-  if (!/\d/.test(m.score)) return false; // walkover / no games played (W/O, Walkover, empty): not counted
-  const n = /^(\d+)/.exec(m.level)?.[1];
-  if (n && Number(n) < 50) return false; // sub-$50K ITF (WTA) — not counted
-  return true;
+  // Shared scope primitive (with historical-elo.ts `keepForEloRow`); a Match always has a string score, so
+  // "games played?" is just /\d/ — no undefined case (unlike the row form, where a missing score = played).
+  return keepForEloScope(m.level, /\d/.test(m.score));
 }
 
 /** TA began counting RETIREMENTS in season yElo (and full Elo) at a one-time RECOMPUTE in spring 2025: every
@@ -57,35 +58,50 @@ export function keepForElo(m: Match): boolean {
  *  (e.g. ATP 20241104 494/507 RET-off vs 201 on; ATP 20260223 265/265 RET-on vs 188 off). So RET inclusion is
  *  decided per board by CAPTURE date, NOT match date (the recompute was retroactive). Exact cutover unknown —
  *  no Wayback capture exists between 2025-03-17 and 2025-05-26 — so we gate at a midpoint in that window. */
-export const RET_ERA_START = 20250418;
+export { RET_ELO_ERA_START as RET_ERA_START } from "../historical-elo";
 export const isRetirement = (m: Match): boolean => /\d/.test(m.score) && /\b(RET|DEF|ABD)\b/i.test(m.score);
 
 const SURF: Record<string, "Hard" | "Clay" | "Grass"> = { Hard: "Hard", Clay: "Clay", Grass: "Grass" };
 
-/** Chronological rank of a round WITHIN a tournament. Sackmann lists matches FINAL-FIRST (match_num F is
- *  the highest, R32 the lowest), so naive CSV order processes the final before its early rounds — which,
- *  in a from-scratch replay, lets a champion "beat" opponents still at the seed. We must process in PLAY
- *  order: qualifying → round-robin → R128 → … → F. Used as the primary intra-date sort key. */
-const ROUND_RANK: Record<string, number> = {
-  Q1: 1, Q2: 2, Q3: 3, Q4: 4, // qualifying (played before the main draw)
-  RR: 5, // round-robin group stage (Finals/United Cup) — before the knockout
-  R128: 10, R64: 11, R32: 12, R16: 13, QF: 14, SF: 15, BR: 16, F: 17,
-};
-export const roundRank = (round: string): number => ROUND_RANK[round] ?? 13;
+// `roundRank` (chronological rank of a round WITHIN a tournament — the primary intra-date PLAY-order sort
+// key) is re-exported above from historical-elo.ts, the single source shared with the production engine.
 
 /** YYYYMMDD + n days → YYYYMMDD (UTC). */
-function addDays(date: number, n: number): number {
+export function addDays(date: number, n: number): number {
   const y = Math.floor(date / 10000), m = (Math.floor(date / 100) % 100) - 1, d = date % 100;
   const dt = new Date(Date.UTC(y, m, d) + n * 86_400_000);
   return dt.getUTCFullYear() * 10000 + (dt.getUTCMonth() + 1) * 100 + dt.getUTCDate();
 }
 
+/** Round to one decimal — TA publishes board ratings to 0.1, so reproduction stats match at that precision. */
+export const round1 = (x: number): number => Math.round(x * 10) / 10;
+
+// Two median variants used across the Elo tooling (they DIVERGE on even-length input, so both exist):
+//  • `median`      — even length averages the two middle elements (calibrate-elo / elo-burnin / fixture).
+//  • `medianUpper` — even length takes the UPPER-middle element, arr[len>>1] (replay / yelo-fit own copies).
+// Both NaN on empty. (replay.ts/yelo-fit.ts keep their own inline `med` — they're owned by other agents.)
+/** Median; even length = average of the two middle elements. NaN on empty. */
+export const median = (a: number[]): number => {
+  const s = [...a].sort((x, y) => x - y);
+  if (!s.length) return NaN;
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
+/** Median; even length = the UPPER-middle element (arr[len>>1] after sort). NaN on empty. */
+export const medianUpper = (a: number[]): number => {
+  const s = [...a].sort((x, y) => x - y);
+  return s.length ? s[s.length >> 1] : NaN;
+};
+
 // Sackmann dates EVERY match in an event with the event's START (tourney_date), but TA's weekly board only
 // counts a match once it has been PLAYED. To attribute matches to the right board we estimate each match's
 // actual play date = tourney_date + a round-offset that depends on the event's calendar span. Slams run 13
 // days; the 96-draw "1.5-week" Masters ~11; everything else is a 1-week (Mon→Sun) event.
-const players2 = (round: string): number =>
-  ({ R128: 128, R64: 64, R32: 32, R16: 16, QF: 8, SF: 4, F: 2, BR: 2 } as Record<string, number>)[round] ?? 0;
+// `roundsFromFinal` = how many rounds back from the final a round sits (F=1 … R128=7; BR=1 like F). An
+// unknown round (not a main-draw knockout) returns undefined so playDate falls back to the full span. (This
+// is the round depth playDate needs directly — formerly recovered as Math.round(log2(player-count)).)
+const roundsFromFinal = (round: string): number | undefined =>
+  ({ F: 1, BR: 1, SF: 2, QF: 3, R16: 4, R32: 5, R64: 6, R128: 7 } as Record<string, number>)[round];
 
 /** Day-span from the event start (day 0) to the FINAL, by event type. */
 function eventSpan(level: string, draw: number): number {
@@ -104,11 +120,11 @@ export function playDate(date: number, drawSize: number, level: string, round: s
   const span = eventSpan(level, drawSize);
   if (level === "F") return addDays(date, ({ RR: 4, SF: 6, F: 7, BR: 7 } as Record<string, number>)[round] ?? span);
   if (level === "D" || round === "RR") return addDays(date, Math.max(0, span - 1));
-  const p = players2(round);
-  if (!p) return addDays(date, span);
+  const depth = roundsFromFinal(round);
+  if (depth === undefined) return addDays(date, span);
   // round number from the first main-draw round (depends on draw size); spread evenly start→final.
   const total = Math.max(1, Math.round(Math.log2(Math.max(2, drawSize)))); // # main-draw rounds
-  const rn = total - Math.round(Math.log2(p)) + 1; // 1 = first round … total = final
+  const rn = total - depth + 1; // 1 = first round … total = final
   const off = total <= 1 ? span : Math.round(((rn - 1) / (total - 1)) * span);
   return addDays(date, Math.min(off, span));
 }
@@ -230,6 +246,89 @@ export function byName(board: Board): Map<string, BoardPlayer> {
   return new Map(board.players.map((p) => [p.name, p]));
 }
 
-/** YYYYMMDD -> integer day number (for gap/age arithmetic). */
-export const dayNum = (d: number): number =>
-  Math.round(Date.UTC(Math.floor(d / 10000), (Math.floor(d / 100) % 100) - 1, d % 100) / 86_400_000);
+// ---- shared board-replay window machinery (scatter.ts / dashboard-data.ts / replay.ts) ----
+// The same per-board-pair replay was copy-pasted in three callers: build a per-id sorted career-date index,
+// binary-search the prior-match count, lazily carry-forward each player's state, run the window's Elo update,
+// and (for the timeline) flag "recompute boundary" transitions. The mechanics below are byte-identical across
+// callers; only the OUTPUT shape (scatter pts / dashboard pts / replay residuals) diverges, so each caller
+// keeps its own post-window loop and consumes these primitives.
+
+/** Per-id career match-date index + a binary-search prior-count closure. `prior(id, before)` = how many of
+ *  that id's matches started strictly BEFORE `before` (the K-factor's experience count `n`). Built from the
+ *  SAME `keepForElo`-filtered match set every caller passes, so the closure is identical across them. */
+export function priorMatchCounter(matches: Match[]): (id: string, before: number) => number {
+  const cd = new Map<string, number[]>();
+  for (const m of matches) for (const id of [m.winnerId, m.loserId]) { const a = cd.get(id) ?? []; a.push(m.date); cd.set(id, a); }
+  return (id: string, before: number) => {
+    const a = cd.get(id);
+    if (!a) return 0;
+    let lo = 0, hi = a.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (a[mid] < before) lo = mid + 1; else hi = mid; }
+    return lo;
+  };
+}
+
+/** "Recompute boundary" heuristic, shared by all three callers: a board-wide rescale shows up as the IDLE
+ *  players (those with a prior rating but NO window match) shifting EN MASSE — flagged when there are >=5 of
+ *  them and their UPPER-median delta exceeds 25. `idleDeltas` = (predicted/carried − published) per idle player. */
+export const isRecomputeBoundary = (idleDeltas: number[]): boolean =>
+  idleDeltas.length >= 5 && Math.abs(idleDeltas.slice().sort((a, b) => a - b)[idleDeltas.length >> 1]) > 25;
+
+/** Running per-id rating state during a window replay: `ov` overall Elo, `n` matches-so-far (drives K). */
+export interface ReplayState { ov: number; n: number }
+/** One yielded window: the board pair, the day-gap, the per-id state AFTER the window's matches were applied
+ *  (idle players are absent — their carry-forward value lives in `latest`), and a per-id window match count. */
+export interface ReplayWindowYield {
+  i: number; prev: Board; cur: Board; gap: number;
+  st: Map<string, ReplayState>; mcount: Map<string, number>; latest: Map<string, number>;
+}
+export interface ReplayWindowOpts {
+  seed: number; // entrant seed for a never-seen player
+  maxGap: number; // skip a board pair whose day-gap exceeds this (stale/missing intermediate captures)
+  winProb: (a: number, b: number) => number; // P(A beats B) given the two overall Elos
+  kFactor: (n: number) => number; // K-factor from a player's prior match count
+  eraGate?: (m: Match, curDate: number) => boolean; // optional per-window inclusion gate (replay's RET era)
+}
+
+/** Sweep consecutive board pairs, replaying each window's matches forward from TA's own carried-forward board
+ *  values, and YIELD the post-window state for every pair within `maxGap`. The caller's loop body runs between
+ *  yields, BEFORE this advances `latest` to the current board — preserving the original "score, then carry
+ *  forward" ordering. `boardIds[i]` is board i's players keyed by Sackmann id (built once by the caller). */
+export function* replayWindow(
+  boards: Board[],
+  boardIds: Map<string, BoardPlayer>[],
+  matches: Match[],
+  prior: (id: string, before: number) => number,
+  opts: ReplayWindowOpts,
+): Generator<ReplayWindowYield> {
+  const { seed, maxGap, winProb, kFactor: kF, eraGate } = opts;
+  const latest = new Map<string, number>(); // latest-known published overall per id (carry-forward)
+  for (let i = 0; i < boards.length; i++) {
+    const prev = i > 0 ? boards[i - 1] : null, cur = boards[i];
+    if (prev) {
+      const gap = dayNumber(cur.lastUpdate) - dayNumber(prev.lastUpdate);
+      if (gap <= maxGap) {
+        let win = windowMatches(matches, prev.lastUpdate, cur.lastUpdate);
+        if (eraGate) win = win.filter((m) => eraGate(m, cur.lastUpdate));
+        const st = new Map<string, ReplayState>();
+        const mcount = new Map<string, number>();
+        const get = (id: string): ReplayState => {
+          let s = st.get(id);
+          if (!s) { s = { ov: latest.get(id) ?? seed, n: prior(id, prev.lastUpdate) }; st.set(id, s); }
+          return s;
+        };
+        for (const m of win) {
+          const w = get(m.winnerId), l = get(m.loserId);
+          const e = winProb(w.ov, l.ov);
+          w.ov += kF(w.n) * (1 - e); l.ov += kF(l.n) * (0 - (1 - e)); w.n++; l.n++;
+          mcount.set(m.winnerId, (mcount.get(m.winnerId) ?? 0) + 1); mcount.set(m.loserId, (mcount.get(m.loserId) ?? 0) + 1);
+        }
+        yield { i, prev, cur, gap, st, mcount, latest };
+      }
+    }
+    for (const [id, p] of boardIds[i]) latest.set(id, p.overall);
+  }
+}
+
+// `dayNum` (YYYYMMDD -> integer UTC day number, for gap/age arithmetic) is re-exported above as the engine's
+// `dayNumber` — one shared definition with the production engine.

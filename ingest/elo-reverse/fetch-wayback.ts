@@ -10,8 +10,9 @@
 // retry w/ backoff). Network → must run with the sandbox OFF.
 //   npx tsx ingest/elo-reverse/fetch-wayback.ts            # fetch all four reports
 //   npx tsx ingest/elo-reverse/fetch-wayback.ts atp_season_yelo_ratings   # one report only
-import { mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { cdxTimestamps, fetchWaybackCapture, pool } from "./wayback";
 
 const OUT = resolve(process.cwd(), "data/wayback/raw-full");
 const REPORTS = [
@@ -21,51 +22,34 @@ const REPORTS = [
   "wta_season_yelo_ratings",
 ] as const;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 /** Distinct-content capture timestamps for one report, newest-content-first dedup by digest. */
-async function cdxList(slug: string): Promise<string[]> {
+function cdxList(slug: string): Promise<string[]> {
   const url =
     `http://web.archive.org/cdx/search/cdx?url=tennisabstract.com/reports/${slug}.html` +
     `&output=text&fl=timestamp,digest&filter=statuscode:200&collapse=digest`;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const txt = (await (await fetch(url)).text()).trim();
-      if (!txt) return [];
-      return txt.split(/\r?\n/).map((l) => l.split(" ")[0]).filter((t) => /^\d{14}$/.test(t));
-    } catch {
-      await sleep(1000 * (attempt + 1));
-    }
-  }
-  throw new Error(`CDX failed for ${slug}`);
+  // fl=timestamp,digest → keep field 0; drop non-14-digit lines; 5 attempts (4 retries) w/ 1s*n
+  // backoff on every failure (incl. the last) before throwing `CDX failed`.
+  return cdxTimestamps(url, {
+    retries: 4,
+    backoffMs: 1000,
+    backoffOnExhaust: true,
+    mapLine: (l) => l.split(" ")[0],
+    keep: (t) => /^\d{14}$/.test(t),
+    onExhausted: () => { throw new Error(`CDX failed for ${slug}`); },
+  });
 }
 
-async function fetchCapture(slug: string, ts: string): Promise<"saved" | "skip" | "fail"> {
-  const out = resolve(OUT, `${slug}_${ts}.html`);
-  if (existsSync(out) && /last update/i.test(readFileSync(out, "utf8"))) return "skip";
-  const url = `https://web.archive.org/web/${ts}/https://tennisabstract.com/reports/${slug}.html`;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      const res = await fetch(url, { headers: { "User-Agent": "TennisArc-elo-research/1.0" } });
-      if (!res.ok) { await sleep(700 * (attempt + 1)); continue; }
-      const html = await res.text();
-      if (/last update/i.test(html)) { writeFileSync(out, html); return "saved"; }
-      return "fail"; // 200 but no board (rare placeholder)
-    } catch {
-      await sleep(900 * (attempt + 1));
-    }
-  }
-  return "fail";
-}
-
-/** Run `tasks` with bounded concurrency. */
-async function pool<T>(items: T[], limit: number, fn: (x: T, i: number) => Promise<void>): Promise<void> {
-  let i = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (i < items.length) { const idx = i++; await fn(items[idx], idx); }
-    }),
-  );
+function fetchCapture(slug: string, ts: string): Promise<"saved" | "skip" | "fail"> {
+  // 4 attempts (3 retries); UA header; honour res.ok (700ms*n backoff on bad status, even last attempt);
+  // 900ms*n backoff on every thrown error (incl. the last); {slug}_{14-digit-ts}.html on disk.
+  return fetchWaybackCapture(slug, ts, resolve(OUT, `${slug}_${ts}.html`), {
+    headers: { "User-Agent": "TennisArc-elo-research/1.0" },
+    retries: 3,
+    checkOk: true,
+    okBackoffMs: 700,
+    errBackoffMs: 900,
+    errBackoffOnExhaust: true,
+  });
 }
 
 async function main(): Promise<void> {

@@ -4,6 +4,7 @@ import { computeRatingsAsOfSorted } from "./historical-elo";
 import { loadSorted } from "./calibrate-elo";
 import { ATP_ELO_CONFIG, WTA_ELO_CONFIG } from "./elo-config";
 import { fullKey } from "./names";
+import { median } from "./elo-reverse/lib"; // even length = average of the two middle elements
 import ref from "./fixtures/ta-elo-reference.json";
 
 // Regression guard: re-deriving Elo to "today" must still reproduce the pinned live Tennis Abstract
@@ -25,12 +26,8 @@ const BANDS: Record<Tour, { overall: number; hard: number; clay: number; grass: 
   WTA: { overall: 20, hard: 35, clay: 35, grass: 70, minJoin: 16 },
 };
 
-const medianAbs = (a: number[]): number => {
-  const s = a.map(Math.abs).sort((x, y) => x - y);
-  if (!s.length) return NaN;
-  const mid = s.length >> 1;
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-};
+// Median of the absolute values; `median` (shared from elo-reverse/lib) averages the two middles on even length.
+const medianAbs = (a: number[]): number => median(a.map(Math.abs));
 
 const run = process.env.ELO_FIXTURE === "1" ? describe : describe.skip;
 
