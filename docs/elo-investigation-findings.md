@@ -18,6 +18,74 @@ chronic/veteran cases (TA's private per-player accounting), not a generalizable 
 Investigation dates: 2026-06-14 (initial) + **2026-06-15 (dock re-instated, history → 1968, max-deviation
 reporting, Wayback formalized)**. "Today" numbers measured against the live TA board as-of 2026-06-14.
 
+> **2026-06-15 — §0 below SUPERSEDES parts of §2/§5 via a stronger method.** The from-scratch
+> reconstruction (§1–§11) approximated TA's board from Sackmann CSVs over deep history. A second,
+> independent attack — replaying TA's *own published monthly boards* forward one window at a time
+> (`.scratch/elo-reverse/`, full writeup `.scratch/elo-reverse/FINDINGS.md`) — reproduces the board to a
+> few Elo per month, **byte-exact in clean windows**, and pins several parameters the reconstruction could
+> only guess. Where §0 and the older sections conflict, §0 is the measured truth.
+
+---
+
+## 0. Board-to-board reverse-engineering (2026-06-15) — the strongest evidence
+
+**Method.** Each archived TA board (Wayback, `.scratch/wayback/all`; 77 ATP + 88 WTA, 2016–2026, depth
+106–543) is TA's exact published state on its "Last update" date. Seed an engine from board(T), replay that
+window's Sackmann matches, compare to board(T+1). No burn-in, no seed-guessing for existing players — board(T)
+IS the truth — so each mechanism is isolated directly. Validated by a 6-finder × 6-adversarial-verifier
+dynamic workflow.
+
+**Result (full rule: E·D=400 + K=250/(n+5)^0.4 + idle-freeze + the corrected inclusion scope below, excluding
+the mid-2018 recompute boundary): whole-span per-transition median |err| = median-of-medians 3.0 (ATP) /
+1.4 (WTA)** — ATP 11/62 transitions ≤1 Elo, WTA **24/65 ≤1 (essentially exact), 41/65 ≤2**. **Many windows are
+BYTE-EXACT** (median |err| 0.00; one quiet window froze 441/444 players to within 0.1). Far tighter than the
+from-scratch meanAbs 11/7 (which was vs *today's* board only). Run `npx tsx .scratch/elo-reverse/replay.ts
+{ATP|WTA} --clean`.
+
+**Confirmed directly (each adversarially re-derived):**
+- `E = 1/(1+10^((rB−rA)/400))`, **D = 400** (weakly identified — flat RMSE 380–450, point ~405/430 — but
+  400 inside every CI; form confirmed, base is a convention absorbed into D).
+- **K = 250/(n+5)^0.4**, n = prior match count, no cap, ONE law both tours (win-side spot-checks match). A
+  direct implied-K read (Δelo/(S−E) on single-window matches) suggested the numerator was ~9–15% low (~272);
+  but testing num∈{272,290,312} in the full board replay made reproduction MONOTONICALLY WORSE and byte-exact
+  windows are MAXIMISED at 250 — so that implied-K excess is a single-window leakage artifact (a 2nd match's
+  partial effect + opponent drift inflate Δelo). **250 stands.**
+- **Surface display = EXACTLY 0.5·overall + 0.5·surface-raw** — free OLS a=0.5000, b=0.5000, c≈0, R²=1.0000
+  over ~75k obs. Surface raws are surface-separated; overall counts all surfaces.
+- **Idle = FREEZE** between adjustments (median Δ=0, incl. the 175-day COVID gap: 72 idle players → median 0).
+- **New-entrant seed ≈ low 1200s, a SINGLE value per tour, NO level/qualifying split**: ATP ~1155, WTA ~1200.
+  ⇒ the §4 seeds **1550/1170 (ATP) & 1400/1090 (WTA) are burn-in calibration artifacts, not TA's seed.**
+- **Inclusion** (sharp, single-category-window tests): ATP G/M/A/F/D/C + qualifying. WTA G/PM/P/I/F/D +
+  qualifying + **ITF ≥ $50K only** (levels 15/25/35/40 NOT counted; 50/60/75/80/100 counted). Excluding
+  sub-$50K ITF + walkovers/RET is what drops the WTA whole-span median-of-medians 7.3 → 1.4.
+
+**Corrected / overturned vs §2 and §5:**
+- **Walkovers & retirements are NOT counted** (clean OVERTURN of §2's "counted"). RET/WO single-match players
+  move 12% (ATP)/24% (WTA) vs 78–79% for completed matches. Olympics (level O) also appear uncounted (thin).
+- **The injury/absence DOCK — concept right (≥1900 gate, ~−100, ~8wk trigger all CONFIRMED), MECHANISM wrong.**
+  It is NOT a smooth 100→150 curve baked into history with a results-based ×1.5→×1 K-recovery (§5/§5b).
+  It is a **discrete, round (multiple-of-5) DISPLAY dock** on a *currently-absent* ≥~1900 player: **~−100**
+  (range −90…−115) applied at a single board with zero matches once ~6–10 weeks idle; strict gate (0 docks
+  below ~1900 in ~69 events); usually one-time, occasionally extended a round step toward ~−150 (Zverev −125
+  then −25; Berdych −105,−10,−10); sometimes **refunded by a discrete +100/+105 around return** (rare ATP
+  1/18 — Berrettini −100 then +100 back to exactly 2018.8; commoner WTA 7/21, all exact, clustered on dates),
+  frozen in between. A **semi-manual round-number overlay**, not a history-baked formula. This is exactly why
+  the §9 "active injury-returnee +100" outliers persisted: the reconstruction carried a residual in-state
+  dock recovering slowly; TA just adds the ~+100 back at display.
+
+**New:**
+- **A mid-2018 full-history RECOMPUTE discontinuity.** When TA expanded inclusion ("20 tour-level matches" →
+  "10 matches incl. Challengers/qualifying/ITF $50K+") it re-ran its whole history, shifting the entire scale
+  a one-time **~−82 median (~−230 at the top)** at ATP 2018-06-11 / WTA 2018-05-28 (every player drops
+  uniformly, incl. zero-match ones: Federer −235, Serena −391). An era boundary, not a monthly update. This
+  also reframes §6's "2016–17 peak is −95 low": part is this recompute era, not pure burn-in.
+
+**Engine implication (NOT yet applied — see §11):** to match TA the production engine should use seed ~1155
+(ATP)/~1200 (WTA) with no level split, exclude walkovers/retirements, and replace the §5b dock+recovery model
+with a currently-absent-only ~−100 round dock (≥1900) that is fully dropped once a player returns. The board-
+replay tooling is the natural regression fixture. Left as a follow-up because it restructures the live
+pipeline.
+
 ---
 
 ## 1. Is the formula / code public?
