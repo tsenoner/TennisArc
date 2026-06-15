@@ -36,3 +36,5 @@ ingest/elo-reverse/elo-scatter.html
 ingest/elo-reverse/yelo-boards.json
 ingest/elo-reverse/yelo-scatter-ATP.json
 ingest/elo-reverse/yelo-scatter-WTA.json
+ingest/elo-reverse/dashboard-data.json
+ingest/elo-reverse/points-data.json

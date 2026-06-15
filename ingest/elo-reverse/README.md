@@ -16,15 +16,28 @@ Method + findings: `docs/elo-investigation-findings.md` §0 (full board) and `do
 ## Run
 
 ```bash
-pnpm elo:scatter                                   # parse → reproduce → interactive Elo+yElo scatter (toggle)
+pnpm elo:scatter                                   # parse → reproduce → serve the full DASHBOARD (localhost:5188)
+pnpm elo:scatter-legacy                            # the older single Elo/yElo scatter file (elo-scatter.html)
+pnpm elo:check-points                              # known-answer gate for the points engine (ATP 2019/2023)
 npx tsx ingest/elo-reverse/fetch-wayback.ts        # (re)download every distinct Wayback capture (network)
 npx tsx ingest/elo-reverse/replay.ts ATP --clean   # full-board update rule (per-transition residuals)
 npx tsx ingest/elo-reverse/yelo-fit.ts ATP         # season-yElo reproduction (per board)
 npx tsx ingest/elo-reverse/yelo-fit.ts ATP --board 20260112   # one yElo board, detailed W/L + Δ
 ```
 
-The **scatter** (`elo-scatter.html`, generated) plots computed vs retrieved per player, with an **Elo / yElo
-toggle**; hover shows name + both values + discrepancy + W/L. Points on the diagonal reproduce TA exactly.
+The **dashboard** (`dashboard.html`, served by `serve.ts` because the dataset is a ~5 MB JSON sidecar, not
+inlined) has three views, toggled top-left, with an ATP/WTA switch:
+
+- **Elo / yElo** — a **stacked-bar accuracy timeline** over EVERY snapshot we have (all 333 ATP / 231 WTA
+  full-board transitions; all 30/35 yElo boards). Each bar = that snapshot's |Δ|-bucket composition
+  (green ≤2 / yellow ≤10 / orange ≤30 / red >30), with a median-|Δ| overlay line and recompute boundaries
+  drawn muted. **Click a bar → the linked computed-vs-retrieved scatter** + the full stats line for that
+  snapshot. (`dashboard-data.ts` → `dashboard-data.json`.)
+- **Points** — computed best-N earned-points vs official year-end ranking, per season, top-30, as paired
+  bars with colour-coded Δ. ATP 2009-2025 + WTA 2015-2025. (`../points/engine.ts --emit` → `points-data.json`.)
+
+The legacy **scatter** (`elo-scatter.html`, `scatter.ts`) is the old last-8-transitions single plot, kept for
+reference.
 
 ## Files
 
@@ -36,7 +49,10 @@ toggle**; hover shows name + both values + discrepancy + W/L. Points on the diag
 | `parse-yelo.ts` | parse season-yElo boards (`Rank\|Player\|Wins\|Losses\|yElo`) → `yelo-boards.json`. |
 | `replay.ts` | full-board seeded mini-replay; validation of the update rule. |
 | `yelo-fit.ts` | season-yElo reproduction (`--board`, `--pgrid`, `--cutfit`, `--scatter`, `--trace`). |
-| `scatter.ts` | build the interactive Elo+yElo computed-vs-retrieved HTML. |
+| `scatter.ts` | (legacy) build the interactive last-8 Elo+yElo computed-vs-retrieved HTML. |
+| `dashboard-data.ts` | emit `dashboard-data.json` — EVERY Elo/yElo snapshot with |Δ|-bucket counts + full pts (name-interned). |
+| `dashboard.html` | the 3-view dashboard (stacked-bar timeline + linked scatter + points); fetches the JSON sidecars. |
+| `serve.ts` | tiny static server for `dashboard.html` + the sidecars (5 MB → HTTP not file://); opens the browser. |
 
 Generated (gitignored): `boards.json`, `yelo-boards.json`, `yelo-scatter-{ATP,WTA}.json`, `elo-scatter.html`.
 

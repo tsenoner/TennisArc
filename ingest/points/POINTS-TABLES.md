@@ -123,6 +123,7 @@ Value = points for REACHING (i.e. losing in) that round; `W` = champion. `Q` = q
 
   "WTA_FINALS": {
     "_format": "round-robin accumulation; undefeated champion capped 1500 every era",
+    "2015": { "participation":125, "per_RR_win":160, "SF_win":330, "F_win":420, "totals_undefeated": {"W":1500,"F":1080,"SF":750} },
     "2016_2023": { "per_RR_appearance":125, "per_RR_win":125, "totals_undefeated": {"W":1500,"F":1080,"SF":750} },
     "2024_2025": { "per_RR_win":200, "SF_win":400, "F_win":500, "totals_undefeated": {"W":1500,"F":1000,"SF":600} }
   },

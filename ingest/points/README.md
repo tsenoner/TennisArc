@@ -27,17 +27,28 @@ boundary), and Challenger sub-category (CH50–175; we approximate as CH125).
 ## Run
 
 ```bash
-npx tsx ingest/points/validate.ts ATP 2023            # top-30 computed vs official year-end
-npx tsx ingest/points/validate.ts ATP 2019 30 --p="Daniil Medvedev"   # one player's event breakdown
-npx tsx ingest/points/round-extraction.ts ATP 2023 "Wimbledon"        # verify round-reached mechanics
+npx tsx ingest/points/engine.ts ATP 2016             # any season top-30 computed vs official (generalized)
+npx tsx ingest/points/engine.ts WTA 2019 --p="Ashleigh Barty"   # one player's event breakdown
+npx tsx ingest/points/engine.ts --emit               # write points-data.json for the dashboard (all seasons)
+npx tsx ingest/points/engine.ts --check              # known-answer gate (ATP 2019 ≥12/30, Djokovic 2023 exact)
+npx tsx ingest/points/validate.ts ATP 2023           # (original) hardcoded-2019/2023 validator
 ```
+
+`engine.ts` generalizes `validate.ts` to EVERY repo-scope season (ATP 2009-2025, WTA 2015-2025): it loads the
+per-era point tables, the ordered tier ruleset, the per-year tier lists and the best-N rules straight from the
+spec docs' `json` blocks (single source of truth) and resolves them by season. Ground truth covers all 28
+seasons (curated 2019/2023 + 24 sourced & adversarially verified via a research workflow). ATP clean years hit
+13-20/30 exact; COVID years (ATP 2020-22 / WTA 2020-21, frozen multi-season rankings) and team-event years
+(2023+) carry the documented floor; WTA's best-others cap reproduces only approximately. Each season's diagnostic
+note ships in `points-data.json`.
 
 ## Files
 
 | File | Role |
 |---|---|
-| `validate.ts` | tier classification + era tables + bye rule + qualifying bonus + best-N; validates vs `ground-truth.json` |
+| `engine.ts` | **generalized** points engine — all seasons, spec-driven tables/tiers, `--emit`/`--check`/per-player |
+| `validate.ts` | original hardcoded-2019/2023 validator (kept; the known-answer baseline) |
 | `round-extraction.ts` | the table-independent round-reached core (mechanics check) |
-| `ground-truth.json` | published year-end top-30 (ATP/WTA 2019 & 2023) |
+| `ground-truth.json` | published year-end top-30 — ATP 2009-2025 + WTA 2015-2025 (28 seasons); `_meta.provenance` flags source |
 | `POINTS-TABLES.md` | era-correct per-round point tables (both tours), counting rules, ground truth |
 | `TIER-LISTS.md` | CSV-verified per-year ATP-500 / WTA-tier name lists, qualifying tables, diagnosed residuals |

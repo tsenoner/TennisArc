@@ -1,1 +1,4291 @@
-{"ATP_2019":[{"rank":1,"player":"Rafael Nadal","points":9985},{"rank":2,"player":"Novak Djokovic","points":9145},{"rank":3,"player":"Roger Federer","points":6590},{"rank":4,"player":"Dominic Thiem","points":5825},{"rank":5,"player":"Daniil Medvedev","points":5705},{"rank":6,"player":"Stefanos Tsitsipas","points":5300},{"rank":7,"player":"Alexander Zverev","points":3345},{"rank":8,"player":"Matteo Berrettini","points":2870},{"rank":9,"player":"Roberto Bautista Agut","points":2540},{"rank":10,"player":"Gael Monfils","points":2530},{"rank":11,"player":"David Goffin","points":2335},{"rank":12,"player":"Fabio Fognini","points":2290},{"rank":13,"player":"Kei Nishikori","points":2180},{"rank":14,"player":"Diego Schwartzman","points":2125},{"rank":15,"player":"Denis Shapovalov","points":2050},{"rank":16,"player":"Stan Wawrinka","points":2000},{"rank":17,"player":"Karen Khachanov","points":1840},{"rank":18,"player":"Alex de Minaur","points":1775},{"rank":19,"player":"John Isner","points":1770},{"rank":20,"player":"Grigor Dimitrov","points":1747},{"rank":21,"player":"Felix Auger-Aliassime","points":1636},{"rank":22,"player":"Lucas Pouille","points":1600},{"rank":23,"player":"Andrey Rublev","points":1584},{"rank":24,"player":"Benoit Paire","points":1538},{"rank":25,"player":"Guido Pella","points":1530},{"rank":26,"player":"Nikoloz Basilashvili","points":1450},{"rank":27,"player":"Pablo Carreno Busta","points":1422},{"rank":28,"player":"Borna Coric","points":1415},{"rank":29,"player":"Jo-Wilfried Tsonga","points":1410},{"rank":30,"player":"Nick Kyrgios","points":1395}],"ATP_2023":[{"rank":1,"player":"Novak Djokovic","points":11245},{"rank":2,"player":"Carlos Alcaraz","points":8855},{"rank":3,"player":"Daniil Medvedev","points":7600},{"rank":4,"player":"Jannik Sinner","points":6490},{"rank":5,"player":"Andrey Rublev","points":4805},{"rank":6,"player":"Stefanos Tsitsipas","points":4235},{"rank":7,"player":"Alexander Zverev","points":3985},{"rank":8,"player":"Holger Rune","points":3660},{"rank":9,"player":"Hubert Hurkacz","points":3245},{"rank":10,"player":"Taylor Fritz","points":3100},{"rank":11,"player":"Casper Ruud","points":2825},{"rank":12,"player":"Alex de Minaur","points":2740},{"rank":13,"player":"Tommy Paul","points":2665},{"rank":14,"player":"Grigor Dimitrov","points":2570},{"rank":15,"player":"Karen Khachanov","points":2520},{"rank":16,"player":"Frances Tiafoe","points":2310},{"rank":17,"player":"Ben Shelton","points":2145},{"rank":18,"player":"Cameron Norrie","points":1940},{"rank":19,"player":"Nicolas Jarry","points":1810},{"rank":20,"player":"Ugo Humbert","points":1765},{"rank":21,"player":"Francisco Cerundolo","points":1760},{"rank":22,"player":"Adrian Mannarino","points":1755},{"rank":23,"player":"Tallon Griekspoor","points":1640},{"rank":24,"player":"Sebastian Korda","points":1530},{"rank":25,"player":"Jan-Lennard Struff","points":1522},{"rank":26,"player":"Alejandro Davidovich Fokina","points":1495},{"rank":27,"player":"Lorenzo Musetti","points":1470},{"rank":28,"player":"Sebastian Baez","points":1435},{"rank":29,"player":"Felix Auger-Aliassime","points":1425},{"rank":30,"player":"Tomas Martin Etcheverry","points":1375}],"WTA_2019":[{"rank":1,"player":"Ashleigh Barty","points":7851},{"rank":2,"player":"Karolina Pliskova","points":5940},{"rank":3,"player":"Naomi Osaka","points":5496},{"rank":4,"player":"Simona Halep","points":5462},{"rank":5,"player":"Bianca Andreescu","points":5192},{"rank":6,"player":"Elina Svitolina","points":5075},{"rank":7,"player":"Petra Kvitova","points":4776},{"rank":8,"player":"Belinda Bencic","points":4745},{"rank":9,"player":"Kiki Bertens","points":4245},{"rank":10,"player":"Serena Williams","points":3935},{"rank":11,"player":"Aryna Sabalenka","points":3120},{"rank":12,"player":"Johanna Konta","points":2879},{"rank":13,"player":"Madison Keys","points":2767},{"rank":14,"player":"Sofia Kenin","points":2740},{"rank":15,"player":"Petra Martic","points":2617},{"rank":16,"player":"Marketa Vondrousova","points":2390},{"rank":17,"player":"Elise Mertens","points":2290},{"rank":18,"player":"Alison Riske","points":2210},{"rank":19,"player":"Donna Vekic","points":2205},{"rank":20,"player":"Angelique Kerber","points":2175},{"rank":21,"player":"Karolina Muchova","points":1864},{"rank":22,"player":"Dayana Yastremska","points":1825},{"rank":23,"player":"Maria Sakkari","points":1820},{"rank":24,"player":"Amanda Anisimova","points":1793},{"rank":25,"player":"Sloane Stephens","points":1737},{"rank":26,"player":"Anett Kontaveit","points":1645},{"rank":27,"player":"Anastasija Sevastova","points":1617},{"rank":28,"player":"Julia Goerges","points":1610},{"rank":29,"player":"Wang Qiang","points":1563},{"rank":30,"player":"Anastasia Pavlyuchenkova","points":1560}],"WTA_2023":[{"rank":1,"player":"Iga Swiatek","points":9295},{"rank":2,"player":"Aryna Sabalenka","points":9050},{"rank":3,"player":"Coco Gauff","points":6580},{"rank":4,"player":"Elena Rybakina","points":6365},{"rank":5,"player":"Jessica Pegula","points":5975},{"rank":6,"player":"Ons Jabeur","points":4195},{"rank":7,"player":"Marketa Vondrousova","points":4075},{"rank":8,"player":"Karolina Muchova","points":3651},{"rank":9,"player":"Maria Sakkari","points":3620},{"rank":10,"player":"Barbora Krejcikova","points":2880},{"rank":11,"player":"Beatriz Haddad Maia","points":2855},{"rank":12,"player":"Madison Keys","points":2816},{"rank":13,"player":"Jelena Ostapenko","points":2720},{"rank":14,"player":"Petra Kvitova","points":2660},{"rank":15,"player":"Zheng Qinwen","points":2660},{"rank":16,"player":"Liudmila Samsonova","points":2650},{"rank":17,"player":"Belinda Bencic","points":2570},{"rank":18,"player":"Daria Kasatkina","points":2550},{"rank":19,"player":"Veronika Kudermetova","points":2520},{"rank":20,"player":"Caroline Garcia","points":2095},{"rank":21,"player":"Ekaterina Alexandrova","points":2035},{"rank":22,"player":"Victoria Azarenka","points":1905},{"rank":23,"player":"Donna Vekic","points":1865},{"rank":24,"player":"Magda Linette","points":1861},{"rank":25,"player":"Elina Svitolina","points":1809},{"rank":26,"player":"Sorana Cirstea","points":1765},{"rank":27,"player":"Anastasia Potapova","points":1588},{"rank":28,"player":"Anhelina Kalinina","points":1570},{"rank":29,"player":"Elise Mertens","points":1495},{"rank":30,"player":"Jasmine Paolini","points":1435}]}
+{
+ "_meta": {
+  "note": "Official year-end singles top-30. Curated pairs (ATP/WTA 2019,2023) kept verbatim; others sourced+adversarially-verified via workflow wf_10ce6ff6.",
+  "provenance": {
+   "ATP_2009": "high",
+   "ATP_2010": "high",
+   "ATP_2011": "high",
+   "ATP_2012": "high",
+   "ATP_2013": "high",
+   "ATP_2014": "high",
+   "ATP_2015": "high",
+   "ATP_2016": "high",
+   "ATP_2017": "high",
+   "ATP_2018": "high",
+   "ATP_2019": "curated",
+   "ATP_2020": "high",
+   "ATP_2021": "high",
+   "ATP_2022": "high",
+   "ATP_2023": "curated",
+   "ATP_2024": "high",
+   "ATP_2025": "high",
+   "WTA_2015": "high",
+   "WTA_2016": "high",
+   "WTA_2017": "high",
+   "WTA_2018": "high",
+   "WTA_2019": "curated",
+   "WTA_2020": "high",
+   "WTA_2021": "high",
+   "WTA_2022": "high",
+   "WTA_2023": "curated",
+   "WTA_2024": "high",
+   "WTA_2025": "high"
+  }
+ },
+ "ATP_2009": [
+  {
+   "rank": 1,
+   "player": "Roger Federer",
+   "points": 10550
+  },
+  {
+   "rank": 2,
+   "player": "Rafael Nadal",
+   "points": 9205
+  },
+  {
+   "rank": 3,
+   "player": "Novak Djokovic",
+   "points": 8310
+  },
+  {
+   "rank": 4,
+   "player": "Andy Murray",
+   "points": 7030
+  },
+  {
+   "rank": 5,
+   "player": "Juan Martin del Potro",
+   "points": 6785
+  },
+  {
+   "rank": 6,
+   "player": "Nikolay Davydenko",
+   "points": 4930
+  },
+  {
+   "rank": 7,
+   "player": "Andy Roddick",
+   "points": 4410
+  },
+  {
+   "rank": 8,
+   "player": "Robin Soderling",
+   "points": 3410
+  },
+  {
+   "rank": 9,
+   "player": "Fernando Verdasco",
+   "points": 3300
+  },
+  {
+   "rank": 10,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 2875
+  },
+  {
+   "rank": 11,
+   "player": "Fernando Gonzalez",
+   "points": 2870
+  },
+  {
+   "rank": 12,
+   "player": "Radek Stepanek",
+   "points": 2625
+  },
+  {
+   "rank": 13,
+   "player": "Gael Monfils",
+   "points": 2610
+  },
+  {
+   "rank": 14,
+   "player": "Marin Cilic",
+   "points": 2430
+  },
+  {
+   "rank": 15,
+   "player": "Gilles Simon",
+   "points": 2275
+  },
+  {
+   "rank": 16,
+   "player": "Tommy Robredo",
+   "points": 2175
+  },
+  {
+   "rank": 17,
+   "player": "David Ferrer",
+   "points": 1870
+  },
+  {
+   "rank": 18,
+   "player": "Tommy Haas",
+   "points": 1855
+  },
+  {
+   "rank": 19,
+   "player": "Mikhail Youzhny",
+   "points": 1690
+  },
+  {
+   "rank": 20,
+   "player": "Tomas Berdych",
+   "points": 1655
+  },
+  {
+   "rank": 21,
+   "player": "Stan Wawrinka",
+   "points": 1635
+  },
+  {
+   "rank": 22,
+   "player": "Lleyton Hewitt",
+   "points": 1600
+  },
+  {
+   "rank": 23,
+   "player": "Juan Carlos Ferrero",
+   "points": 1555
+  },
+  {
+   "rank": 24,
+   "player": "Ivan Ljubicic",
+   "points": 1405
+  },
+  {
+   "rank": 25,
+   "player": "Sam Querrey",
+   "points": 1320
+  },
+  {
+   "rank": 26,
+   "player": "Nicolas Almagro",
+   "points": 1305
+  },
+  {
+   "rank": 27,
+   "player": "Philipp Kohlschreiber",
+   "points": 1260
+  },
+  {
+   "rank": 28,
+   "player": "Jurgen Melzer",
+   "points": 1260
+  },
+  {
+   "rank": 29,
+   "player": "Viktor Troicki",
+   "points": 1175
+  },
+  {
+   "rank": 30,
+   "player": "Juan Monaco",
+   "points": 1170
+  }
+ ],
+ "ATP_2010": [
+  {
+   "rank": 1,
+   "player": "Rafael Nadal",
+   "points": 12450
+  },
+  {
+   "rank": 2,
+   "player": "Roger Federer",
+   "points": 9145
+  },
+  {
+   "rank": 3,
+   "player": "Novak Djokovic",
+   "points": 6035
+  },
+  {
+   "rank": 4,
+   "player": "Andy Murray",
+   "points": 5760
+  },
+  {
+   "rank": 5,
+   "player": "Robin Soderling",
+   "points": 5580
+  },
+  {
+   "rank": 6,
+   "player": "Tomas Berdych",
+   "points": 3955
+  },
+  {
+   "rank": 7,
+   "player": "David Ferrer",
+   "points": 3735
+  },
+  {
+   "rank": 8,
+   "player": "Andy Roddick",
+   "points": 3665
+  },
+  {
+   "rank": 9,
+   "player": "Fernando Verdasco",
+   "points": 3240
+  },
+  {
+   "rank": 10,
+   "player": "Mikhail Youzhny",
+   "points": 2920
+  },
+  {
+   "rank": 11,
+   "player": "Jurgen Melzer",
+   "points": 2785
+  },
+  {
+   "rank": 12,
+   "player": "Gael Monfils",
+   "points": 2485
+  },
+  {
+   "rank": 13,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 2345
+  },
+  {
+   "rank": 14,
+   "player": "Marin Cilic",
+   "points": 2300
+  },
+  {
+   "rank": 15,
+   "player": "Nicolas Almagro",
+   "points": 2160
+  },
+  {
+   "rank": 16,
+   "player": "Mardy Fish",
+   "points": 1991
+  },
+  {
+   "rank": 17,
+   "player": "Ivan Ljubicic",
+   "points": 1965
+  },
+  {
+   "rank": 18,
+   "player": "Sam Querrey",
+   "points": 1860
+  },
+  {
+   "rank": 19,
+   "player": "John Isner",
+   "points": 1850
+  },
+  {
+   "rank": 20,
+   "player": "Marcos Baghdatis",
+   "points": 1785
+  },
+  {
+   "rank": 21,
+   "player": "Stan Wawrinka",
+   "points": 1755
+  },
+  {
+   "rank": 22,
+   "player": "Nikolay Davydenko",
+   "points": 1655
+  },
+  {
+   "rank": 23,
+   "player": "Michael Llodra",
+   "points": 1575
+  },
+  {
+   "rank": 24,
+   "player": "Ernests Gulbis",
+   "points": 1505
+  },
+  {
+   "rank": 25,
+   "player": "Albert Montanes",
+   "points": 1495
+  },
+  {
+   "rank": 26,
+   "player": "Juan Monaco",
+   "points": 1480
+  },
+  {
+   "rank": 27,
+   "player": "David Nalbandian",
+   "points": 1480
+  },
+  {
+   "rank": 28,
+   "player": "Juan Carlos Ferrero",
+   "points": 1415
+  },
+  {
+   "rank": 29,
+   "player": "Richard Gasquet",
+   "points": 1385
+  },
+  {
+   "rank": 30,
+   "player": "Viktor Troicki",
+   "points": 1360
+  }
+ ],
+ "ATP_2011": [
+  {
+   "rank": 1,
+   "player": "Novak Djokovic",
+   "points": 13630
+  },
+  {
+   "rank": 2,
+   "player": "Rafael Nadal",
+   "points": 9595
+  },
+  {
+   "rank": 3,
+   "player": "Roger Federer",
+   "points": 8170
+  },
+  {
+   "rank": 4,
+   "player": "Andy Murray",
+   "points": 7380
+  },
+  {
+   "rank": 5,
+   "player": "David Ferrer",
+   "points": 4925
+  },
+  {
+   "rank": 6,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 4335
+  },
+  {
+   "rank": 7,
+   "player": "Tomas Berdych",
+   "points": 3700
+  },
+  {
+   "rank": 8,
+   "player": "Mardy Fish",
+   "points": 2965
+  },
+  {
+   "rank": 9,
+   "player": "Janko Tipsarevic",
+   "points": 2595
+  },
+  {
+   "rank": 10,
+   "player": "Nicolas Almagro",
+   "points": 2380
+  },
+  {
+   "rank": 11,
+   "player": "Juan Martin del Potro",
+   "points": 2315
+  },
+  {
+   "rank": 12,
+   "player": "Gilles Simon",
+   "points": 2165
+  },
+  {
+   "rank": 13,
+   "player": "Robin Soderling",
+   "points": 2120
+  },
+  {
+   "rank": 14,
+   "player": "Andy Roddick",
+   "points": 1940
+  },
+  {
+   "rank": 15,
+   "player": "Alexandr Dolgopolov",
+   "points": 1925
+  },
+  {
+   "rank": 16,
+   "player": "Gael Monfils",
+   "points": 1910
+  },
+  {
+   "rank": 17,
+   "player": "Stan Wawrinka",
+   "points": 1820
+  },
+  {
+   "rank": 18,
+   "player": "John Isner",
+   "points": 1800
+  },
+  {
+   "rank": 19,
+   "player": "Richard Gasquet",
+   "points": 1765
+  },
+  {
+   "rank": 20,
+   "player": "Feliciano Lopez",
+   "points": 1755
+  },
+  {
+   "rank": 21,
+   "player": "Marin Cilic",
+   "points": 1665
+  },
+  {
+   "rank": 22,
+   "player": "Viktor Troicki",
+   "points": 1655
+  },
+  {
+   "rank": 23,
+   "player": "Florian Mayer",
+   "points": 1630
+  },
+  {
+   "rank": 24,
+   "player": "Fernando Verdasco",
+   "points": 1550
+  },
+  {
+   "rank": 25,
+   "player": "Kei Nishikori",
+   "points": 1430
+  },
+  {
+   "rank": 26,
+   "player": "Juan Monaco",
+   "points": 1335
+  },
+  {
+   "rank": 27,
+   "player": "Marcel Granollers",
+   "points": 1335
+  },
+  {
+   "rank": 28,
+   "player": "Radek Stepanek",
+   "points": 1275
+  },
+  {
+   "rank": 29,
+   "player": "Juan Ignacio Chela",
+   "points": 1270
+  },
+  {
+   "rank": 30,
+   "player": "Ivan Ljubicic",
+   "points": 1270
+  }
+ ],
+ "ATP_2012": [
+  {
+   "rank": 1,
+   "player": "Novak Djokovic",
+   "points": 12920
+  },
+  {
+   "rank": 2,
+   "player": "Roger Federer",
+   "points": 10265
+  },
+  {
+   "rank": 3,
+   "player": "Andy Murray",
+   "points": 8000
+  },
+  {
+   "rank": 4,
+   "player": "Rafael Nadal",
+   "points": 6690
+  },
+  {
+   "rank": 5,
+   "player": "David Ferrer",
+   "points": 6505
+  },
+  {
+   "rank": 6,
+   "player": "Tomas Berdych",
+   "points": 4680
+  },
+  {
+   "rank": 7,
+   "player": "Juan Martin del Potro",
+   "points": 4480
+  },
+  {
+   "rank": 8,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 3490
+  },
+  {
+   "rank": 9,
+   "player": "Janko Tipsarevic",
+   "points": 2990
+  },
+  {
+   "rank": 10,
+   "player": "Richard Gasquet",
+   "points": 2515
+  },
+  {
+   "rank": 11,
+   "player": "Nicolas Almagro",
+   "points": 2515
+  },
+  {
+   "rank": 12,
+   "player": "Juan Monaco",
+   "points": 2430
+  },
+  {
+   "rank": 13,
+   "player": "Milos Raonic",
+   "points": 2380
+  },
+  {
+   "rank": 14,
+   "player": "John Isner",
+   "points": 2215
+  },
+  {
+   "rank": 15,
+   "player": "Marin Cilic",
+   "points": 2210
+  },
+  {
+   "rank": 16,
+   "player": "Gilles Simon",
+   "points": 2165
+  },
+  {
+   "rank": 17,
+   "player": "Stan Wawrinka",
+   "points": 1900
+  },
+  {
+   "rank": 18,
+   "player": "Alexandr Dolgopolov",
+   "points": 1855
+  },
+  {
+   "rank": 19,
+   "player": "Kei Nishikori",
+   "points": 1830
+  },
+  {
+   "rank": 20,
+   "player": "Philipp Kohlschreiber",
+   "points": 1770
+  },
+  {
+   "rank": 21,
+   "player": "Tommy Haas",
+   "points": 1695
+  },
+  {
+   "rank": 22,
+   "player": "Sam Querrey",
+   "points": 1650
+  },
+  {
+   "rank": 23,
+   "player": "Andreas Seppi",
+   "points": 1560
+  },
+  {
+   "rank": 24,
+   "player": "Fernando Verdasco",
+   "points": 1490
+  },
+  {
+   "rank": 25,
+   "player": "Mikhail Youzhny",
+   "points": 1335
+  },
+  {
+   "rank": 26,
+   "player": "Jerzy Janowicz",
+   "points": 1299
+  },
+  {
+   "rank": 27,
+   "player": "Mardy Fish",
+   "points": 1255
+  },
+  {
+   "rank": 28,
+   "player": "Florian Mayer",
+   "points": 1215
+  },
+  {
+   "rank": 29,
+   "player": "Jurgen Melzer",
+   "points": 1177
+  },
+  {
+   "rank": 30,
+   "player": "Martin Klizan",
+   "points": 1175
+  }
+ ],
+ "ATP_2013": [
+  {
+   "rank": 1,
+   "player": "Rafael Nadal",
+   "points": 13030
+  },
+  {
+   "rank": 2,
+   "player": "Novak Djokovic",
+   "points": 12260
+  },
+  {
+   "rank": 3,
+   "player": "David Ferrer",
+   "points": 5800
+  },
+  {
+   "rank": 4,
+   "player": "Andy Murray",
+   "points": 5790
+  },
+  {
+   "rank": 5,
+   "player": "Juan Martin del Potro",
+   "points": 5255
+  },
+  {
+   "rank": 6,
+   "player": "Roger Federer",
+   "points": 4205
+  },
+  {
+   "rank": 7,
+   "player": "Tomas Berdych",
+   "points": 4180
+  },
+  {
+   "rank": 8,
+   "player": "Stan Wawrinka",
+   "points": 3730
+  },
+  {
+   "rank": 9,
+   "player": "Richard Gasquet",
+   "points": 3300
+  },
+  {
+   "rank": 10,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 3065
+  },
+  {
+   "rank": 11,
+   "player": "Milos Raonic",
+   "points": 2860
+  },
+  {
+   "rank": 12,
+   "player": "Tommy Haas",
+   "points": 2435
+  },
+  {
+   "rank": 13,
+   "player": "Nicolas Almagro",
+   "points": 2290
+  },
+  {
+   "rank": 14,
+   "player": "John Isner",
+   "points": 2150
+  },
+  {
+   "rank": 15,
+   "player": "Mikhail Youzhny",
+   "points": 2145
+  },
+  {
+   "rank": 16,
+   "player": "Fabio Fognini",
+   "points": 1930
+  },
+  {
+   "rank": 17,
+   "player": "Kei Nishikori",
+   "points": 1915
+  },
+  {
+   "rank": 18,
+   "player": "Tommy Robredo",
+   "points": 1810
+  },
+  {
+   "rank": 19,
+   "player": "Gilles Simon",
+   "points": 1790
+  },
+  {
+   "rank": 20,
+   "player": "Kevin Anderson",
+   "points": 1685
+  },
+  {
+   "rank": 21,
+   "player": "Jerzy Janowicz",
+   "points": 1615
+  },
+  {
+   "rank": 22,
+   "player": "Philipp Kohlschreiber",
+   "points": 1525
+  },
+  {
+   "rank": 23,
+   "player": "Grigor Dimitrov",
+   "points": 1520
+  },
+  {
+   "rank": 24,
+   "player": "Ernests Gulbis",
+   "points": 1393
+  },
+  {
+   "rank": 25,
+   "player": "Andreas Seppi",
+   "points": 1360
+  },
+  {
+   "rank": 26,
+   "player": "Benoit Paire",
+   "points": 1345
+  },
+  {
+   "rank": 27,
+   "player": "Jurgen Melzer",
+   "points": 1315
+  },
+  {
+   "rank": 28,
+   "player": "Feliciano Lopez",
+   "points": 1310
+  },
+  {
+   "rank": 29,
+   "player": "Dmitry Tursunov",
+   "points": 1244
+  },
+  {
+   "rank": 30,
+   "player": "Fernando Verdasco",
+   "points": 1235
+  }
+ ],
+ "ATP_2014": [
+  {
+   "rank": 1,
+   "player": "Novak Djokovic",
+   "points": 11360
+  },
+  {
+   "rank": 2,
+   "player": "Roger Federer",
+   "points": 9775
+  },
+  {
+   "rank": 3,
+   "player": "Rafael Nadal",
+   "points": 6835
+  },
+  {
+   "rank": 4,
+   "player": "Stan Wawrinka",
+   "points": 5370
+  },
+  {
+   "rank": 5,
+   "player": "Kei Nishikori",
+   "points": 5025
+  },
+  {
+   "rank": 6,
+   "player": "Andy Murray",
+   "points": 4675
+  },
+  {
+   "rank": 7,
+   "player": "Tomas Berdych",
+   "points": 4600
+  },
+  {
+   "rank": 8,
+   "player": "Milos Raonic",
+   "points": 4440
+  },
+  {
+   "rank": 9,
+   "player": "Marin Cilic",
+   "points": 4150
+  },
+  {
+   "rank": 10,
+   "player": "David Ferrer",
+   "points": 4045
+  },
+  {
+   "rank": 11,
+   "player": "Grigor Dimitrov",
+   "points": 3645
+  },
+  {
+   "rank": 12,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 2740
+  },
+  {
+   "rank": 13,
+   "player": "Ernests Gulbis",
+   "points": 2455
+  },
+  {
+   "rank": 14,
+   "player": "Feliciano Lopez",
+   "points": 2130
+  },
+  {
+   "rank": 15,
+   "player": "Roberto Bautista Agut",
+   "points": 2110
+  },
+  {
+   "rank": 16,
+   "player": "Kevin Anderson",
+   "points": 2080
+  },
+  {
+   "rank": 17,
+   "player": "Tommy Robredo",
+   "points": 2015
+  },
+  {
+   "rank": 18,
+   "player": "Gael Monfils",
+   "points": 1900
+  },
+  {
+   "rank": 19,
+   "player": "John Isner",
+   "points": 1890
+  },
+  {
+   "rank": 20,
+   "player": "Fabio Fognini",
+   "points": 1790
+  },
+  {
+   "rank": 21,
+   "player": "Gilles Simon",
+   "points": 1730
+  },
+  {
+   "rank": 22,
+   "player": "David Goffin",
+   "points": 1599
+  },
+  {
+   "rank": 23,
+   "player": "Alexandr Dolgopolov",
+   "points": 1455
+  },
+  {
+   "rank": 24,
+   "player": "Philipp Kohlschreiber",
+   "points": 1415
+  },
+  {
+   "rank": 25,
+   "player": "Julien Benneteau",
+   "points": 1365
+  },
+  {
+   "rank": 26,
+   "player": "Richard Gasquet",
+   "points": 1350
+  },
+  {
+   "rank": 27,
+   "player": "Ivo Karlovic",
+   "points": 1320
+  },
+  {
+   "rank": 28,
+   "player": "Leonardo Mayer",
+   "points": 1299
+  },
+  {
+   "rank": 29,
+   "player": "Jeremy Chardy",
+   "points": 1240
+  },
+  {
+   "rank": 30,
+   "player": "Pablo Cuevas",
+   "points": 1222
+  }
+ ],
+ "ATP_2015": [
+  {
+   "rank": 1,
+   "player": "Novak Djokovic",
+   "points": 16585
+  },
+  {
+   "rank": 2,
+   "player": "Andy Murray",
+   "points": 8945
+  },
+  {
+   "rank": 3,
+   "player": "Roger Federer",
+   "points": 8265
+  },
+  {
+   "rank": 4,
+   "player": "Stan Wawrinka",
+   "points": 6865
+  },
+  {
+   "rank": 5,
+   "player": "Rafael Nadal",
+   "points": 5230
+  },
+  {
+   "rank": 6,
+   "player": "Tomas Berdych",
+   "points": 4620
+  },
+  {
+   "rank": 7,
+   "player": "David Ferrer",
+   "points": 4305
+  },
+  {
+   "rank": 8,
+   "player": "Kei Nishikori",
+   "points": 4235
+  },
+  {
+   "rank": 9,
+   "player": "Richard Gasquet",
+   "points": 2850
+  },
+  {
+   "rank": 10,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 2635
+  },
+  {
+   "rank": 11,
+   "player": "John Isner",
+   "points": 2495
+  },
+  {
+   "rank": 12,
+   "player": "Kevin Anderson",
+   "points": 2475
+  },
+  {
+   "rank": 13,
+   "player": "Marin Cilic",
+   "points": 2405
+  },
+  {
+   "rank": 14,
+   "player": "Milos Raonic",
+   "points": 2170
+  },
+  {
+   "rank": 15,
+   "player": "Gilles Simon",
+   "points": 2145
+  },
+  {
+   "rank": 16,
+   "player": "David Goffin",
+   "points": 1880
+  },
+  {
+   "rank": 17,
+   "player": "Feliciano Lopez",
+   "points": 1690
+  },
+  {
+   "rank": 18,
+   "player": "Bernard Tomic",
+   "points": 1675
+  },
+  {
+   "rank": 19,
+   "player": "Benoit Paire",
+   "points": 1633
+  },
+  {
+   "rank": 20,
+   "player": "Dominic Thiem",
+   "points": 1600
+  },
+  {
+   "rank": 21,
+   "player": "Fabio Fognini",
+   "points": 1515
+  },
+  {
+   "rank": 22,
+   "player": "Viktor Troicki",
+   "points": 1487
+  },
+  {
+   "rank": 23,
+   "player": "Ivo Karlovic",
+   "points": 1485
+  },
+  {
+   "rank": 24,
+   "player": "Gael Monfils",
+   "points": 1485
+  },
+  {
+   "rank": 25,
+   "player": "Roberto Bautista Agut",
+   "points": 1480
+  },
+  {
+   "rank": 26,
+   "player": "Jack Sock",
+   "points": 1465
+  },
+  {
+   "rank": 27,
+   "player": "Guillermo Garcia-Lopez",
+   "points": 1430
+  },
+  {
+   "rank": 28,
+   "player": "Grigor Dimitrov",
+   "points": 1360
+  },
+  {
+   "rank": 29,
+   "player": "Andreas Seppi",
+   "points": 1360
+  },
+  {
+   "rank": 30,
+   "player": "Nick Kyrgios",
+   "points": 1260
+  }
+ ],
+ "ATP_2016": [
+  {
+   "rank": 1,
+   "player": "Andy Murray",
+   "points": 12410
+  },
+  {
+   "rank": 2,
+   "player": "Novak Djokovic",
+   "points": 11780
+  },
+  {
+   "rank": 3,
+   "player": "Milos Raonic",
+   "points": 5450
+  },
+  {
+   "rank": 4,
+   "player": "Stan Wawrinka",
+   "points": 5315
+  },
+  {
+   "rank": 5,
+   "player": "Kei Nishikori",
+   "points": 4905
+  },
+  {
+   "rank": 6,
+   "player": "Marin Cilic",
+   "points": 3650
+  },
+  {
+   "rank": 7,
+   "player": "Gael Monfils",
+   "points": 3625
+  },
+  {
+   "rank": 8,
+   "player": "Dominic Thiem",
+   "points": 3415
+  },
+  {
+   "rank": 9,
+   "player": "Rafael Nadal",
+   "points": 3300
+  },
+  {
+   "rank": 10,
+   "player": "Tomas Berdych",
+   "points": 3060
+  },
+  {
+   "rank": 11,
+   "player": "David Goffin",
+   "points": 2750
+  },
+  {
+   "rank": 12,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 2550
+  },
+  {
+   "rank": 13,
+   "player": "Nick Kyrgios",
+   "points": 2460
+  },
+  {
+   "rank": 14,
+   "player": "Roberto Bautista Agut",
+   "points": 2350
+  },
+  {
+   "rank": 15,
+   "player": "Lucas Pouille",
+   "points": 2156
+  },
+  {
+   "rank": 16,
+   "player": "Roger Federer",
+   "points": 2130
+  },
+  {
+   "rank": 17,
+   "player": "Grigor Dimitrov",
+   "points": 2035
+  },
+  {
+   "rank": 18,
+   "player": "Richard Gasquet",
+   "points": 1885
+  },
+  {
+   "rank": 19,
+   "player": "John Isner",
+   "points": 1850
+  },
+  {
+   "rank": 20,
+   "player": "Ivo Karlovic",
+   "points": 1795
+  },
+  {
+   "rank": 21,
+   "player": "David Ferrer",
+   "points": 1785
+  },
+  {
+   "rank": 22,
+   "player": "Pablo Cuevas",
+   "points": 1780
+  },
+  {
+   "rank": 23,
+   "player": "Jack Sock",
+   "points": 1710
+  },
+  {
+   "rank": 24,
+   "player": "Alexander Zverev",
+   "points": 1655
+  },
+  {
+   "rank": 25,
+   "player": "Gilles Simon",
+   "points": 1585
+  },
+  {
+   "rank": 26,
+   "player": "Bernard Tomic",
+   "points": 1465
+  },
+  {
+   "rank": 27,
+   "player": "Albert Ramos-Vinolas",
+   "points": 1435
+  },
+  {
+   "rank": 28,
+   "player": "Feliciano Lopez",
+   "points": 1410
+  },
+  {
+   "rank": 29,
+   "player": "Viktor Troicki",
+   "points": 1385
+  },
+  {
+   "rank": 30,
+   "player": "Pablo Carreno Busta",
+   "points": 1370
+  }
+ ],
+ "ATP_2017": [
+  {
+   "rank": 1,
+   "player": "Rafael Nadal",
+   "points": 10645
+  },
+  {
+   "rank": 2,
+   "player": "Roger Federer",
+   "points": 9605
+  },
+  {
+   "rank": 3,
+   "player": "Grigor Dimitrov",
+   "points": 5150
+  },
+  {
+   "rank": 4,
+   "player": "Alexander Zverev",
+   "points": 4610
+  },
+  {
+   "rank": 5,
+   "player": "Dominic Thiem",
+   "points": 4015
+  },
+  {
+   "rank": 6,
+   "player": "Marin Cilic",
+   "points": 3805
+  },
+  {
+   "rank": 7,
+   "player": "David Goffin",
+   "points": 3775
+  },
+  {
+   "rank": 8,
+   "player": "Jack Sock",
+   "points": 3165
+  },
+  {
+   "rank": 9,
+   "player": "Stan Wawrinka",
+   "points": 3150
+  },
+  {
+   "rank": 10,
+   "player": "Pablo Carreno Busta",
+   "points": 2615
+  },
+  {
+   "rank": 11,
+   "player": "Juan Martin del Potro",
+   "points": 2595
+  },
+  {
+   "rank": 12,
+   "player": "Novak Djokovic",
+   "points": 2585
+  },
+  {
+   "rank": 13,
+   "player": "Sam Querrey",
+   "points": 2535
+  },
+  {
+   "rank": 14,
+   "player": "Kevin Anderson",
+   "points": 2480
+  },
+  {
+   "rank": 15,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 2320
+  },
+  {
+   "rank": 16,
+   "player": "Andy Murray",
+   "points": 2290
+  },
+  {
+   "rank": 17,
+   "player": "John Isner",
+   "points": 2265
+  },
+  {
+   "rank": 18,
+   "player": "Lucas Pouille",
+   "points": 2235
+  },
+  {
+   "rank": 19,
+   "player": "Tomas Berdych",
+   "points": 2095
+  },
+  {
+   "rank": 20,
+   "player": "Roberto Bautista Agut",
+   "points": 2015
+  },
+  {
+   "rank": 21,
+   "player": "Nick Kyrgios",
+   "points": 2010
+  },
+  {
+   "rank": 22,
+   "player": "Kei Nishikori",
+   "points": 1885
+  },
+  {
+   "rank": 23,
+   "player": "Albert Ramos-Vinolas",
+   "points": 1845
+  },
+  {
+   "rank": 24,
+   "player": "Milos Raonic",
+   "points": 1795
+  },
+  {
+   "rank": 25,
+   "player": "Gilles Muller",
+   "points": 1695
+  },
+  {
+   "rank": 26,
+   "player": "Diego Schwartzman",
+   "points": 1675
+  },
+  {
+   "rank": 27,
+   "player": "Fabio Fognini",
+   "points": 1670
+  },
+  {
+   "rank": 28,
+   "player": "Adrian Mannarino",
+   "points": 1635
+  },
+  {
+   "rank": 29,
+   "player": "Philipp Kohlschreiber",
+   "points": 1440
+  },
+  {
+   "rank": 30,
+   "player": "Damir Dzumhur",
+   "points": 1391
+  }
+ ],
+ "ATP_2018": [
+  {
+   "rank": 1,
+   "player": "Novak Djokovic",
+   "points": 9045
+  },
+  {
+   "rank": 2,
+   "player": "Rafael Nadal",
+   "points": 7480
+  },
+  {
+   "rank": 3,
+   "player": "Roger Federer",
+   "points": 6420
+  },
+  {
+   "rank": 4,
+   "player": "Alexander Zverev",
+   "points": 6385
+  },
+  {
+   "rank": 5,
+   "player": "Juan Martin del Potro",
+   "points": 5300
+  },
+  {
+   "rank": 6,
+   "player": "Kevin Anderson",
+   "points": 4710
+  },
+  {
+   "rank": 7,
+   "player": "Marin Cilic",
+   "points": 4250
+  },
+  {
+   "rank": 8,
+   "player": "Dominic Thiem",
+   "points": 4095
+  },
+  {
+   "rank": 9,
+   "player": "Kei Nishikori",
+   "points": 3590
+  },
+  {
+   "rank": 10,
+   "player": "John Isner",
+   "points": 3155
+  },
+  {
+   "rank": 11,
+   "player": "Karen Khachanov",
+   "points": 2835
+  },
+  {
+   "rank": 12,
+   "player": "Borna Coric",
+   "points": 2480
+  },
+  {
+   "rank": 13,
+   "player": "Fabio Fognini",
+   "points": 2315
+  },
+  {
+   "rank": 14,
+   "player": "Kyle Edmund",
+   "points": 2150
+  },
+  {
+   "rank": 15,
+   "player": "Stefanos Tsitsipas",
+   "points": 2095
+  },
+  {
+   "rank": 16,
+   "player": "Daniil Medvedev",
+   "points": 1977
+  },
+  {
+   "rank": 17,
+   "player": "Diego Schwartzman",
+   "points": 1880
+  },
+  {
+   "rank": 18,
+   "player": "Milos Raonic",
+   "points": 1855
+  },
+  {
+   "rank": 19,
+   "player": "Grigor Dimitrov",
+   "points": 1835
+  },
+  {
+   "rank": 20,
+   "player": "Marco Cecchinato",
+   "points": 1819
+  },
+  {
+   "rank": 21,
+   "player": "Nikoloz Basilashvili",
+   "points": 1795
+  },
+  {
+   "rank": 22,
+   "player": "David Goffin",
+   "points": 1785
+  },
+  {
+   "rank": 23,
+   "player": "Pablo Carreno Busta",
+   "points": 1705
+  },
+  {
+   "rank": 24,
+   "player": "Roberto Bautista Agut",
+   "points": 1605
+  },
+  {
+   "rank": 25,
+   "player": "Hyeon Chung",
+   "points": 1585
+  },
+  {
+   "rank": 26,
+   "player": "Richard Gasquet",
+   "points": 1535
+  },
+  {
+   "rank": 27,
+   "player": "Denis Shapovalov",
+   "points": 1440
+  },
+  {
+   "rank": 28,
+   "player": "Fernando Verdasco",
+   "points": 1410
+  },
+  {
+   "rank": 29,
+   "player": "Gael Monfils",
+   "points": 1400
+  },
+  {
+   "rank": 30,
+   "player": "Gilles Simon",
+   "points": 1370
+  }
+ ],
+ "ATP_2019": [
+  {
+   "rank": 1,
+   "player": "Rafael Nadal",
+   "points": 9985
+  },
+  {
+   "rank": 2,
+   "player": "Novak Djokovic",
+   "points": 9145
+  },
+  {
+   "rank": 3,
+   "player": "Roger Federer",
+   "points": 6590
+  },
+  {
+   "rank": 4,
+   "player": "Dominic Thiem",
+   "points": 5825
+  },
+  {
+   "rank": 5,
+   "player": "Daniil Medvedev",
+   "points": 5705
+  },
+  {
+   "rank": 6,
+   "player": "Stefanos Tsitsipas",
+   "points": 5300
+  },
+  {
+   "rank": 7,
+   "player": "Alexander Zverev",
+   "points": 3345
+  },
+  {
+   "rank": 8,
+   "player": "Matteo Berrettini",
+   "points": 2870
+  },
+  {
+   "rank": 9,
+   "player": "Roberto Bautista Agut",
+   "points": 2540
+  },
+  {
+   "rank": 10,
+   "player": "Gael Monfils",
+   "points": 2530
+  },
+  {
+   "rank": 11,
+   "player": "David Goffin",
+   "points": 2335
+  },
+  {
+   "rank": 12,
+   "player": "Fabio Fognini",
+   "points": 2290
+  },
+  {
+   "rank": 13,
+   "player": "Kei Nishikori",
+   "points": 2180
+  },
+  {
+   "rank": 14,
+   "player": "Diego Schwartzman",
+   "points": 2125
+  },
+  {
+   "rank": 15,
+   "player": "Denis Shapovalov",
+   "points": 2050
+  },
+  {
+   "rank": 16,
+   "player": "Stan Wawrinka",
+   "points": 2000
+  },
+  {
+   "rank": 17,
+   "player": "Karen Khachanov",
+   "points": 1840
+  },
+  {
+   "rank": 18,
+   "player": "Alex de Minaur",
+   "points": 1775
+  },
+  {
+   "rank": 19,
+   "player": "John Isner",
+   "points": 1770
+  },
+  {
+   "rank": 20,
+   "player": "Grigor Dimitrov",
+   "points": 1747
+  },
+  {
+   "rank": 21,
+   "player": "Felix Auger-Aliassime",
+   "points": 1636
+  },
+  {
+   "rank": 22,
+   "player": "Lucas Pouille",
+   "points": 1600
+  },
+  {
+   "rank": 23,
+   "player": "Andrey Rublev",
+   "points": 1584
+  },
+  {
+   "rank": 24,
+   "player": "Benoit Paire",
+   "points": 1538
+  },
+  {
+   "rank": 25,
+   "player": "Guido Pella",
+   "points": 1530
+  },
+  {
+   "rank": 26,
+   "player": "Nikoloz Basilashvili",
+   "points": 1450
+  },
+  {
+   "rank": 27,
+   "player": "Pablo Carreno Busta",
+   "points": 1422
+  },
+  {
+   "rank": 28,
+   "player": "Borna Coric",
+   "points": 1415
+  },
+  {
+   "rank": 29,
+   "player": "Jo-Wilfried Tsonga",
+   "points": 1410
+  },
+  {
+   "rank": 30,
+   "player": "Nick Kyrgios",
+   "points": 1395
+  }
+ ],
+ "ATP_2020": [
+  {
+   "rank": 1,
+   "player": "Novak Djokovic",
+   "points": 12030
+  },
+  {
+   "rank": 2,
+   "player": "Rafael Nadal",
+   "points": 9850
+  },
+  {
+   "rank": 3,
+   "player": "Dominic Thiem",
+   "points": 9125
+  },
+  {
+   "rank": 4,
+   "player": "Daniil Medvedev",
+   "points": 8470
+  },
+  {
+   "rank": 5,
+   "player": "Roger Federer",
+   "points": 6630
+  },
+  {
+   "rank": 6,
+   "player": "Stefanos Tsitsipas",
+   "points": 5925
+  },
+  {
+   "rank": 7,
+   "player": "Alexander Zverev",
+   "points": 5525
+  },
+  {
+   "rank": 8,
+   "player": "Andrey Rublev",
+   "points": 4119
+  },
+  {
+   "rank": 9,
+   "player": "Diego Schwartzman",
+   "points": 3455
+  },
+  {
+   "rank": 10,
+   "player": "Matteo Berrettini",
+   "points": 3075
+  },
+  {
+   "rank": 11,
+   "player": "Gael Monfils",
+   "points": 2860
+  },
+  {
+   "rank": 12,
+   "player": "Denis Shapovalov",
+   "points": 2830
+  },
+  {
+   "rank": 13,
+   "player": "Roberto Bautista Agut",
+   "points": 2710
+  },
+  {
+   "rank": 14,
+   "player": "Milos Raonic",
+   "points": 2580
+  },
+  {
+   "rank": 15,
+   "player": "David Goffin",
+   "points": 2555
+  },
+  {
+   "rank": 16,
+   "player": "Pablo Carreno Busta",
+   "points": 2535
+  },
+  {
+   "rank": 17,
+   "player": "Fabio Fognini",
+   "points": 2400
+  },
+  {
+   "rank": 18,
+   "player": "Stan Wawrinka",
+   "points": 2320
+  },
+  {
+   "rank": 19,
+   "player": "Grigor Dimitrov",
+   "points": 2260
+  },
+  {
+   "rank": 20,
+   "player": "Karen Khachanov",
+   "points": 2245
+  },
+  {
+   "rank": 21,
+   "player": "Felix Auger-Aliassime",
+   "points": 2216
+  },
+  {
+   "rank": 22,
+   "player": "Cristian Garin",
+   "points": 2170
+  },
+  {
+   "rank": 23,
+   "player": "Alex de Minaur",
+   "points": 1860
+  },
+  {
+   "rank": 24,
+   "player": "Borna Coric",
+   "points": 1855
+  },
+  {
+   "rank": 25,
+   "player": "John Isner",
+   "points": 1850
+  },
+  {
+   "rank": 26,
+   "player": "Dusan Lajovic",
+   "points": 1785
+  },
+  {
+   "rank": 27,
+   "player": "Casper Ruud",
+   "points": 1739
+  },
+  {
+   "rank": 28,
+   "player": "Benoit Paire",
+   "points": 1738
+  },
+  {
+   "rank": 29,
+   "player": "Taylor Fritz",
+   "points": 1670
+  },
+  {
+   "rank": 30,
+   "player": "Ugo Humbert",
+   "points": 1646
+  }
+ ],
+ "ATP_2021": [
+  {
+   "rank": 1,
+   "player": "Novak Djokovic",
+   "points": 11540
+  },
+  {
+   "rank": 2,
+   "player": "Daniil Medvedev",
+   "points": 8640
+  },
+  {
+   "rank": 3,
+   "player": "Alexander Zverev",
+   "points": 7840
+  },
+  {
+   "rank": 4,
+   "player": "Stefanos Tsitsipas",
+   "points": 6540
+  },
+  {
+   "rank": 5,
+   "player": "Andrey Rublev",
+   "points": 5150
+  },
+  {
+   "rank": 6,
+   "player": "Rafael Nadal",
+   "points": 4875
+  },
+  {
+   "rank": 7,
+   "player": "Matteo Berrettini",
+   "points": 4568
+  },
+  {
+   "rank": 8,
+   "player": "Casper Ruud",
+   "points": 4160
+  },
+  {
+   "rank": 9,
+   "player": "Hubert Hurkacz",
+   "points": 3706
+  },
+  {
+   "rank": 10,
+   "player": "Jannik Sinner",
+   "points": 3350
+  },
+  {
+   "rank": 11,
+   "player": "Felix Auger-Aliassime",
+   "points": 3308
+  },
+  {
+   "rank": 12,
+   "player": "Cameron Norrie",
+   "points": 2945
+  },
+  {
+   "rank": 13,
+   "player": "Diego Schwartzman",
+   "points": 2625
+  },
+  {
+   "rank": 14,
+   "player": "Denis Shapovalov",
+   "points": 2475
+  },
+  {
+   "rank": 15,
+   "player": "Dominic Thiem",
+   "points": 2425
+  },
+  {
+   "rank": 16,
+   "player": "Roger Federer",
+   "points": 2385
+  },
+  {
+   "rank": 17,
+   "player": "Cristian Garin",
+   "points": 2353
+  },
+  {
+   "rank": 18,
+   "player": "Aslan Karatsev",
+   "points": 2351
+  },
+  {
+   "rank": 19,
+   "player": "Roberto Bautista Agut",
+   "points": 2260
+  },
+  {
+   "rank": 20,
+   "player": "Pablo Carreno Busta",
+   "points": 2230
+  },
+  {
+   "rank": 21,
+   "player": "Gael Monfils",
+   "points": 2158
+  },
+  {
+   "rank": 22,
+   "player": "Nikoloz Basilashvili",
+   "points": 2101
+  },
+  {
+   "rank": 23,
+   "player": "Taylor Fritz",
+   "points": 2050
+  },
+  {
+   "rank": 24,
+   "player": "John Isner",
+   "points": 1991
+  },
+  {
+   "rank": 25,
+   "player": "Daniel Evans",
+   "points": 1942
+  },
+  {
+   "rank": 26,
+   "player": "Reilly Opelka",
+   "points": 1936
+  },
+  {
+   "rank": 27,
+   "player": "Lorenzo Sonego",
+   "points": 1825
+  },
+  {
+   "rank": 28,
+   "player": "Grigor Dimitrov",
+   "points": 1801
+  },
+  {
+   "rank": 29,
+   "player": "Karen Khachanov",
+   "points": 1731
+  },
+  {
+   "rank": 30,
+   "player": "Marin Cilic",
+   "points": 1710
+  }
+ ],
+ "ATP_2022": [
+  {
+   "rank": 1,
+   "player": "Carlos Alcaraz",
+   "points": 6820
+  },
+  {
+   "rank": 2,
+   "player": "Rafael Nadal",
+   "points": 6020
+  },
+  {
+   "rank": 3,
+   "player": "Casper Ruud",
+   "points": 5820
+  },
+  {
+   "rank": 4,
+   "player": "Stefanos Tsitsipas",
+   "points": 5550
+  },
+  {
+   "rank": 5,
+   "player": "Novak Djokovic",
+   "points": 4820
+  },
+  {
+   "rank": 6,
+   "player": "Felix Auger-Aliassime",
+   "points": 4195
+  },
+  {
+   "rank": 7,
+   "player": "Daniil Medvedev",
+   "points": 4065
+  },
+  {
+   "rank": 8,
+   "player": "Andrey Rublev",
+   "points": 3930
+  },
+  {
+   "rank": 9,
+   "player": "Taylor Fritz",
+   "points": 3355
+  },
+  {
+   "rank": 10,
+   "player": "Hubert Hurkacz",
+   "points": 2905
+  },
+  {
+   "rank": 11,
+   "player": "Holger Rune",
+   "points": 2888
+  },
+  {
+   "rank": 12,
+   "player": "Alexander Zverev",
+   "points": 2700
+  },
+  {
+   "rank": 13,
+   "player": "Pablo Carreno Busta",
+   "points": 2495
+  },
+  {
+   "rank": 14,
+   "player": "Cameron Norrie",
+   "points": 2445
+  },
+  {
+   "rank": 15,
+   "player": "Jannik Sinner",
+   "points": 2410
+  },
+  {
+   "rank": 16,
+   "player": "Matteo Berrettini",
+   "points": 2375
+  },
+  {
+   "rank": 17,
+   "player": "Marin Cilic",
+   "points": 2105
+  },
+  {
+   "rank": 18,
+   "player": "Denis Shapovalov",
+   "points": 2075
+  },
+  {
+   "rank": 19,
+   "player": "Frances Tiafoe",
+   "points": 2000
+  },
+  {
+   "rank": 20,
+   "player": "Karen Khachanov",
+   "points": 1990
+  },
+  {
+   "rank": 21,
+   "player": "Roberto Bautista Agut",
+   "points": 1940
+  },
+  {
+   "rank": 22,
+   "player": "Nick Kyrgios",
+   "points": 1870
+  },
+  {
+   "rank": 23,
+   "player": "Lorenzo Musetti",
+   "points": 1865
+  },
+  {
+   "rank": 24,
+   "player": "Alex de Minaur",
+   "points": 1790
+  },
+  {
+   "rank": 25,
+   "player": "Diego Schwartzman",
+   "points": 1700
+  },
+  {
+   "rank": 26,
+   "player": "Borna Coric",
+   "points": 1685
+  },
+  {
+   "rank": 27,
+   "player": "Daniel Evans",
+   "points": 1585
+  },
+  {
+   "rank": 28,
+   "player": "Grigor Dimitrov",
+   "points": 1460
+  },
+  {
+   "rank": 29,
+   "player": "Miomir Kecmanovic",
+   "points": 1420
+  },
+  {
+   "rank": 30,
+   "player": "Francisco Cerundolo",
+   "points": 1395
+  }
+ ],
+ "ATP_2023": [
+  {
+   "rank": 1,
+   "player": "Novak Djokovic",
+   "points": 11245
+  },
+  {
+   "rank": 2,
+   "player": "Carlos Alcaraz",
+   "points": 8855
+  },
+  {
+   "rank": 3,
+   "player": "Daniil Medvedev",
+   "points": 7600
+  },
+  {
+   "rank": 4,
+   "player": "Jannik Sinner",
+   "points": 6490
+  },
+  {
+   "rank": 5,
+   "player": "Andrey Rublev",
+   "points": 4805
+  },
+  {
+   "rank": 6,
+   "player": "Stefanos Tsitsipas",
+   "points": 4235
+  },
+  {
+   "rank": 7,
+   "player": "Alexander Zverev",
+   "points": 3985
+  },
+  {
+   "rank": 8,
+   "player": "Holger Rune",
+   "points": 3660
+  },
+  {
+   "rank": 9,
+   "player": "Hubert Hurkacz",
+   "points": 3245
+  },
+  {
+   "rank": 10,
+   "player": "Taylor Fritz",
+   "points": 3100
+  },
+  {
+   "rank": 11,
+   "player": "Casper Ruud",
+   "points": 2825
+  },
+  {
+   "rank": 12,
+   "player": "Alex de Minaur",
+   "points": 2740
+  },
+  {
+   "rank": 13,
+   "player": "Tommy Paul",
+   "points": 2665
+  },
+  {
+   "rank": 14,
+   "player": "Grigor Dimitrov",
+   "points": 2570
+  },
+  {
+   "rank": 15,
+   "player": "Karen Khachanov",
+   "points": 2520
+  },
+  {
+   "rank": 16,
+   "player": "Frances Tiafoe",
+   "points": 2310
+  },
+  {
+   "rank": 17,
+   "player": "Ben Shelton",
+   "points": 2145
+  },
+  {
+   "rank": 18,
+   "player": "Cameron Norrie",
+   "points": 1940
+  },
+  {
+   "rank": 19,
+   "player": "Nicolas Jarry",
+   "points": 1810
+  },
+  {
+   "rank": 20,
+   "player": "Ugo Humbert",
+   "points": 1765
+  },
+  {
+   "rank": 21,
+   "player": "Francisco Cerundolo",
+   "points": 1760
+  },
+  {
+   "rank": 22,
+   "player": "Adrian Mannarino",
+   "points": 1755
+  },
+  {
+   "rank": 23,
+   "player": "Tallon Griekspoor",
+   "points": 1640
+  },
+  {
+   "rank": 24,
+   "player": "Sebastian Korda",
+   "points": 1530
+  },
+  {
+   "rank": 25,
+   "player": "Jan-Lennard Struff",
+   "points": 1522
+  },
+  {
+   "rank": 26,
+   "player": "Alejandro Davidovich Fokina",
+   "points": 1495
+  },
+  {
+   "rank": 27,
+   "player": "Lorenzo Musetti",
+   "points": 1470
+  },
+  {
+   "rank": 28,
+   "player": "Sebastian Baez",
+   "points": 1435
+  },
+  {
+   "rank": 29,
+   "player": "Felix Auger-Aliassime",
+   "points": 1425
+  },
+  {
+   "rank": 30,
+   "player": "Tomas Martin Etcheverry",
+   "points": 1375
+  }
+ ],
+ "ATP_2024": [
+  {
+   "rank": 1,
+   "player": "Jannik Sinner",
+   "points": 11830
+  },
+  {
+   "rank": 2,
+   "player": "Alexander Zverev",
+   "points": 7915
+  },
+  {
+   "rank": 3,
+   "player": "Carlos Alcaraz",
+   "points": 7010
+  },
+  {
+   "rank": 4,
+   "player": "Taylor Fritz",
+   "points": 5100
+  },
+  {
+   "rank": 5,
+   "player": "Daniil Medvedev",
+   "points": 5030
+  },
+  {
+   "rank": 6,
+   "player": "Casper Ruud",
+   "points": 4255
+  },
+  {
+   "rank": 7,
+   "player": "Novak Djokovic",
+   "points": 3910
+  },
+  {
+   "rank": 8,
+   "player": "Andrey Rublev",
+   "points": 3760
+  },
+  {
+   "rank": 9,
+   "player": "Alex de Minaur",
+   "points": 3745
+  },
+  {
+   "rank": 10,
+   "player": "Grigor Dimitrov",
+   "points": 3350
+  },
+  {
+   "rank": 11,
+   "player": "Stefanos Tsitsipas",
+   "points": 3165
+  },
+  {
+   "rank": 12,
+   "player": "Tommy Paul",
+   "points": 3145
+  },
+  {
+   "rank": 13,
+   "player": "Holger Rune",
+   "points": 3025
+  },
+  {
+   "rank": 14,
+   "player": "Ugo Humbert",
+   "points": 2765
+  },
+  {
+   "rank": 15,
+   "player": "Jack Draper",
+   "points": 2685
+  },
+  {
+   "rank": 16,
+   "player": "Hubert Hurkacz",
+   "points": 2640
+  },
+  {
+   "rank": 17,
+   "player": "Lorenzo Musetti",
+   "points": 2600
+  },
+  {
+   "rank": 18,
+   "player": "Frances Tiafoe",
+   "points": 2585
+  },
+  {
+   "rank": 19,
+   "player": "Karen Khachanov",
+   "points": 2410
+  },
+  {
+   "rank": 20,
+   "player": "Arthur Fils",
+   "points": 2355
+  },
+  {
+   "rank": 21,
+   "player": "Ben Shelton",
+   "points": 2330
+  },
+  {
+   "rank": 22,
+   "player": "Sebastian Korda",
+   "points": 1985
+  },
+  {
+   "rank": 23,
+   "player": "Alejandro Tabilo",
+   "points": 1943
+  },
+  {
+   "rank": 24,
+   "player": "Alexei Popyrin",
+   "points": 1865
+  },
+  {
+   "rank": 25,
+   "player": "Tomas Machac",
+   "points": 1758
+  },
+  {
+   "rank": 26,
+   "player": "Jordan Thompson",
+   "points": 1745
+  },
+  {
+   "rank": 27,
+   "player": "Sebastian Baez",
+   "points": 1690
+  },
+  {
+   "rank": 28,
+   "player": "Jiri Lehecka",
+   "points": 1660
+  },
+  {
+   "rank": 29,
+   "player": "Felix Auger-Aliassime",
+   "points": 1635
+  },
+  {
+   "rank": 30,
+   "player": "Francisco Cerundolo",
+   "points": 1620
+  }
+ ],
+ "ATP_2025": [
+  {
+   "rank": 1,
+   "player": "Carlos Alcaraz",
+   "points": 12050
+  },
+  {
+   "rank": 2,
+   "player": "Jannik Sinner",
+   "points": 11500
+  },
+  {
+   "rank": 3,
+   "player": "Alexander Zverev",
+   "points": 5160
+  },
+  {
+   "rank": 4,
+   "player": "Novak Djokovic",
+   "points": 4830
+  },
+  {
+   "rank": 5,
+   "player": "Felix Auger-Aliassime",
+   "points": 4245
+  },
+  {
+   "rank": 6,
+   "player": "Taylor Fritz",
+   "points": 4135
+  },
+  {
+   "rank": 7,
+   "player": "Alex de Minaur",
+   "points": 4135
+  },
+  {
+   "rank": 8,
+   "player": "Lorenzo Musetti",
+   "points": 4040
+  },
+  {
+   "rank": 9,
+   "player": "Ben Shelton",
+   "points": 3970
+  },
+  {
+   "rank": 10,
+   "player": "Jack Draper",
+   "points": 2990
+  },
+  {
+   "rank": 11,
+   "player": "Alexander Bublik",
+   "points": 2870
+  },
+  {
+   "rank": 12,
+   "player": "Casper Ruud",
+   "points": 2835
+  },
+  {
+   "rank": 13,
+   "player": "Daniil Medvedev",
+   "points": 2760
+  },
+  {
+   "rank": 14,
+   "player": "Alejandro Davidovich Fokina",
+   "points": 2635
+  },
+  {
+   "rank": 15,
+   "player": "Holger Rune",
+   "points": 2590
+  },
+  {
+   "rank": 16,
+   "player": "Andrey Rublev",
+   "points": 2520
+  },
+  {
+   "rank": 17,
+   "player": "Jiri Lehecka",
+   "points": 2325
+  },
+  {
+   "rank": 18,
+   "player": "Karen Khachanov",
+   "points": 2320
+  },
+  {
+   "rank": 19,
+   "player": "Jakub Mensik",
+   "points": 2180
+  },
+  {
+   "rank": 20,
+   "player": "Tommy Paul",
+   "points": 2100
+  },
+  {
+   "rank": 21,
+   "player": "Francisco Cerundolo",
+   "points": 2085
+  },
+  {
+   "rank": 22,
+   "player": "Flavio Cobolli",
+   "points": 2025
+  },
+  {
+   "rank": 23,
+   "player": "Denis Shapovalov",
+   "points": 1675
+  },
+  {
+   "rank": 24,
+   "player": "Joao Fonseca",
+   "points": 1635
+  },
+  {
+   "rank": 25,
+   "player": "Tallon Griekspoor",
+   "points": 1615
+  },
+  {
+   "rank": 26,
+   "player": "Luciano Darderi",
+   "points": 1609
+  },
+  {
+   "rank": 27,
+   "player": "Cameron Norrie",
+   "points": 1573
+  },
+  {
+   "rank": 28,
+   "player": "Learner Tien",
+   "points": 1550
+  },
+  {
+   "rank": 29,
+   "player": "Arthur Rinderknech",
+   "points": 1540
+  },
+  {
+   "rank": 30,
+   "player": "Frances Tiafoe",
+   "points": 1510
+  }
+ ],
+ "WTA_2015": [
+  {
+   "rank": 1,
+   "player": "Serena Williams",
+   "points": 9945
+  },
+  {
+   "rank": 2,
+   "player": "Simona Halep",
+   "points": 6060
+  },
+  {
+   "rank": 3,
+   "player": "Garbine Muguruza",
+   "points": 5200
+  },
+  {
+   "rank": 4,
+   "player": "Maria Sharapova",
+   "points": 5011
+  },
+  {
+   "rank": 5,
+   "player": "Agnieszka Radwanska",
+   "points": 4500
+  },
+  {
+   "rank": 6,
+   "player": "Petra Kvitova",
+   "points": 4220
+  },
+  {
+   "rank": 7,
+   "player": "Venus Williams",
+   "points": 3790
+  },
+  {
+   "rank": 8,
+   "player": "Flavia Pennetta",
+   "points": 3621
+  },
+  {
+   "rank": 9,
+   "player": "Lucie Safarova",
+   "points": 3590
+  },
+  {
+   "rank": 10,
+   "player": "Angelique Kerber",
+   "points": 3590
+  },
+  {
+   "rank": 11,
+   "player": "Karolina Pliskova",
+   "points": 3285
+  },
+  {
+   "rank": 12,
+   "player": "Timea Bacsinszky",
+   "points": 3133
+  },
+  {
+   "rank": 13,
+   "player": "Carla Suarez Navarro",
+   "points": 3090
+  },
+  {
+   "rank": 14,
+   "player": "Belinda Bencic",
+   "points": 2900
+  },
+  {
+   "rank": 15,
+   "player": "Roberta Vinci",
+   "points": 2785
+  },
+  {
+   "rank": 16,
+   "player": "Ana Ivanovic",
+   "points": 2645
+  },
+  {
+   "rank": 17,
+   "player": "Caroline Wozniacki",
+   "points": 2641
+  },
+  {
+   "rank": 18,
+   "player": "Madison Keys",
+   "points": 2600
+  },
+  {
+   "rank": 19,
+   "player": "Elina Svitolina",
+   "points": 2590
+  },
+  {
+   "rank": 20,
+   "player": "Sara Errani",
+   "points": 2525
+  },
+  {
+   "rank": 21,
+   "player": "Jelena Jankovic",
+   "points": 2445
+  },
+  {
+   "rank": 22,
+   "player": "Victoria Azarenka",
+   "points": 2276
+  },
+  {
+   "rank": 23,
+   "player": "Ekaterina Makarova",
+   "points": 2201
+  },
+  {
+   "rank": 24,
+   "player": "Andrea Petkovic",
+   "points": 2185
+  },
+  {
+   "rank": 25,
+   "player": "Svetlana Kuznetsova",
+   "points": 2006
+  },
+  {
+   "rank": 26,
+   "player": "Anna Karolina Schmiedlova",
+   "points": 1875
+  },
+  {
+   "rank": 27,
+   "player": "Samantha Stosur",
+   "points": 1865
+  },
+  {
+   "rank": 28,
+   "player": "Anastasia Pavlyuchenkova",
+   "points": 1840
+  },
+  {
+   "rank": 29,
+   "player": "Kristina Mladenovic",
+   "points": 1725
+  },
+  {
+   "rank": 30,
+   "player": "Sloane Stephens",
+   "points": 1715
+  }
+ ],
+ "WTA_2016": [
+  {
+   "rank": 1,
+   "player": "Angelique Kerber",
+   "points": 9080
+  },
+  {
+   "rank": 2,
+   "player": "Serena Williams",
+   "points": 7050
+  },
+  {
+   "rank": 3,
+   "player": "Agnieszka Radwanska",
+   "points": 5600
+  },
+  {
+   "rank": 4,
+   "player": "Simona Halep",
+   "points": 5228
+  },
+  {
+   "rank": 5,
+   "player": "Dominika Cibulkova",
+   "points": 4875
+  },
+  {
+   "rank": 6,
+   "player": "Karolina Pliskova",
+   "points": 4600
+  },
+  {
+   "rank": 7,
+   "player": "Garbine Muguruza",
+   "points": 4236
+  },
+  {
+   "rank": 8,
+   "player": "Madison Keys",
+   "points": 4137
+  },
+  {
+   "rank": 9,
+   "player": "Svetlana Kuznetsova",
+   "points": 4115
+  },
+  {
+   "rank": 10,
+   "player": "Johanna Konta",
+   "points": 3640
+  },
+  {
+   "rank": 11,
+   "player": "Petra Kvitova",
+   "points": 3485
+  },
+  {
+   "rank": 12,
+   "player": "Carla Suarez Navarro",
+   "points": 3070
+  },
+  {
+   "rank": 13,
+   "player": "Victoria Azarenka",
+   "points": 3061
+  },
+  {
+   "rank": 14,
+   "player": "Elina Svitolina",
+   "points": 2895
+  },
+  {
+   "rank": 15,
+   "player": "Timea Bacsinszky",
+   "points": 2347
+  },
+  {
+   "rank": 16,
+   "player": "Elena Vesnina",
+   "points": 2252
+  },
+  {
+   "rank": 17,
+   "player": "Venus Williams",
+   "points": 2240
+  },
+  {
+   "rank": 18,
+   "player": "Roberta Vinci",
+   "points": 2210
+  },
+  {
+   "rank": 19,
+   "player": "Caroline Wozniacki",
+   "points": 2185
+  },
+  {
+   "rank": 20,
+   "player": "Barbora Strycova",
+   "points": 2170
+  },
+  {
+   "rank": 21,
+   "player": "Samantha Stosur",
+   "points": 2115
+  },
+  {
+   "rank": 22,
+   "player": "Kiki Bertens",
+   "points": 1977
+  },
+  {
+   "rank": 23,
+   "player": "Shuai Zhang",
+   "points": 1860
+  },
+  {
+   "rank": 24,
+   "player": "Caroline Garcia",
+   "points": 1765
+  },
+  {
+   "rank": 25,
+   "player": "Daria Gavrilova",
+   "points": 1665
+  },
+  {
+   "rank": 26,
+   "player": "Daria Kasatkina",
+   "points": 1630
+  },
+  {
+   "rank": 27,
+   "player": "Anastasia Pavlyuchenkova",
+   "points": 1620
+  },
+  {
+   "rank": 28,
+   "player": "Timea Babos",
+   "points": 1575
+  },
+  {
+   "rank": 29,
+   "player": "Irina-Camelia Begu",
+   "points": 1531
+  },
+  {
+   "rank": 30,
+   "player": "Ekaterina Makarova",
+   "points": 1530
+  }
+ ],
+ "WTA_2017": [
+  {
+   "rank": 1,
+   "player": "Simona Halep",
+   "points": 6175
+  },
+  {
+   "rank": 2,
+   "player": "Garbine Muguruza",
+   "points": 6135
+  },
+  {
+   "rank": 3,
+   "player": "Caroline Wozniacki",
+   "points": 6015
+  },
+  {
+   "rank": 4,
+   "player": "Karolina Pliskova",
+   "points": 5730
+  },
+  {
+   "rank": 5,
+   "player": "Venus Williams",
+   "points": 5597
+  },
+  {
+   "rank": 6,
+   "player": "Elina Svitolina",
+   "points": 5500
+  },
+  {
+   "rank": 7,
+   "player": "Jelena Ostapenko",
+   "points": 5010
+  },
+  {
+   "rank": 8,
+   "player": "Caroline Garcia",
+   "points": 4385
+  },
+  {
+   "rank": 9,
+   "player": "Johanna Konta",
+   "points": 3610
+  },
+  {
+   "rank": 10,
+   "player": "Coco Vandeweghe",
+   "points": 3258
+  },
+  {
+   "rank": 11,
+   "player": "Kristina Mladenovic",
+   "points": 2935
+  },
+  {
+   "rank": 12,
+   "player": "Svetlana Kuznetsova",
+   "points": 2856
+  },
+  {
+   "rank": 13,
+   "player": "Sloane Stephens",
+   "points": 2802
+  },
+  {
+   "rank": 14,
+   "player": "Julia Goerges",
+   "points": 2655
+  },
+  {
+   "rank": 15,
+   "player": "Anastasia Pavlyuchenkova",
+   "points": 2485
+  },
+  {
+   "rank": 16,
+   "player": "Anastasija Sevastova",
+   "points": 2475
+  },
+  {
+   "rank": 17,
+   "player": "Ashleigh Barty",
+   "points": 2236
+  },
+  {
+   "rank": 18,
+   "player": "Elena Vesnina",
+   "points": 2220
+  },
+  {
+   "rank": 19,
+   "player": "Madison Keys",
+   "points": 2213
+  },
+  {
+   "rank": 20,
+   "player": "Magdalena Rybarikova",
+   "points": 2141
+  },
+  {
+   "rank": 21,
+   "player": "Angelique Kerber",
+   "points": 2121
+  },
+  {
+   "rank": 22,
+   "player": "Serena Williams",
+   "points": 2030
+  },
+  {
+   "rank": 23,
+   "player": "Barbora Strycova",
+   "points": 2025
+  },
+  {
+   "rank": 24,
+   "player": "Daria Kasatkina",
+   "points": 1950
+  },
+  {
+   "rank": 25,
+   "player": "Daria Gavrilova",
+   "points": 1865
+  },
+  {
+   "rank": 26,
+   "player": "Dominika Cibulkova",
+   "points": 1860
+  },
+  {
+   "rank": 27,
+   "player": "Shuai Peng",
+   "points": 1765
+  },
+  {
+   "rank": 28,
+   "player": "Agnieszka Radwanska",
+   "points": 1715
+  },
+  {
+   "rank": 29,
+   "player": "Petra Kvitova",
+   "points": 1653
+  },
+  {
+   "rank": 30,
+   "player": "Lucie Safarova",
+   "points": 1650
+  }
+ ],
+ "WTA_2018": [
+  {
+   "rank": 1,
+   "player": "Simona Halep",
+   "points": 6921
+  },
+  {
+   "rank": 2,
+   "player": "Angelique Kerber",
+   "points": 5875
+  },
+  {
+   "rank": 3,
+   "player": "Caroline Wozniacki",
+   "points": 5586
+  },
+  {
+   "rank": 4,
+   "player": "Elina Svitolina",
+   "points": 5350
+  },
+  {
+   "rank": 5,
+   "player": "Naomi Osaka",
+   "points": 5115
+  },
+  {
+   "rank": 6,
+   "player": "Sloane Stephens",
+   "points": 5023
+  },
+  {
+   "rank": 7,
+   "player": "Petra Kvitova",
+   "points": 4630
+  },
+  {
+   "rank": 8,
+   "player": "Karolina Pliskova",
+   "points": 4465
+  },
+  {
+   "rank": 9,
+   "player": "Kiki Bertens",
+   "points": 4335
+  },
+  {
+   "rank": 10,
+   "player": "Daria Kasatkina",
+   "points": 3415
+  },
+  {
+   "rank": 11,
+   "player": "Aryna Sabalenka",
+   "points": 3245
+  },
+  {
+   "rank": 12,
+   "player": "Anastasija Sevastova",
+   "points": 3240
+  },
+  {
+   "rank": 13,
+   "player": "Elise Mertens",
+   "points": 3165
+  },
+  {
+   "rank": 14,
+   "player": "Julia Goerges",
+   "points": 3055
+  },
+  {
+   "rank": 15,
+   "player": "Ashleigh Barty",
+   "points": 2985
+  },
+  {
+   "rank": 16,
+   "player": "Serena Williams",
+   "points": 2976
+  },
+  {
+   "rank": 17,
+   "player": "Madison Keys",
+   "points": 2976
+  },
+  {
+   "rank": 18,
+   "player": "Garbine Muguruza",
+   "points": 2910
+  },
+  {
+   "rank": 19,
+   "player": "Caroline Garcia",
+   "points": 2660
+  },
+  {
+   "rank": 20,
+   "player": "Qiang Wang",
+   "points": 2485
+  },
+  {
+   "rank": 21,
+   "player": "Anett Kontaveit",
+   "points": 2480
+  },
+  {
+   "rank": 22,
+   "player": "Jelena Ostapenko",
+   "points": 2362
+  },
+  {
+   "rank": 23,
+   "player": "Carla Suarez Navarro",
+   "points": 2153
+  },
+  {
+   "rank": 24,
+   "player": "Mihaela Buzarnescu",
+   "points": 1860
+  },
+  {
+   "rank": 25,
+   "player": "Dominika Cibulkova",
+   "points": 1805
+  },
+  {
+   "rank": 26,
+   "player": "Camila Giorgi",
+   "points": 1800
+  },
+  {
+   "rank": 27,
+   "player": "Lesia Tsurenko",
+   "points": 1755
+  },
+  {
+   "rank": 28,
+   "player": "Su-Wei Hsieh",
+   "points": 1640
+  },
+  {
+   "rank": 29,
+   "player": "Maria Sharapova",
+   "points": 1602
+  },
+  {
+   "rank": 30,
+   "player": "Aliaksandra Sasnovich",
+   "points": 1570
+  }
+ ],
+ "WTA_2019": [
+  {
+   "rank": 1,
+   "player": "Ashleigh Barty",
+   "points": 7851
+  },
+  {
+   "rank": 2,
+   "player": "Karolina Pliskova",
+   "points": 5940
+  },
+  {
+   "rank": 3,
+   "player": "Naomi Osaka",
+   "points": 5496
+  },
+  {
+   "rank": 4,
+   "player": "Simona Halep",
+   "points": 5462
+  },
+  {
+   "rank": 5,
+   "player": "Bianca Andreescu",
+   "points": 5192
+  },
+  {
+   "rank": 6,
+   "player": "Elina Svitolina",
+   "points": 5075
+  },
+  {
+   "rank": 7,
+   "player": "Petra Kvitova",
+   "points": 4776
+  },
+  {
+   "rank": 8,
+   "player": "Belinda Bencic",
+   "points": 4745
+  },
+  {
+   "rank": 9,
+   "player": "Kiki Bertens",
+   "points": 4245
+  },
+  {
+   "rank": 10,
+   "player": "Serena Williams",
+   "points": 3935
+  },
+  {
+   "rank": 11,
+   "player": "Aryna Sabalenka",
+   "points": 3120
+  },
+  {
+   "rank": 12,
+   "player": "Johanna Konta",
+   "points": 2879
+  },
+  {
+   "rank": 13,
+   "player": "Madison Keys",
+   "points": 2767
+  },
+  {
+   "rank": 14,
+   "player": "Sofia Kenin",
+   "points": 2740
+  },
+  {
+   "rank": 15,
+   "player": "Petra Martic",
+   "points": 2617
+  },
+  {
+   "rank": 16,
+   "player": "Marketa Vondrousova",
+   "points": 2390
+  },
+  {
+   "rank": 17,
+   "player": "Elise Mertens",
+   "points": 2290
+  },
+  {
+   "rank": 18,
+   "player": "Alison Riske Amritraj",
+   "points": 2210
+  },
+  {
+   "rank": 19,
+   "player": "Donna Vekic",
+   "points": 2205
+  },
+  {
+   "rank": 20,
+   "player": "Angelique Kerber",
+   "points": 2175
+  },
+  {
+   "rank": 21,
+   "player": "Karolina Muchova",
+   "points": 1864
+  },
+  {
+   "rank": 22,
+   "player": "Dayana Yastremska",
+   "points": 1825
+  },
+  {
+   "rank": 23,
+   "player": "Maria Sakkari",
+   "points": 1820
+  },
+  {
+   "rank": 24,
+   "player": "Amanda Anisimova",
+   "points": 1793
+  },
+  {
+   "rank": 25,
+   "player": "Sloane Stephens",
+   "points": 1737
+  },
+  {
+   "rank": 26,
+   "player": "Anett Kontaveit",
+   "points": 1645
+  },
+  {
+   "rank": 27,
+   "player": "Anastasija Sevastova",
+   "points": 1617
+  },
+  {
+   "rank": 28,
+   "player": "Julia Goerges",
+   "points": 1610
+  },
+  {
+   "rank": 29,
+   "player": "Wang Qiang",
+   "points": 1563
+  },
+  {
+   "rank": 30,
+   "player": "Anastasia Pavlyuchenkova",
+   "points": 1560
+  }
+ ],
+ "WTA_2020": [
+  {
+   "rank": 1,
+   "player": "Ashleigh Barty",
+   "points": 8717
+  },
+  {
+   "rank": 2,
+   "player": "Simona Halep",
+   "points": 7255
+  },
+  {
+   "rank": 3,
+   "player": "Naomi Osaka",
+   "points": 5780
+  },
+  {
+   "rank": 4,
+   "player": "Sofia Kenin",
+   "points": 5760
+  },
+  {
+   "rank": 5,
+   "player": "Elina Svitolina",
+   "points": 5260
+  },
+  {
+   "rank": 6,
+   "player": "Karolina Pliskova",
+   "points": 5205
+  },
+  {
+   "rank": 7,
+   "player": "Bianca Andreescu",
+   "points": 4555
+  },
+  {
+   "rank": 8,
+   "player": "Petra Kvitova",
+   "points": 4516
+  },
+  {
+   "rank": 9,
+   "player": "Kiki Bertens",
+   "points": 4505
+  },
+  {
+   "rank": 10,
+   "player": "Aryna Sabalenka",
+   "points": 4220
+  },
+  {
+   "rank": 11,
+   "player": "Serena Williams",
+   "points": 4080
+  },
+  {
+   "rank": 12,
+   "player": "Belinda Bencic",
+   "points": 4010
+  },
+  {
+   "rank": 13,
+   "player": "Victoria Azarenka",
+   "points": 3426
+  },
+  {
+   "rank": 14,
+   "player": "Johanna Konta",
+   "points": 3152
+  },
+  {
+   "rank": 15,
+   "player": "Garbine Muguruza",
+   "points": 3016
+  },
+  {
+   "rank": 16,
+   "player": "Madison Keys",
+   "points": 2962
+  },
+  {
+   "rank": 17,
+   "player": "Iga Swiatek",
+   "points": 2960
+  },
+  {
+   "rank": 18,
+   "player": "Petra Martic",
+   "points": 2850
+  },
+  {
+   "rank": 19,
+   "player": "Elena Rybakina",
+   "points": 2696
+  },
+  {
+   "rank": 20,
+   "player": "Elise Mertens",
+   "points": 2650
+  },
+  {
+   "rank": 21,
+   "player": "Marketa Vondrousova",
+   "points": 2538
+  },
+  {
+   "rank": 22,
+   "player": "Maria Sakkari",
+   "points": 2405
+  },
+  {
+   "rank": 23,
+   "player": "Anett Kontaveit",
+   "points": 2330
+  },
+  {
+   "rank": 24,
+   "player": "Jennifer Brady",
+   "points": 2320
+  },
+  {
+   "rank": 25,
+   "player": "Angelique Kerber",
+   "points": 2271
+  },
+  {
+   "rank": 26,
+   "player": "Alison Riske Amritraj",
+   "points": 2256
+  },
+  {
+   "rank": 27,
+   "player": "Karolina Muchova",
+   "points": 2036
+  },
+  {
+   "rank": 28,
+   "player": "Yulia Putintseva",
+   "points": 2015
+  },
+  {
+   "rank": 29,
+   "player": "Dayana Yastremska",
+   "points": 1925
+  },
+  {
+   "rank": 30,
+   "player": "Amanda Anisimova",
+   "points": 1905
+  }
+ ],
+ "WTA_2021": [
+  {
+   "rank": 1,
+   "player": "Ashleigh Barty",
+   "points": 7582
+  },
+  {
+   "rank": 2,
+   "player": "Aryna Sabalenka",
+   "points": 6380
+  },
+  {
+   "rank": 3,
+   "player": "Garbine Muguruza",
+   "points": 5685
+  },
+  {
+   "rank": 4,
+   "player": "Karolina Pliskova",
+   "points": 5135
+  },
+  {
+   "rank": 5,
+   "player": "Barbora Krejcikova",
+   "points": 5008
+  },
+  {
+   "rank": 6,
+   "player": "Maria Sakkari",
+   "points": 4385
+  },
+  {
+   "rank": 7,
+   "player": "Anett Kontaveit",
+   "points": 4351
+  },
+  {
+   "rank": 8,
+   "player": "Paula Badosa",
+   "points": 3849
+  },
+  {
+   "rank": 9,
+   "player": "Iga Swiatek",
+   "points": 3786
+  },
+  {
+   "rank": 10,
+   "player": "Ons Jabeur",
+   "points": 3455
+  },
+  {
+   "rank": 11,
+   "player": "Anastasia Pavlyuchenkova",
+   "points": 3076
+  },
+  {
+   "rank": 12,
+   "player": "Sofia Kenin",
+   "points": 2971
+  },
+  {
+   "rank": 13,
+   "player": "Naomi Osaka",
+   "points": 2956
+  },
+  {
+   "rank": 14,
+   "player": "Elena Rybakina",
+   "points": 2855
+  },
+  {
+   "rank": 15,
+   "player": "Elina Svitolina",
+   "points": 2726
+  },
+  {
+   "rank": 16,
+   "player": "Angelique Kerber",
+   "points": 2671
+  },
+  {
+   "rank": 17,
+   "player": "Petra Kvitova",
+   "points": 2660
+  },
+  {
+   "rank": 18,
+   "player": "Jessica Pegula",
+   "points": 2650
+  },
+  {
+   "rank": 19,
+   "player": "Emma Raducanu",
+   "points": 2595
+  },
+  {
+   "rank": 20,
+   "player": "Simona Halep",
+   "points": 2576
+  },
+  {
+   "rank": 21,
+   "player": "Elise Mertens",
+   "points": 2570
+  },
+  {
+   "rank": 22,
+   "player": "Coco Gauff",
+   "points": 2550
+  },
+  {
+   "rank": 23,
+   "player": "Belinda Bencic",
+   "points": 2415
+  },
+  {
+   "rank": 24,
+   "player": "Leylah Fernandez",
+   "points": 2284
+  },
+  {
+   "rank": 25,
+   "player": "Jennifer Brady",
+   "points": 2264
+  },
+  {
+   "rank": 26,
+   "player": "Daria Kasatkina",
+   "points": 2180
+  },
+  {
+   "rank": 27,
+   "player": "Victoria Azarenka",
+   "points": 2166
+  },
+  {
+   "rank": 28,
+   "player": "Jelena Ostapenko",
+   "points": 2060
+  },
+  {
+   "rank": 29,
+   "player": "Danielle Collins",
+   "points": 2036
+  },
+  {
+   "rank": 30,
+   "player": "Tamara Zidansek",
+   "points": 1876
+  }
+ ],
+ "WTA_2022": [
+  {
+   "rank": 1,
+   "player": "Iga Swiatek",
+   "points": 11085
+  },
+  {
+   "rank": 2,
+   "player": "Ons Jabeur",
+   "points": 5055
+  },
+  {
+   "rank": 3,
+   "player": "Jessica Pegula",
+   "points": 4691
+  },
+  {
+   "rank": 4,
+   "player": "Caroline Garcia",
+   "points": 4375
+  },
+  {
+   "rank": 5,
+   "player": "Aryna Sabalenka",
+   "points": 3925
+  },
+  {
+   "rank": 6,
+   "player": "Maria Sakkari",
+   "points": 3871
+  },
+  {
+   "rank": 7,
+   "player": "Coco Gauff",
+   "points": 3646
+  },
+  {
+   "rank": 8,
+   "player": "Daria Kasatkina",
+   "points": 3435
+  },
+  {
+   "rank": 9,
+   "player": "Veronika Kudermetova",
+   "points": 2795
+  },
+  {
+   "rank": 10,
+   "player": "Simona Halep",
+   "points": 2661
+  },
+  {
+   "rank": 11,
+   "player": "Madison Keys",
+   "points": 2417
+  },
+  {
+   "rank": 12,
+   "player": "Belinda Bencic",
+   "points": 2365
+  },
+  {
+   "rank": 13,
+   "player": "Paula Badosa",
+   "points": 2363
+  },
+  {
+   "rank": 14,
+   "player": "Danielle Collins",
+   "points": 2292
+  },
+  {
+   "rank": 15,
+   "player": "Beatriz Haddad Maia",
+   "points": 2215
+  },
+  {
+   "rank": 16,
+   "player": "Petra Kvitova",
+   "points": 2097
+  },
+  {
+   "rank": 17,
+   "player": "Anett Kontaveit",
+   "points": 2093
+  },
+  {
+   "rank": 18,
+   "player": "Jelena Ostapenko",
+   "points": 1986
+  },
+  {
+   "rank": 19,
+   "player": "Ekaterina Alexandrova",
+   "points": 1910
+  },
+  {
+   "rank": 20,
+   "player": "Liudmila Samsonova",
+   "points": 1910
+  },
+  {
+   "rank": 21,
+   "player": "Barbora Krejcikova",
+   "points": 1877
+  },
+  {
+   "rank": 22,
+   "player": "Elena Rybakina",
+   "points": 1860
+  },
+  {
+   "rank": 23,
+   "player": "Amanda Anisimova",
+   "points": 1746
+  },
+  {
+   "rank": 24,
+   "player": "Shuai Zhang",
+   "points": 1665
+  },
+  {
+   "rank": 25,
+   "player": "Qinwen Zheng",
+   "points": 1642
+  },
+  {
+   "rank": 26,
+   "player": "Marie Bouzkova",
+   "points": 1607
+  },
+  {
+   "rank": 27,
+   "player": "Victoria Azarenka",
+   "points": 1597
+  },
+  {
+   "rank": 28,
+   "player": "Martina Trevisan",
+   "points": 1567
+  },
+  {
+   "rank": 29,
+   "player": "Elise Mertens",
+   "points": 1475
+  },
+  {
+   "rank": 30,
+   "player": "Kaia Kanepi",
+   "points": 1433
+  }
+ ],
+ "WTA_2023": [
+  {
+   "rank": 1,
+   "player": "Iga Swiatek",
+   "points": 9295
+  },
+  {
+   "rank": 2,
+   "player": "Aryna Sabalenka",
+   "points": 9050
+  },
+  {
+   "rank": 3,
+   "player": "Coco Gauff",
+   "points": 6580
+  },
+  {
+   "rank": 4,
+   "player": "Elena Rybakina",
+   "points": 6365
+  },
+  {
+   "rank": 5,
+   "player": "Jessica Pegula",
+   "points": 5975
+  },
+  {
+   "rank": 6,
+   "player": "Ons Jabeur",
+   "points": 4195
+  },
+  {
+   "rank": 7,
+   "player": "Marketa Vondrousova",
+   "points": 4075
+  },
+  {
+   "rank": 8,
+   "player": "Karolina Muchova",
+   "points": 3651
+  },
+  {
+   "rank": 9,
+   "player": "Maria Sakkari",
+   "points": 3620
+  },
+  {
+   "rank": 10,
+   "player": "Barbora Krejcikova",
+   "points": 2880
+  },
+  {
+   "rank": 11,
+   "player": "Beatriz Haddad Maia",
+   "points": 2855
+  },
+  {
+   "rank": 12,
+   "player": "Madison Keys",
+   "points": 2816
+  },
+  {
+   "rank": 13,
+   "player": "Jelena Ostapenko",
+   "points": 2720
+  },
+  {
+   "rank": 14,
+   "player": "Petra Kvitova",
+   "points": 2660
+  },
+  {
+   "rank": 15,
+   "player": "Zheng Qinwen",
+   "points": 2660
+  },
+  {
+   "rank": 16,
+   "player": "Liudmila Samsonova",
+   "points": 2650
+  },
+  {
+   "rank": 17,
+   "player": "Belinda Bencic",
+   "points": 2570
+  },
+  {
+   "rank": 18,
+   "player": "Daria Kasatkina",
+   "points": 2550
+  },
+  {
+   "rank": 19,
+   "player": "Veronika Kudermetova",
+   "points": 2520
+  },
+  {
+   "rank": 20,
+   "player": "Caroline Garcia",
+   "points": 2095
+  },
+  {
+   "rank": 21,
+   "player": "Ekaterina Alexandrova",
+   "points": 2035
+  },
+  {
+   "rank": 22,
+   "player": "Victoria Azarenka",
+   "points": 1905
+  },
+  {
+   "rank": 23,
+   "player": "Donna Vekic",
+   "points": 1865
+  },
+  {
+   "rank": 24,
+   "player": "Magda Linette",
+   "points": 1861
+  },
+  {
+   "rank": 25,
+   "player": "Elina Svitolina",
+   "points": 1809
+  },
+  {
+   "rank": 26,
+   "player": "Sorana Cirstea",
+   "points": 1765
+  },
+  {
+   "rank": 27,
+   "player": "Anastasia Potapova",
+   "points": 1588
+  },
+  {
+   "rank": 28,
+   "player": "Anhelina Kalinina",
+   "points": 1570
+  },
+  {
+   "rank": 29,
+   "player": "Elise Mertens",
+   "points": 1495
+  },
+  {
+   "rank": 30,
+   "player": "Jasmine Paolini",
+   "points": 1435
+  }
+ ],
+ "WTA_2024": [
+  {
+   "rank": 1,
+   "player": "Aryna Sabalenka",
+   "points": 9416
+  },
+  {
+   "rank": 2,
+   "player": "Iga Swiatek",
+   "points": 8370
+  },
+  {
+   "rank": 3,
+   "player": "Coco Gauff",
+   "points": 6530
+  },
+  {
+   "rank": 4,
+   "player": "Jasmine Paolini",
+   "points": 5344
+  },
+  {
+   "rank": 5,
+   "player": "Qinwen Zheng",
+   "points": 5340
+  },
+  {
+   "rank": 6,
+   "player": "Elena Rybakina",
+   "points": 5171
+  },
+  {
+   "rank": 7,
+   "player": "Jessica Pegula",
+   "points": 4705
+  },
+  {
+   "rank": 8,
+   "player": "Emma Navarro",
+   "points": 3589
+  },
+  {
+   "rank": 9,
+   "player": "Daria Kasatkina",
+   "points": 3368
+  },
+  {
+   "rank": 10,
+   "player": "Barbora Krejcikova",
+   "points": 3214
+  },
+  {
+   "rank": 11,
+   "player": "Danielle Collins",
+   "points": 3178
+  },
+  {
+   "rank": 12,
+   "player": "Paula Badosa",
+   "points": 2908
+  },
+  {
+   "rank": 13,
+   "player": "Diana Shnaider",
+   "points": 2895
+  },
+  {
+   "rank": 14,
+   "player": "Anna Kalinskaya",
+   "points": 2743
+  },
+  {
+   "rank": 15,
+   "player": "Jelena Ostapenko",
+   "points": 2588
+  },
+  {
+   "rank": 16,
+   "player": "Mirra Andreeva",
+   "points": 2578
+  },
+  {
+   "rank": 17,
+   "player": "Beatriz Haddad Maia",
+   "points": 2554
+  },
+  {
+   "rank": 18,
+   "player": "Marta Kostyuk",
+   "points": 2493
+  },
+  {
+   "rank": 19,
+   "player": "Donna Vekic",
+   "points": 2258
+  },
+  {
+   "rank": 20,
+   "player": "Victoria Azarenka",
+   "points": 2127
+  },
+  {
+   "rank": 21,
+   "player": "Madison Keys",
+   "points": 2126
+  },
+  {
+   "rank": 22,
+   "player": "Karolina Muchova",
+   "points": 1971
+  },
+  {
+   "rank": 23,
+   "player": "Elina Svitolina",
+   "points": 1942
+  },
+  {
+   "rank": 24,
+   "player": "Katie Boulter",
+   "points": 1931
+  },
+  {
+   "rank": 25,
+   "player": "Magdalena Frech",
+   "points": 1928
+  },
+  {
+   "rank": 26,
+   "player": "Linda Noskova",
+   "points": 1913
+  },
+  {
+   "rank": 27,
+   "player": "Liudmila Samsonova",
+   "points": 1885
+  },
+  {
+   "rank": 28,
+   "player": "Ekaterina Alexandrova",
+   "points": 1848
+  },
+  {
+   "rank": 29,
+   "player": "Yulia Putintseva",
+   "points": 1844
+  },
+  {
+   "rank": 30,
+   "player": "Anastasia Pavlyuchenkova",
+   "points": 1807
+  }
+ ],
+ "WTA_2025": [
+  {
+   "rank": 1,
+   "player": "Aryna Sabalenka",
+   "points": 10870
+  },
+  {
+   "rank": 2,
+   "player": "Iga Swiatek",
+   "points": 8395
+  },
+  {
+   "rank": 3,
+   "player": "Coco Gauff",
+   "points": 6763
+  },
+  {
+   "rank": 4,
+   "player": "Amanda Anisimova",
+   "points": 6287
+  },
+  {
+   "rank": 5,
+   "player": "Elena Rybakina",
+   "points": 5850
+  },
+  {
+   "rank": 6,
+   "player": "Jessica Pegula",
+   "points": 5583
+  },
+  {
+   "rank": 7,
+   "player": "Madison Keys",
+   "points": 4335
+  },
+  {
+   "rank": 8,
+   "player": "Jasmine Paolini",
+   "points": 4325
+  },
+  {
+   "rank": 9,
+   "player": "Mirra Andreeva",
+   "points": 4319
+  },
+  {
+   "rank": 10,
+   "player": "Ekaterina Alexandrova",
+   "points": 3375
+  },
+  {
+   "rank": 11,
+   "player": "Belinda Bencic",
+   "points": 3168
+  },
+  {
+   "rank": 12,
+   "player": "Clara Tauson",
+   "points": 2770
+  },
+  {
+   "rank": 13,
+   "player": "Linda Noskova",
+   "points": 2641
+  },
+  {
+   "rank": 14,
+   "player": "Elina Svitolina",
+   "points": 2606
+  },
+  {
+   "rank": 15,
+   "player": "Emma Navarro",
+   "points": 2515
+  },
+  {
+   "rank": 16,
+   "player": "Naomi Osaka",
+   "points": 2487
+  },
+  {
+   "rank": 17,
+   "player": "Liudmila Samsonova",
+   "points": 2209
+  },
+  {
+   "rank": 18,
+   "player": "Victoria Mboko",
+   "points": 2157
+  },
+  {
+   "rank": 19,
+   "player": "Karolina Muchova",
+   "points": 1996
+  },
+  {
+   "rank": 20,
+   "player": "Elise Mertens",
+   "points": 1969
+  },
+  {
+   "rank": 21,
+   "player": "Diana Shnaider",
+   "points": 1866
+  },
+  {
+   "rank": 22,
+   "player": "Leylah Fernandez",
+   "points": 1821
+  },
+  {
+   "rank": 23,
+   "player": "Jelena Ostapenko",
+   "points": 1800
+  },
+  {
+   "rank": 24,
+   "player": "Qinwen Zheng",
+   "points": 1728
+  },
+  {
+   "rank": 25,
+   "player": "Paula Badosa",
+   "points": 1676
+  },
+  {
+   "rank": 26,
+   "player": "Marta Kostyuk",
+   "points": 1659
+  },
+  {
+   "rank": 27,
+   "player": "Dayana Yastremska",
+   "points": 1604
+  },
+  {
+   "rank": 28,
+   "player": "Sofia Kenin",
+   "points": 1589
+  },
+  {
+   "rank": 29,
+   "player": "Emma Raducanu",
+   "points": 1563
+  },
+  {
+   "rank": 30,
+   "player": "Veronika Kudermetova",
+   "points": 1558
+  }
+ ]
+}
