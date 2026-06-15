@@ -1,5 +1,8 @@
 # Elo formula — one-page reference
 
+> **Canonical summary: [docs/issue-25-findings.md](issue-25-findings.md).** This file is kept as the detailed investigation log for issue #25; some intermediate values below were later corrected — trust the canonical summary where they differ.
+
+
 What Tennis Abstract's (TA) singles Elo actually does, reverse-engineered from TA's own published boards
 (2026-06-15 board-replay — full record [`elo-investigation-findings.md`](elo-investigation-findings.md) §0,
 rationale [`elo-methodology.md`](elo-methodology.md)). **CONFIRMED** items reproduce TA byte-exact in clean

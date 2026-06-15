@@ -1,5 +1,8 @@
 # ATP/WTA points-earned reproduction (issue #25, Phase 2 — 2026-06-15)
 
+> **Canonical summary: [docs/issue-25-findings.md](issue-25-findings.md).** This file is kept as the detailed investigation log for issue #25; some intermediate values below were later corrected — trust the canonical summary where they differ.
+
+
 Companion to [`yelo-reproduction.md`](yelo-reproduction.md). Reproduces the official ATP/WTA ranking points
 each player **earned per tournament** (tier + round reached), summed per calendar year, from Jeff Sackmann's
 match CSVs. Tooling: [`ingest/points/`](../ingest/points/) (`validate.ts`, `round-extraction.ts`); authoritative

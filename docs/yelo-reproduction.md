@@ -1,5 +1,8 @@
 # Season yElo — reverse-engineered & reproduced (issue #25, 2026-06-15)
 
+> **Canonical summary: [docs/issue-25-findings.md](issue-25-findings.md).** This file is kept as the detailed investigation log for issue #25; some intermediate values below were later corrected — trust the canonical summary where they differ.
+
+
 Companion to [`elo-investigation-findings.md`](elo-investigation-findings.md). This documents Tennis
 Abstract's **season "yElo"** boards (`{atp,wta}_season_yelo_ratings.html`), the definitive model behind them
 (from Sackmann's own writing + the archived boards), our reproduction, and the data/tooling.

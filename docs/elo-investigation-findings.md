@@ -1,5 +1,8 @@
 # Elo Investigation — Full Findings Log (issue #25)
 
+> **Canonical summary: [docs/issue-25-findings.md](issue-25-findings.md).** This file is kept as the detailed investigation log for issue #25; some intermediate values below were later corrected — trust the canonical summary where they differ.
+
+
 This is the durable research record behind TennisArc's Elo engine. For the one-page formula see
 [`elo-formula.md`](elo-formula.md); for the concise "how it works," see
 [`elo-methodology.md`](elo-methodology.md). This document captures **everything investigated** — verified
