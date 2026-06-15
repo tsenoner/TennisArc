@@ -1,6 +1,7 @@
 # Elo Investigation — Full Findings Log (issue #25)
 
-This is the durable research record behind TennisArc's Elo engine. For the concise "how it works," see
+This is the durable research record behind TennisArc's Elo engine. For the one-page formula see
+[`elo-formula.md`](elo-formula.md); for the concise "how it works," see
 [`elo-methodology.md`](elo-methodology.md). This document captures **everything investigated** — verified
 parameters, empirical experiments, dead-ends we tried and rejected, and the bounded limitations — so the
 reasoning isn't lost.

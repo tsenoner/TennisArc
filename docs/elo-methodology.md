@@ -1,5 +1,7 @@
 # Elo methodology
 
+> **Just want the math?** See the one-page [`elo-formula.md`](elo-formula.md).
+
 TennisArc ships surface-aware Elo on every player, recomputed from [Jeff Sackmann's](https://github.com/JeffSackmann) match CSVs and **frozen at each slam's start date** (a 2016 draw shows 2016 Elo, not today's). The engine lives in `ingest/historical-elo.ts`; the per-tour fitted parameters in `ingest/elo-config.ts`; the calibration harness in `ingest/calibrate-elo.ts`; the regression guard in `ingest/historical-elo.fixture.test.ts`.
 
 The goal is to reproduce [Tennis Abstract's published board](https://tennisabstract.com/reports/atp_elo_ratings.html) as closely as public data allows. This investigation (issue #25, 2026-06-14) verified TA's methodology against Sackmann's own blog/code and **measured** the result against the live board.
