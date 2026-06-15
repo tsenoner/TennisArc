@@ -15,7 +15,7 @@
 //   npx tsx ingest/elo-reverse/yelo-fit.ts ATP --pgrid    # K/D/seed grid
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadMatches, nameIndex, fullKey, keepForElo, roundRank, type Match } from "./lib";
+import { loadMatches, nameIndex, fullKey, keepForElo, roundRank, dayNum, type Match } from "./lib";
 import { parseBoard } from "./parse-boards";
 import type { YeloBoard } from "./parse-yelo";
 
@@ -41,10 +41,14 @@ const { keyToId } = nameIndex(allMatches);
 // So challenger/ITF QUALIFYING is NOT counted (only G/M/A/F qualifying is). --allqual disables this test.
 // "Tour level" (where qualifying counts): ATP G/M/A/F, WTA G/PM/P/I/F. Challenger (C) + ITF (numeric)
 // qualifying is NOT counted; their MAIN draw is.
-const TOUR = new Set(tour === "ATP" ? ["G", "M", "A", "F"] : ["G", "PM", "P", "I", "F"]);
+// WTA additionally counts WTA-125 (level C) QUALIFYING — verified against the boards (e.g. Canberra-125 quallies
+// reconcile only when counted). ATP does NOT count challenger (C) qualifying (Karol's TA page: yElo 21 = 57
+// chall − 36 quallies). Neither tour counts numeric-ITF (W50/W75/W100) qualifying. So the set below lists the
+// levels whose QUALIFYING counts; everything else's qualifying is dropped.
+const TOUR = new Set(tour === "ATP" ? ["G", "M", "A", "F"] : ["G", "PM", "P", "I", "F", "C"]);
 const isQual = (round: string): boolean => /^Q[1-4]$/.test(round); // Q1/Q2/Q3 — NOT QF (quarterfinal)
 const yeloScope = (m: Match): boolean =>
-  !(isQual(m.round) && !TOUR.has(m.level)); // drop challenger/ITF qualifying; keep tour-level qualifying
+  !(isQual(m.round) && !TOUR.has(m.level)); // drop ITF (+ ATP challenger) qualifying; keep tour-level (+WTA-125) qualifying
 const ALLQUAL = process.argv.includes("--allqual");
 const counted = allMatches
   .filter((m) => keepForElo(m) && (ALLQUAL || yeloScope(m)))
@@ -70,6 +74,40 @@ function loadFullEloBoards(): { lastUpdate: number; overall: Map<string, number>
     });
 }
 const FULL_BOARDS = ANCHOR ? loadFullEloBoards() : [];
+
+/** Opponent's "actual rating at the time" (Sackmann's phrase), estimated by LINEARLY INTERPOLATING the
+ *  opponent's full-Elo between the two published boards that bracket the match date and that both list them.
+ *
+ *  Why interpolate rather than read the nearest-PRIOR board: a frozen prior-board value is up to ~30 days stale,
+ *  and through the season opponents CLIMB, so a target's later matches face opponents whose true rating is above
+ *  their last published board → the target is under-credited and the error accumulates (a negative bias that is
+ *  ~0 in January and grows to ~−11 by November, insensitive to D/K). Interpolation tracks the climb between
+ *  weekly captures and ~halves that bias across every board (verified: ATP/WTA med-of-medians 8.6/9.9 → 7.0/8.5,
+ *  byte-exact players ~+50%, and — because it only changes the opponent RATING, never the counted match set —
+ *  it cannot flip any W/L-exact player). Reading opponents straight off the board (not a forward Elo pass) is
+ *  what first made Alcaraz byte-exact (2124.4 vs 2124); interpolation refines the between-capture estimate.
+ *
+ *  Residual after this: non-linear title-run jumps (50+ Elo in days) can't be reproduced by linear interpolation
+ *  between weekly boards — a hard data-granularity limit, not a model error. Players below the board's display
+ *  floor (~1100, mostly deep ITF/Challenger) are on no board → fall back to the anchored forward-pass timeline
+ *  (tlSeed 1500 is the least-biased there — those opponents are mid-strength ~1400, not weak-near-floor). */
+function oppRatingAt(oppId: string, date: number, fallback: number): number {
+  if (!ANCHOR) return fallback;
+  let pi = -1, ni = -1;
+  for (let i = 0; i < FULL_BOARDS.length; i++) {
+    if (!FULL_BOARDS[i].overall.has(oppId)) continue;
+    if (FULL_BOARDS[i].lastUpdate <= date) pi = i;
+    else { ni = i; break; }
+  }
+  const pv = pi >= 0 ? FULL_BOARDS[pi].overall.get(oppId)! : undefined;
+  const nv = ni >= 0 ? FULL_BOARDS[ni].overall.get(oppId)! : undefined;
+  if (pv !== undefined && nv !== undefined) {
+    const t0 = dayNum(FULL_BOARDS[pi].lastUpdate), t1 = dayNum(FULL_BOARDS[ni].lastUpdate);
+    const f = Math.max(0, Math.min(1, (dayNum(date) - t0) / (t1 - t0)));
+    return pv + f * (nv - pv);
+  }
+  return pv ?? nv ?? fallback; // single-side carry-forward/back, else off-board → timeline fallback
+}
 
 /** PASS 1 — full-Elo overall timeline. Forward Elo over all counted matches (career n, both sides update);
  *  when ANCHOR, re-sync every board-listed player to TA's published overall as each board date is passed,
@@ -119,7 +157,8 @@ function yeloFor(id: string, year: number, asOf: number, cfg: Cfg, tl = TL): St 
   let yelo = cfg.seed, n = 0, wins = 0, losses = 0;
   for (const m of ms) {
     const isW = m.winnerId === id;
-    const oppReal = isW ? tl.lBefore.get(m.idx)! : tl.wBefore.get(m.idx)!;
+    const oppId = isW ? m.loserId : m.winnerId;
+    const oppReal = oppRatingAt(oppId, m.date, isW ? tl.lBefore.get(m.idx)! : tl.wBefore.get(m.idx)!);
     const e = winP(yelo, oppReal, cfg.D);
     yelo += kOf(n, cfg) * ((isW ? 1 : 0) - e);
     n++; if (isW) wins++; else losses++;

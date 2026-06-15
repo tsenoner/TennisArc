@@ -31,66 +31,96 @@ strength is the whole point.
 
 ## Inclusion scope (verified against the boards + TA player pages)
 
-Same competitive scope as the full board, with one sharp extra rule found here:
-
 - **Counted:** tour-level main draw (ATP G/M/A/F, WTA G/PM/P/I/F) + **tour-level qualifying** +
-  **Challenger / WTA-125 MAIN DRAW** (level `C`) + **ITF $50K+ main draw**.
-- **NOT counted:** **Challenger / ITF qualifying** (only *tour-level* qualifying counts), walkovers &
-  retirements (no winner credit), sub-$50K ITF, and (thin-sample) Olympics.
+  **Challenger / WTA-125 MAIN DRAW** (level `C`) + **ITF $50K+ main draw** + **retirements** (see below).
+- **WTA also counts WTA-125 (level `C`) QUALIFYING; ATP does NOT count Challenger qualifying.** This tour
+  asymmetry was missed at first (it's the second-largest W/L source). For ATP it's provable from Milos Karol's
+  2025 player page (57 Challenger matches, 36 qualifying → board shows 9–12 = 21 = 57 − 36, *main draw only*).
+  For WTA the 125 quallies reconcile only when counted (e.g. Canberra-125 Q rows). **Neither tour counts
+  numeric-ITF (W50/W75/W100) qualifying** — adding it regresses ~120 players per 2024 WTA board (adversarially
+  verified). So: drop a qualifying match only when its level is neither tour-level nor (WTA) `C`.
+- **Retirements / defaults COUNT; only pure walkovers don't.** The discriminator is simply *were any games
+  played* — i.e. does the score string contain a digit. `6-3 4-6 2-1 RET`, `… DEF`, `… ABD` are contested and
+  have a winner → counted; `W/O` / `Walkover` / empty → dropped. **Proven by Djokovic's 2026 Australian Open:**
+  his yElo board shows **5-1**, which requires his QF win over Musetti's `RET`; his R16 `W/O` over Mensik is
+  *not* counted. This single rule took the latest ATP board from 71% → **100% W/L-exact**. (Earlier full-board
+  notes that lumped "RET/WO don't count" were conflating the two — only walkovers are excluded.)
+- **NOT counted:** Challenger/ITF *qualifying* (except WTA-125 qual), pure walkovers, sub-$50K ITF, Olympics.
 - A season is attributed by a tournament's **end year**, so late-December season-openers (United Cup,
   Brisbane, Hong Kong) count in the **new** year, as TA does.
 
-The challenger-qualifying exclusion was decisive and is provable from TA's own player page: Milos Karol's 2025
-page lists 57 Challenger matches (36 of them qualifying); his yElo board shows **9–12 = 21 = 57 − 36** —
-exactly Challenger *main draw* only. Counting Challenger qualifying over-states Challenger journeymen ~2.5×.
+**Feed de-duplication.** Sackmann's WTA qualifying/challenger feed re-lists every level-`C` (WTA-125) match
+**twice** (1343 byte-identical rows in 2026; ATP has ~14 total). `loadMatches` now drops duplicates keyed by
+`tourneyId|round|winnerId|loserId|score` — mandatory once 125 qualifying is in scope, a safe no-op elsewhere
+(a draw pairs two players at most once per round, so the key never collides legitimately).
 
 ## How we reproduce it
 
 `ingest/elo-reverse/yelo-fit.ts` (`npx tsx … ATP|WTA`):
 
-1. **Opponent timeline (pass 1).** A forward full-Elo pass over all counted matches, **re-anchored to TA's
-   own published full-Elo boards** at every board date (we have dense ~weekly captures — see below), so each
-   opponent's rating tracks TA's real value to within one weekly board.
+1. **Opponent rating = TA's published full-Elo, interpolated to match date.** The opponent's "actual rating at
+   the time" (Sackmann's phrase) is read straight off TA's own dense ~weekly full-Elo board captures —
+   **`oppRatingAt` linearly interpolates by calendar date between the two captured boards that bracket the
+   match** and that both list the opponent (carry-forward/back to a single side; only players below the
+   board's ~1100 display floor fall through to an anchored forward-Elo pass, `tlSeed=1500`). Reading opponents
+   off the *board* — not a free-running forward Elo — is what removed the old uniform positive bias; the
+   interpolation then removes most of the residual *negative* bias from reading a stale prior board (opponents
+   climb between weekly captures). See "What was wrong" below.
 2. **yElo (pass 2).** For each listed player: reset to 1500/n=0, replay their season (whole-tournament
-   `endDate` gating, tournament end-year season), opponents at their pass-1 rating at match time, only the
-   target updates. Compare W/L and yElo to the published board.
+   `endDate` gating, tournament end-year season), opponents at their interpolated rating at match time, only
+   the target updates. Compare W/L and yElo to the published board.
 
-A 3-parameter grid over (D, K-numerator, K-shape) confirms **D=400, K=250/(n+5)^0.4** is the clear optimum —
-**yElo uses the identical update rule as the full board**, no special parameters.
+A grid over (D, K-numerator, K-shape) confirms **D=400, K=250/(n+5)^0.4** is the optimum — **yElo uses the
+identical update rule as the full board**, no special parameters. (The negative residual is *insensitive* to D
+and K, which is what proved it was an opponent-rating-staleness problem, not a parameter problem.)
 
-## Results
+## Results (after the 2026-06-15-later fixes)
 
-- **yElo ratings**, scored **only on players whose W/L we reproduce exactly** (a W/L mismatch means a
-  different match set was replayed, so its Δ isn't a rating error): per-board **median |Δ| ≈ 5–8 Elo (ATP),
-  ~8 (WTA)**, byte-exact on dozens of player-boards, points hug the diagonal in `pnpm elo:scatter` (yElo
-  mode). Over **all** joined players (including W/L mismatches) the WTA median is ~15 Elo — the conditioning
-  on exact W/L matters, so quote it as conditional. The reproduction is **scale-correct** — the 5–0-champion
-  spread matches TA (e.g. 2026-01-12: Medvedev +15, Hurkacz +9). A small uniform **+9…+17 positive bias**
-  remains (inter-anchor opponent drift accumulating into the target over a season); it shifts every player
-  the same way, so it doesn't affect the spread/ordering.
-- **W/L tally** (which matches counted): ATP **74%** of player-board entries exact, WTA **54%**, and
-  **~100% early in each season**. It degrades through the year because a deep-season board needs *every* one
-  of ~25 events attributed to the correct board, and small per-event boundary errors **compound**
-  ((1−ε)^25). The misses are off-by-one at the **latest-event boundary**, not scope errors (late-season
-  mismatches are essentially all "missing the in-progress/just-finished event").
+- **yElo ratings**, scored on players whose W/L we reproduce exactly (a W/L mismatch means a different match
+  set, so its Δ isn't a rating error): per-board **median |Δ| ≈ 5 Elo (ATP) / 6 (WTA)** with **byte-exact on
+  the latest boards** (ATP `20260223` median 5.2; WTA `20260420` 6.1). Aggregate **median-of-medians 7.0 (ATP)
+  / 8.4 (WTA)** (was 8.6 / 9.9 before interpolation) with byte-exact counts ~doubled (ATP 24→44, WTA 5→22).
+  Carlos Alcaraz's 2026 season is **byte-exact** (2124 vs 2124.4 read straight off the boards). Points hug the
+  diagonal in `pnpm elo:scatter` (yElo mode).
+- **W/L tally** (which matches counted): aggregate ATP **65%** / WTA **51%**, but **~100% early-season and on
+  the latest ATP board (265/265)**. It still degrades through a season because a deep board needs *every* one
+  of ~25 events attributed to the correct weekly board, and per-event boundary errors compound; the misses are
+  off-by-one at the **latest-event boundary**, not scope errors.
 
-**A few Wayback captures are corrupted** (a TA/archive glitch): e.g. the WTA `20211227` and `20240101`
-boards show *doubled* W/L counts (Muguruza 84-32 = 2× her real 42-16), so they score W/L-ok 0. These are bad
-*source* captures, not model errors; they drag the 2021/2024-opener W/L numbers and could be filtered.
+### What was wrong, and the irreducible floor
 
-**Residual sources (data limits, not model error):** (a) Sackmann dates every match with the *tournament*
-start (TA's own player pages confirm TA has only tournament-granularity dates too), so a board that lands
-mid-/just-after an event can't be split to the day; (b) opponent ratings drift a few Elo between weekly
-anchors and the target accumulates that over a season. Both are bounded; the **algorithm itself is exactly
-reproduced** (byte-exact on clean cases), mirroring the full-board "byte-exact in clean windows" result.
+The investigation (a dynamic 6-agent workflow, each finding adversarially re-verified on boards it did *not*
+optimise on) decomposed the residual into three independent pieces and fixed two; the third is a data limit:
+
+1. **Retirements weren't counted** → big W/L misses (fixed, see scope above). +94 → 100% on the latest ATP board.
+2. **Opponents were read at the *nearest-prior* board** (or, earlier, a drifting forward pass). The prior board
+   is up to ~30 days stale and opponents *climb* through the season, so a target's later wins were
+   under-credited — a negative bias that is ~0 in January and grows to ~−11 by November, **insensitive to D/K**
+   (the tell). Calendar **interpolation between bracketing boards** halves it on every board (30/30 ATP, 33/33
+   WTA improve; W/L set provably unchanged). The *remaining* ~−5 on dense mid-season boards is **irreducible**:
+   a title run jumps an opponent 50+ Elo in days, which linear interpolation between weekly captures cannot
+   reproduce. (A red herring we ruled out: the seed-1500 fallback does **not** over-rate off-board opponents —
+   they're mid-strength ~1400, not weak-near-floor, and the target wins ~80% of those, so *lowering* the seed
+   makes it worse. The apparent "+bias on off-board players" was an artifact of a diagnostic that used a flat
+   1500 floor instead of the real forward-pass fallback.)
+3. **The latest WTA board's remaining W/L misses are TA *data revision*, not our error.** The `20260420`
+   capture's footer says "Last update 2026-04-20" but it was archived 2026-04-26 against a since-revised match
+   DB: **26 of its 75 under-counters are mathematically impossible** (the board's W or L exceeds the player's
+   entire-season match count under *any* scope/cutoff — e.g. Ristic board 15-12 vs a 2026 max of 13-15), and 66
+   are unreachable at any cutoff. The achievable ceiling on that frozen board is ~258/307, and we hit it.
+
+**A few Wayback captures are also outright corrupted** (WTA `20211227`, `20240101` show *doubled* W/L counts —
+Muguruza 84-32 = 2× her real 42-16 — so they score W/L-ok 0); bad source captures, not model error.
 
 ## Bonus: the dense captures make the FULL-board replay near-exact
 
 Fetching every distinct Wayback capture (not just monthly) gave 338 ATP / 240 WTA distinct full-Elo board
 dates (median gap **7 days**). Re-running the board-to-board replay (`replay.ts --clean`) against this dense
-set, plus the round-order fix below, drops the per-transition **median-of-medians to 0.10 (ATP) / 0.04 (WTA)**
-— **271/332 (ATP) and 181/230 (WTA) transitions reproduce to ≤1 Elo** (was median 3.0/1.4 on monthly boards).
-Weekly anchoring leaves almost no room for boundary noise to accumulate.
+set, plus the round-order fix below, gives a per-transition **median-of-medians of 0.14 (ATP) / 0.09 (WTA)** —
+**266/332 (ATP) and 178/230 (WTA) transitions reproduce to ≤1 Elo** (was median 3.0/1.4 on monthly boards).
+Weekly anchoring leaves almost no room for boundary noise to accumulate. (Counting retirements — correct, see
+scope — nudges these from 0.10/0.04 up to 0.14/0.09; a marginal, deliberate trade of full-board headline for
+the *correct* inclusion rule that the yElo boards prove.)
 
 ⚠️ **Honest qualifier:** that 0.10/0.04 is an **all-players (idle-inclusive)** statistic — ~half of each
 board is idle players whose predicted value is just the carried-forward prior rating (residual trivially ~0).

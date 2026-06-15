@@ -35,10 +35,16 @@ export interface Match {
 }
 
 /** TA's verified inclusion scope (reverse-engineered from the boards, see FINDINGS.md §7–§8):
- *  count every real competitive result EXCEPT walkovers/retirements, and (WTA) ITF below $50K. WTA tags ITF
- *  events by numeric prize tier (15/25/35/40/50/60/75/80/100); only >=50 counts. ATP levels are all real. */
+ *  count every CONTESTED result EXCEPT pure walkovers, and (WTA) ITF below $50K. WTA tags ITF events by
+ *  numeric prize tier (15/25/35/40/50/60/75/80/100); only >=50 counts. ATP levels are all real.
+ *
+ *  RETIREMENTS COUNT (verified 2026-06-15 from yElo boards): a retirement ("6-3 4-6 2-1 RET") or default/
+ *  abandonment ("… DEF"/"… ABD") was contested and HAS a winner, so TA counts it as a normal W/L — proven by
+ *  Djokovic AO-2026 (board 5-1 requires his QF win vs Musetti's RET; his R16 W/O vs Mensik is NOT counted).
+ *  Only a pure WALKOVER ("W/O" / "Walkover" / empty — zero games played) is dropped. So the discriminator is
+ *  simply "were any games played?" = does the score string contain a digit. */
 export function keepForElo(m: Match): boolean {
-  if (/RET|W\/O|WO\b|DEF|Walkover|Def\./i.test(m.score)) return false; // walkover/retirement: no rating change
+  if (!/\d/.test(m.score)) return false; // walkover / no games played (W/O, Walkover, empty): not counted
   const n = /^(\d+)/.exec(m.level)?.[1];
   if (n && Number(n) < 50) return false; // sub-$50K ITF (WTA) — not counted
   return true;
@@ -136,9 +142,20 @@ export function loadMatches(tour: "ATP" | "WTA", fromYear = 2014): Match[] {
       });
     }
   }
+  // Dedup exact-duplicate feed rows. Sackmann's WTA qualifying/challenger feed re-lists every level-C (WTA-125)
+  // match TWICE (1343 identical rows in 2026 alone; ATP has ~14). They're byte-identical on
+  // tourneyId|round|winnerId|loserId|score, so the same pair never legitimately collides on that key (a draw
+  // pairs two players at most once per round). Left in, they DOUBLE-count once 125 qualifying is in scope.
+  const seen = new Set<string>();
+  const deduped = out.filter((m) => {
+    const k = `${m.tourneyId}|${m.round}|${m.winnerId}|${m.loserId}|${m.score}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
   // Play order: by event start date, then ROUND within the event (R128→F), then stable input order.
-  out.sort((a, b) => a.date - b.date || roundRank(a.round) - roundRank(b.round) || a.idx - b.idx);
-  return out;
+  deduped.sort((a, b) => a.date - b.date || roundRank(a.round) - roundRank(b.round) || a.idx - b.idx);
+  return deduped;
 }
 
 export function loadBoards(): { ATP: Board[]; WTA: Board[] } {

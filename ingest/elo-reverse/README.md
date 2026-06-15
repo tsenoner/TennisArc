@@ -30,7 +30,7 @@ toggle**; hover shows name + both values + discrepancy + W/L. Points on the diag
 
 | File | Role |
 |---|---|
-| `lib.ts` | loaders, name↔id join, window/inclusion helpers. `keepForElo` (drops walkovers/RET + sub-$50K ITF); `roundRank` (process matches in PLAY order — Sackmann lists finals first); `playDate`/`estEnd` (draw-size-aware tournament timing). |
+| `lib.ts` | loaders, name↔id join, window/inclusion helpers. `keepForElo` (drops only pure walkovers + sub-$50K ITF; **retirements/defaults COUNT**); `loadMatches` de-dups the WTA-125 feed; `roundRank` (process matches in PLAY order — Sackmann lists finals first); `playDate`/`estEnd` (draw-size-aware tournament timing). |
 | `fetch-wayback.ts` | download every distinct-content Wayback capture of all 4 reports → `data/wayback/raw-full/`. |
 | `parse-boards.ts` | parse full-Elo boards (monthly tarball + dense `raw-full`) → `boards.json`, deduped by `lastUpdate`. |
 | `parse-yelo.ts` | parse season-yElo boards (`Rank\|Player\|Wins\|Losses\|yElo`) → `yelo-boards.json`. |
