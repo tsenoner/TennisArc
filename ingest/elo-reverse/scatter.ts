@@ -4,7 +4,7 @@
 // One point per listed player; hover shows name + computed + retrieved + discrepancy. Tour + transition
 // selectors. Self-contained HTML (no deps) at ingest/elo-reverse/elo-scatter.html (gitignored).
 //   npx tsx ingest/elo-reverse/scatter.ts   (or `pnpm elo:scatter` to build + open)
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadBoards, loadMatches, nameIndex, windowMatches, fullKey, dayNum, keepForElo } from "./lib";
 
@@ -73,15 +73,23 @@ function buildTour(tour: "ATP" | "WTA"): Trans[] {
 const round1 = (x: number) => Math.round(x * 10) / 10;
 
 const data = { ATP: buildTour("ATP"), WTA: buildTour("WTA") };
+// yElo datasets (computed via the season-reset / real-opponent model, ingest/elo-reverse/yelo-fit.ts --scatter)
+const ydata: Record<string, unknown> = { ATP: [], WTA: [] };
+for (const t of ["ATP", "WTA"] as const) {
+  const p = resolve(process.cwd(), `ingest/elo-reverse/yelo-scatter-${t}.json`);
+  if (existsSync(p)) ydata[t] = JSON.parse(readFileSync(p, "utf8"));
+}
 const OUT = resolve(process.cwd(), "ingest/elo-reverse/elo-scatter.html");
-writeFileSync(OUT, html(JSON.stringify(data)));
+writeFileSync(OUT, html(JSON.stringify(data), JSON.stringify(ydata)));
 console.log(`wrote ${OUT}`);
 for (const t of ["ATP", "WTA"] as const) {
   const latestT = data[t][0];
-  console.log(`${t} latest plotted transition ${latestT.prevDate}->${latestT.date}: n=${latestT.stats.n} medAbs=${latestT.stats.medAbs} exact=${latestT.stats.exact} within±5=${latestT.stats.w5}%`);
+  console.log(`${t} Elo latest transition ${latestT.prevDate}->${latestT.date}: n=${latestT.stats.n} medAbs=${latestT.stats.medAbs} exact=${latestT.stats.exact} within±5=${latestT.stats.w5}%`);
+  const yl = (ydata[t] as { date: number; stats: { n: number; medAbs: number; w5: number } }[])[0];
+  if (yl) console.log(`${t} yElo latest board ${yl.date}: n=${yl.stats.n} medAbs=${yl.stats.medAbs} within±5=${yl.stats.w5}%`);
 }
 
-function html(json: string): string {
+function html(json: string, yjson: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TennisArc Elo — computed vs retrieved</title>
 <style>
@@ -102,12 +110,13 @@ function html(json: string): string {
   .legend{display:flex;gap:14px;align-items:center;color:var(--mut);font-size:12px;padding:0 20px 14px;flex-wrap:wrap}
   .chip{display:inline-flex;align-items:center;gap:5px} .dot{width:10px;height:10px;border-radius:50%}
 </style></head><body>
-<header><h1>TennisArc Elo — computed vs retrieved</h1>
-<div class="sub">computed = board-replay (TA board[prev] + window matches → board[cur]) · retrieved = TA's published board[cur]. Points on the diagonal reproduce TA exactly. Hover a point for name + discrepancy.</div></header>
+<header><h1>TennisArc Elo / yElo — computed vs retrieved</h1>
+<div class="sub" id="subtitle"></div></header>
 <div class="controls">
+  <span><label>Rating</label><span class="seg" id="mode"><button data-m="elo" aria-pressed="true">Elo</button><button data-m="yelo">yElo (season)</button></span></span>
   <span><label>Tour</label><span class="seg" id="tour"><button data-t="ATP" aria-pressed="true">ATP</button><button data-t="WTA">WTA</button></span></span>
-  <span><label>Transition (prev → board)</label><select id="trans"></select></span>
-  <span><label>Show</label><span class="seg" id="filter"><button data-f="scored" aria-pressed="true">established</button><button data-f="all">+ debuts</button></span></span>
+  <span><label id="translabel">Transition</label><select id="trans"></select></span>
+  <span><label>Show</label><span class="seg" id="filter"><button data-f="scored" aria-pressed="true">matched</button><button data-f="all">+ unmatched</button></span></span>
 </div>
 <div class="stats" id="stats"></div>
 <div class="legend">
@@ -115,21 +124,28 @@ function html(json: string): string {
   <span class="chip"><span class="dot" style="background:#e0c341"></span>≤10</span>
   <span class="chip"><span class="dot" style="background:#e8843c"></span>≤30</span>
   <span class="chip"><span class="dot" style="background:#e0524a"></span>&gt;30</span>
-  <span class="chip"><span class="dot" style="background:#7d6cff"></span>debut (seeded)</span>
+  <span class="chip"><span class="dot" style="background:#7d6cff"></span>debut (Elo) / W/L≠TA (yElo)</span>
 </div>
 <div class="wrap"><svg id="plot" viewBox="0 0 1100 760" preserveAspectRatio="xMidYMid meet"></svg></div>
 <div id="tip"></div>
 <script>
 const DATA = ${json};
-let tour="ATP", ti=0, filter="scored";
+const YDATA = ${yjson};
+let mode="elo", tour="ATP", ti=0, filter="scored";
 const NS="http://www.w3.org/2000/svg";
 const tip=document.getElementById("tip"), plot=document.getElementById("plot");
-function colour(p){ if(p.status==="new") return "#7d6cff"; const a=Math.abs(p.d); return a<=2?"#3fbf6f":a<=10?"#e0c341":a<=30?"#e8843c":"#e0524a"; }
+const cur=()=> (mode==="elo"?DATA:YDATA)[tour] || [];
+const hidden=p=> mode==="elo" ? p.status==="new" : p.status==="wl"; // elo: debuts; yelo: W/L-mismatch
+function colour(p){ if(hidden(p)) return "#7d6cff"; const a=Math.abs(p.d); return a<=2?"#3fbf6f":a<=10?"#e0c341":a<=30?"#e8843c":"#e0524a"; }
 function fmtDate(d){const s=String(d);return s.slice(0,4)+"-"+s.slice(4,6)+"-"+s.slice(6,8);}
-function transList(){const sel=document.getElementById("trans");sel.innerHTML="";DATA[tour].forEach((t,i)=>{const o=document.createElement("option");o.value=i;o.textContent=fmtDate(t.prevDate)+" → "+fmtDate(t.date)+"  (med|Δ| "+t.stats.medAbs+")";sel.appendChild(o);});sel.value=ti;}
+function transList(){const sel=document.getElementById("trans");sel.innerHTML="";cur().forEach((t,i)=>{const o=document.createElement("option");o.value=i;const lbl=mode==="elo"?(fmtDate(t.prevDate)+" → "+fmtDate(t.date)):("season "+String(t.date).slice(0,4)+" → "+fmtDate(t.date));o.textContent=lbl+"  (med|Δ| "+t.stats.medAbs+")";sel.appendChild(o);});sel.value=ti;
+  document.getElementById("translabel").textContent = mode==="elo"?"Transition (prev → board)":"Season board (Jan 1 → board)";
+  document.getElementById("subtitle").innerHTML = mode==="elo"
+    ? "computed = board-replay (TA board[prev] + window matches → board[cur]) · retrieved = TA's published board[cur]. Diagonal = exact."
+    : "computed = season-reset yElo (every player reset to 1500 on Jan 1, replayed vs opponents' REAL Elo) · retrieved = TA's published yElo board. Diagonal = exact. Purple = our match-count (W/L) differs from TA's (latest-event boundary), so its Δ is not a rating error.";}
 function el(tag,attrs,text){const n=document.createElementNS(NS,tag);for(const k in attrs)n.setAttribute(k,attrs[k]);if(text!=null)n.textContent=text;plot.appendChild(n);return n;}
 function draw(){
-  const t=DATA[tour][ti]; const pts=t.pts.filter(p=>filter==="all"||p.status!=="new");
+  const t=cur()[ti]; if(!t){plot.innerHTML="";return;} const pts=t.pts.filter(p=>filter==="all"||!hidden(p));
   const W=1100,H=760,m={l:64,r:22,t:18,b:54};
   const vals=pts.flatMap(p=>[p.ret,p.comp]); let lo=Math.min(...vals),hi=Math.max(...vals);
   const pad=(hi-lo)*0.04||10; lo-=pad; hi+=pad;
@@ -148,25 +164,30 @@ function draw(){
   // diagonal y=x (perfect reproduction)
   el("line",{x1:sx(lo),y1:sy(lo),x2:sx(hi),y2:sy(hi),stroke:"#6b7380","stroke-width":1.6,"stroke-dasharray":"6 5"});
   // axis titles
-  el("text",{x:m.l+(W-m.l-m.r)/2,y:H-14,fill:"#e8eaed","font-size":13,"text-anchor":"middle"},"retrieved — TA published Elo");
-  el("text",{transform:"translate(18,"+(m.t+(H-m.t-m.b)/2)+") rotate(-90)",fill:"#e8eaed","font-size":13,"text-anchor":"middle"},"computed — board replay");
+  el("text",{x:m.l+(W-m.l-m.r)/2,y:H-14,fill:"#e8eaed","font-size":13,"text-anchor":"middle"},mode==="elo"?"retrieved — TA published Elo":"retrieved — TA published yElo");
+  el("text",{transform:"translate(18,"+(m.t+(H-m.t-m.b)/2)+") rotate(-90)",fill:"#e8eaed","font-size":13,"text-anchor":"middle"},mode==="elo"?"computed — board replay":"computed — season-reset yElo");
   // points (sorted so big residuals draw on top)
   pts.slice().sort((a,b)=>Math.abs(a.d)-Math.abs(b.d)).forEach(p=>{
     const c=document.createElementNS(NS,"circle");
-    c.setAttribute("cx",sx(p.ret));c.setAttribute("cy",sy(p.comp));c.setAttribute("r",p.status==="new"?3.2:3.7);
+    c.setAttribute("cx",sx(p.ret));c.setAttribute("cy",sy(p.comp));c.setAttribute("r",hidden(p)?3.2:3.7);
     c.setAttribute("fill",colour(p));c.setAttribute("fill-opacity","0.85");c.setAttribute("class","pt");
+    const tag = mode==="elo" ? (p.status==="new"?' · debut':'') : (p.status==="wl"?' · W/L≠TA':'');
+    const span = mode==="elo" ? ' this window' : ' this season';
     c.addEventListener("mousemove",e=>{tip.style.opacity=1;tip.style.left=Math.min(e.clientX+14,innerWidth-270)+"px";tip.style.top=(e.clientY+14)+"px";
-      tip.innerHTML='<div class="nm">'+p.name+(p.status==="new"?' · debut':'')+'</div>'+
+      tip.innerHTML='<div class="nm">'+p.name+tag+'</div>'+
         '<div class="row">retrieved (TA): <b style="color:var(--ink)">'+p.ret+'</b></div>'+
         '<div class="row">computed: <b style="color:var(--ink)">'+p.comp+'</b></div>'+
         '<div class="d" style="color:'+colour(p)+'">discrepancy: '+(p.d>0?'+':'')+p.d+'</div>'+
-        '<div class="row">'+p.m+' match'+(p.m===1?'':'es')+' this window · '+p.status+'</div>';});
+        '<div class="row">'+p.m+' match'+(p.m===1?'':'es')+span+' · '+p.status+'</div>';});
     c.addEventListener("mouseleave",()=>tip.style.opacity=0);
     plot.appendChild(c);
   });
   const st=t.stats;
-  document.getElementById("stats").innerHTML='<b>'+st.n+'</b> established players · median |Δ| <b>'+st.medAbs+'</b> Elo · within ±5 <b>'+st.w5+'%</b> · within ±10 <b>'+st.w10+'%</b> · byte-exact (|Δ|≤0.1) <b>'+st.exact+'</b> · '+st.debuts+' debuts (seeded, shown only with "+ debuts")';
+  const tail = mode==="elo" ? st.debuts+' debuts (seeded, "+ debuts")' : st.debuts+' W/L≠TA (latest-event boundary, "+ unmatched")';
+  const noun = mode==="elo" ? "established players" : "W/L-matched players";
+  document.getElementById("stats").innerHTML='<b>'+st.n+'</b> '+noun+' · median |Δ| <b>'+st.medAbs+'</b> Elo · within ±5 <b>'+st.w5+'%</b> · within ±10 <b>'+st.w10+'%</b> · byte-exact (|Δ|≤0.1) <b>'+st.exact+'</b> · '+tail;
 }
+document.getElementById("mode").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;mode=b.dataset.m;ti=0;[...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed",x===b));transList();draw();});
 document.getElementById("tour").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;tour=b.dataset.t;ti=0;[...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed",x===b));transList();draw();});
 document.getElementById("filter").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;filter=b.dataset.f;[...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed",x===b));draw();});
 document.getElementById("trans").addEventListener("change",e=>{ti=+e.target.value;draw();});

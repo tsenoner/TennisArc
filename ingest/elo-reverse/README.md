@@ -1,42 +1,54 @@
-# elo-reverse — board-to-board reverse-engineering of TA's Elo
+# elo-reverse — reverse-engineering & reproducing TA's Elo + season-yElo
 
-Reverse-engineers Tennis Abstract's (TA) singles Elo **update rule** by replaying TA's own published monthly
-boards forward: seed an engine from board(T), apply that window's Sackmann matches, and compare to board(T+1).
-No burn-in, no from-scratch reconstruction — board(T) is the ground truth — so each mechanism (K, seed, dock,
-inclusion) is isolated directly. This is the method behind `docs/elo-investigation-findings.md` §0; it
-reproduces TA month-to-month to median ~3 (ATP) / ~1.4 (WTA) Elo, **byte-exact in clean windows**.
+Two reproductions of Tennis Abstract's (TA) singles ratings, both validated against TA's **own published
+boards** (the ground truth), so no from-scratch burn-in is needed:
+
+1. **Full board** — replay board(T) + that window's Sackmann matches → board(T+1). With the **dense weekly**
+   captures (below) this now reproduces TA to per-transition **median-of-medians 0.10 (ATP) / 0.04 (WTA)** —
+   **271/332 (ATP) & 181/230 (WTA) transitions ≤1 Elo** (was 3.0/1.4 on monthly boards). `replay.ts`.
+2. **Season yElo** — for each player, reset to 1500/n=0 and replay their current-year matches against
+   opponents' **REAL** full-Elo at match time (only the target updates). yElo ratings reproduce to
+   **median |Δ| ~5–8**, ~100% W/L-exact early-season. Full write-up: [`docs/yelo-reproduction.md`](../../docs/yelo-reproduction.md).
+   `yelo-fit.ts`.
+
+Method + findings: `docs/elo-investigation-findings.md` §0 (full board) and `docs/yelo-reproduction.md` (yElo).
 
 ## Run
 
 ```bash
-pnpm elo:scatter                              # parse boards → build the interactive scatter → open it
-npx tsx ingest/elo-reverse/replay.ts ATP --clean   # validate the update rule (per-transition residuals)
-npx tsx ingest/elo-reverse/replay.ts ATP --grid    # grid over K numerator / seed
+pnpm elo:scatter                                   # parse → reproduce → interactive Elo+yElo scatter (toggle)
+npx tsx ingest/elo-reverse/fetch-wayback.ts        # (re)download every distinct Wayback capture (network)
+npx tsx ingest/elo-reverse/replay.ts ATP --clean   # full-board update rule (per-transition residuals)
+npx tsx ingest/elo-reverse/yelo-fit.ts ATP         # season-yElo reproduction (per board)
+npx tsx ingest/elo-reverse/yelo-fit.ts ATP --board 20260112   # one yElo board, detailed W/L + Δ
 ```
 
-The **scatter** (`ingest/elo-reverse/elo-scatter.html`, generated) plots computed (board-replay) vs retrieved
-(TA board) per player; hover shows name + both values + discrepancy. Tour / transition / ±debut selectors.
+The **scatter** (`elo-scatter.html`, generated) plots computed vs retrieved per player, with an **Elo / yElo
+toggle**; hover shows name + both values + discrepancy + W/L. Points on the diagonal reproduce TA exactly.
 
 ## Files
 
 | File | Role |
 |---|---|
-| `lib.ts` | loaders (`loadBoards`, `loadMatches`), name↔id join, window/inclusion helpers, re-exports `winProbability`/`kFactor` from `../historical-elo`. `keepForElo` = TA's verified inclusion scope (drops walkovers/RET + sub-$50K ITF). |
-| `parse-boards.ts` | parse every archived board → `boards.json` (full depth). Auto-extracts the committed board tarball on first run. |
-| `replay.ts` | seeded mini-replay; the decisive validation of the update rule. |
-| `scatter.ts` | build the interactive computed-vs-retrieved HTML. |
+| `lib.ts` | loaders, name↔id join, window/inclusion helpers. `keepForElo` (drops walkovers/RET + sub-$50K ITF); `roundRank` (process matches in PLAY order — Sackmann lists finals first); `playDate`/`estEnd` (draw-size-aware tournament timing). |
+| `fetch-wayback.ts` | download every distinct-content Wayback capture of all 4 reports → `data/wayback/raw-full/`. |
+| `parse-boards.ts` | parse full-Elo boards (monthly tarball + dense `raw-full`) → `boards.json`, deduped by `lastUpdate`. |
+| `parse-yelo.ts` | parse season-yElo boards (`Rank\|Player\|Wins\|Losses\|yElo`) → `yelo-boards.json`. |
+| `replay.ts` | full-board seeded mini-replay; validation of the update rule. |
+| `yelo-fit.ts` | season-yElo reproduction (`--board`, `--pgrid`, `--cutfit`, `--scatter`, `--trace`). |
+| `scatter.ts` | build the interactive Elo+yElo computed-vs-retrieved HTML. |
 
-Generated (gitignored): `boards.json` (~8 MB), `elo-scatter.html`.
+Generated (gitignored): `boards.json`, `yelo-boards.json`, `yelo-scatter-{ATP,WTA}.json`, `elo-scatter.html`.
 
 ## Data dependencies
 
-- **Raw boards:** `data/wayback/raw/` (gitignored), auto-extracted by `parse-boards.ts` from the committed
-  tarball `data/wayback/ta-elo-boards-2016-2026.tar.gz`.
-- **Sackmann match CSVs:** `ingest/.cache/elo/` (gitignored, re-fetched by the rest of the Elo pipeline — run
-  `pnpm backfill-elo` once if the cache is empty).
+- **Dense captures:** `data/wayback/raw-full/` (gitignored, `fetch-wayback.ts`) — 412 ATP + 271 WTA full-Elo
+  + 34 ATP + 36 WTA yElo distinct-content captures.
+- **Monthly tarball:** `data/wayback/ta-elo-boards-2016-2026.tar.gz` (committed) → `data/wayback/raw/`.
+- **Sackmann match CSVs:** `ingest/.cache/elo/` (gitignored; `pnpm backfill-elo` if empty).
 
 ## Note
 
 This tooling characterises TA's method; the **shipped** engine (`../historical-elo.ts` + `../elo-config.ts`)
-is the older from-scratch reconstruction and has not yet been migrated to these findings (seed, walkover/RET
-exclusion, discrete-display dock) — see `docs/elo-investigation-findings.md` §0 for the pending corrections.
+is the older from-scratch reconstruction and has not been migrated to these findings — see
+`docs/elo-investigation-findings.md` §0 for the pending corrections.

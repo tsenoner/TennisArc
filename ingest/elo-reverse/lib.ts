@@ -19,7 +19,8 @@ export interface Match {
   tourneyId: string;
   tourneyName: string;
   date: number; // tourney_date (START of event), YYYYMMDD
-  endDate: number; // estimated FINAL date (see estEnd) — for board-inclusion windows
+  endDate: number; // estimated FINAL date (see estEnd) — for season/whole-event attribution
+  playDate: number; // estimated date THIS match was played (see playDate) — for board-cutoff gating
   drawSize: number;
   level: string; // G grand slam, M masters, A atp/wta, F finals, D davis/team, C challenger, etc.
   surface: "Hard" | "Clay" | "Grass" | null;
@@ -45,15 +46,60 @@ export function keepForElo(m: Match): boolean {
 
 const SURF: Record<string, "Hard" | "Clay" | "Grass"> = { Hard: "Hard", Clay: "Clay", Grass: "Grass" };
 
-/** Estimate a tournament's final-match date from its start + draw size. Sackmann dates every match in an
- *  event with the START date, but a board only "sees" the event once it has FINISHED, so to decide which
- *  board a result belongs to we need an end date. Slams/big draws run ~2 weeks, smaller ~1 week. */
-export function estEnd(date: number, drawSize: number, level: string): number {
-  const span = level === "G" ? 13 : drawSize >= 56 ? 9 : drawSize >= 32 ? 7 : 6;
+/** Chronological rank of a round WITHIN a tournament. Sackmann lists matches FINAL-FIRST (match_num F is
+ *  the highest, R32 the lowest), so naive CSV order processes the final before its early rounds — which,
+ *  in a from-scratch replay, lets a champion "beat" opponents still at the seed. We must process in PLAY
+ *  order: qualifying → round-robin → R128 → … → F. Used as the primary intra-date sort key. */
+const ROUND_RANK: Record<string, number> = {
+  Q1: 1, Q2: 2, Q3: 3, Q4: 4, // qualifying (played before the main draw)
+  RR: 5, // round-robin group stage (Finals/United Cup) — before the knockout
+  R128: 10, R64: 11, R32: 12, R16: 13, QF: 14, SF: 15, BR: 16, F: 17,
+};
+export const roundRank = (round: string): number => ROUND_RANK[round] ?? 13;
+
+/** YYYYMMDD + n days → YYYYMMDD (UTC). */
+function addDays(date: number, n: number): number {
   const y = Math.floor(date / 10000), m = (Math.floor(date / 100) % 100) - 1, d = date % 100;
-  const j = Date.UTC(y, m, d) + span * 86_400_000;
-  const dt = new Date(j);
+  const dt = new Date(Date.UTC(y, m, d) + n * 86_400_000);
   return dt.getUTCFullYear() * 10000 + (dt.getUTCMonth() + 1) * 100 + dt.getUTCDate();
+}
+
+// Sackmann dates EVERY match in an event with the event's START (tourney_date), but TA's weekly board only
+// counts a match once it has been PLAYED. To attribute matches to the right board we estimate each match's
+// actual play date = tourney_date + a round-offset that depends on the event's calendar span. Slams run 13
+// days; the 96-draw "1.5-week" Masters ~11; everything else is a 1-week (Mon→Sun) event.
+const players2 = (round: string): number =>
+  ({ R128: 128, R64: 64, R32: 32, R16: 16, QF: 8, SF: 4, F: 2, BR: 2 } as Record<string, number>)[round] ?? 0;
+
+/** Day-span from the event start (day 0) to the FINAL, by event type. */
+function eventSpan(level: string, draw: number): number {
+  if (level === "G") return 13; // Grand Slam: Mon → 2nd Sunday
+  if (level === "M" && draw >= 96) return 11; // 96-draw Masters (IW/Miami/Madrid/Rome/Canada/Cincy/Shanghai)
+  if (level === "F") return 7; // Tour/NextGen Finals (RR Sun → F next Sun)
+  if (level === "D") return 3; // Davis/team tie (a weekend)
+  return 6; // 1-week event: Mon → Sun (incl. 56-draw Masters Paris/Monte-Carlo, 500s, 250s, challengers)
+}
+
+/** Estimated PLAY date of one match (the day that round concluded). Qualifying is the weekend BEFORE the
+ *  main draw; main-draw rounds are spread linearly from day 0 (first round) to the final. */
+export function playDate(date: number, drawSize: number, level: string, round: string): number {
+  const qual: Record<string, number> = { Q1: -3, Q2: -2, Q3: -1, Q4: -1 };
+  if (round in qual) return addDays(date, qual[round]);
+  const span = eventSpan(level, drawSize);
+  if (level === "F") return addDays(date, ({ RR: 4, SF: 6, F: 7, BR: 7 } as Record<string, number>)[round] ?? span);
+  if (level === "D" || round === "RR") return addDays(date, Math.max(0, span - 1));
+  const p = players2(round);
+  if (!p) return addDays(date, span);
+  // round number from the first main-draw round (depends on draw size); spread evenly start→final.
+  const total = Math.max(1, Math.round(Math.log2(Math.max(2, drawSize)))); // # main-draw rounds
+  const rn = total - Math.round(Math.log2(p)) + 1; // 1 = first round … total = final
+  const off = total <= 1 ? span : Math.round(((rn - 1) / (total - 1)) * span);
+  return addDays(date, Math.min(off, span));
+}
+
+/** Estimated final-match (event END) date — used to attribute a whole tournament to a season/board. */
+export function estEnd(date: number, drawSize: number, level: string): number {
+  return addDays(date, eventSpan(level, drawSize));
 }
 
 /** Load + parse every Sackmann yearly CSV for a tour, sorted by (date, input index). Keeps extra columns
@@ -83,13 +129,15 @@ export function loadMatches(tour: "ATP" | "WTA", fromYear = 2014): Match[] {
       const level = f2[iLvl] ?? "";
       out.push({
         tourneyId: f2[iId] ?? "", tourneyName: f2[iName] ?? "", date,
-        endDate: estEnd(date, drawSize, level), drawSize, level,
+        endDate: estEnd(date, drawSize, level), playDate: playDate(date, drawSize, level, f2[iRound] ?? ""),
+        drawSize, level,
         surface: SURF[f2[iSurf] ?? ""] ?? null, round: f2[iRound] ?? "", bestOf: Number(f2[iBo]) || 3, score: f2[iSc] ?? "",
         winnerId: wId, winnerName: f2[iWn] ?? "", loserId: lId, loserName: f2[iLn] ?? "", idx: idx++,
       });
     }
   }
-  out.sort((a, b) => a.date - b.date || a.idx - b.idx);
+  // Play order: by event start date, then ROUND within the event (R128→F), then stable input order.
+  out.sort((a, b) => a.date - b.date || roundRank(a.round) - roundRank(b.round) || a.idx - b.idx);
   return out;
 }
 

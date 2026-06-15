@@ -18,6 +18,7 @@ import { resolve } from "node:path";
 // Raw archived boards live (gitignored) in data/wayback/raw, extracted from the COMMITTED tarball
 // data/wayback/ta-elo-boards-2016-2026.tar.gz. We auto-extract on first run so a clean checkout works.
 const SRC = resolve(process.cwd(), "data/wayback/raw");
+const SRC_FULL = resolve(process.cwd(), "data/wayback/raw-full"); // dense weekly captures (fetch-wayback.ts)
 const TARBALL = resolve(process.cwd(), "data/wayback/ta-elo-boards-2016-2026.tar.gz");
 const OUT = resolve(process.cwd(), "ingest/elo-reverse/boards.json");
 
@@ -98,12 +99,24 @@ function build(): void {
   ensureRaw();
   mkdirSync(resolve(process.cwd(), "ingest/elo-reverse"), { recursive: true });
   const out: { ATP: Board[]; WTA: Board[] } = { ATP: [], WTA: [] };
+  // (1) the committed monthly tarball set (data/wayback/raw, filename atp_YYYYMMDD.html)
   for (const f of readdirSync(SRC).filter((f) => f.endsWith(".html"))) {
     const mt = f.match(/^(atp|wta)_(\d{8})\.html$/);
     if (!mt) continue;
     const tour = mt[1].toUpperCase() as "ATP" | "WTA";
     const b = parseBoard(readFileSync(resolve(SRC, f), "utf8"), tour, Number(mt[2]));
     if (b) out[tour].push(b);
+  }
+  // (2) the dense weekly captures (data/wayback/raw-full, filename atp_elo_ratings_<14-digit-ts>.html) —
+  //     many more board dates in recent years; deduped against (1) by lastUpdate below.
+  if (existsSync(SRC_FULL)) {
+    for (const f of readdirSync(SRC_FULL).filter((f) => /_elo_ratings_\d{14}\.html$/.test(f) && !/yelo/.test(f))) {
+      const mt = f.match(/^(atp|wta)_elo_ratings_(\d{8})/);
+      if (!mt) continue;
+      const tour = mt[1].toUpperCase() as "ATP" | "WTA";
+      const b = parseBoard(readFileSync(resolve(SRC_FULL, f), "utf8"), tour, Number(mt[2]));
+      if (b) out[tour].push(b);
+    }
   }
   // Dedup by lastUpdate (keep the deepest board per as-of date), then sort chronologically.
   for (const t of ["ATP", "WTA"] as const) {
@@ -133,4 +146,4 @@ function build(): void {
   console.log(`wrote ${OUT}`);
 }
 
-build();
+if (import.meta.url === `file://${process.argv[1]}`) build();

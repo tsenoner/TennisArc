@@ -27,7 +27,12 @@ ingest/.cache/
 
 # Wayback raw HTML — extracted from data/wayback/*.tar.gz (the tarball is the committed copy)
 data/wayback/raw/
+# Dense full Wayback capture set (~144 MB) — re-fetchable via ingest/elo-reverse/fetch-wayback.ts
+data/wayback/raw-full/
 
 # elo-reverse generated artifacts (rebuilt by `pnpm elo:scatter`)
 ingest/elo-reverse/boards.json
 ingest/elo-reverse/elo-scatter.html
+ingest/elo-reverse/yelo-boards.json
+ingest/elo-reverse/yelo-scatter-ATP.json
+ingest/elo-reverse/yelo-scatter-WTA.json

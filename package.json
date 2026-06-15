@@ -19,7 +19,7 @@
     "backfill-finals": "tsx ingest/backfill-finals.ts",
     "backfill-seeds": "tsx ingest/backfill-seeds.ts",
     "backfill-elo": "tsx ingest/backfill-elo.ts",
-    "elo:scatter": "tsx ingest/elo-reverse/parse-boards.ts && tsx ingest/elo-reverse/scatter.ts && open ingest/elo-reverse/elo-scatter.html"
+    "elo:scatter": "tsx ingest/elo-reverse/parse-boards.ts && tsx ingest/elo-reverse/parse-yelo.ts && tsx ingest/elo-reverse/yelo-fit.ts ATP --scatter && tsx ingest/elo-reverse/yelo-fit.ts WTA --scatter && tsx ingest/elo-reverse/scatter.ts && open ingest/elo-reverse/elo-scatter.html"
   },
   "dependencies": {
     "d3-hierarchy": "^3.1.2",

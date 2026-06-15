@@ -27,6 +27,15 @@ reporting, Wayback formalized)**. "Today" numbers measured against the live TA b
 
 ---
 
+> **2026-06-15 (later) — TWO upgrades, see [`yelo-reproduction.md`](yelo-reproduction.md):**
+> (a) **Dense captures + match-order fix → the full-board replay is now near byte-exact.** Downloading
+> *every* distinct Wayback capture (not just monthly) gives 338 ATP / 240 WTA board dates (median gap 7 days);
+> with matches processed in true round order (Sackmann lists finals first — see `lib.ts:roundRank`), the
+> per-transition **median-of-medians drops to 0.10 (ATP) / 0.04 (WTA)** — **271/332 & 181/230 transitions
+> ≤1 Elo**, vs the 3.0/1.4 below on monthly boards. (b) **Season "yElo" reproduced.** yElo = reset each player
+> to 1500/n=0 and replay their current year vs opponents' REAL full-Elo (only the target updates), same
+> D=400 / K=250/(n+5)^0.4, excluding challenger/ITF qualifying. Ratings reproduce to median |Δ| ~5–8 Elo.
+
 ## 0. Board-to-board reverse-engineering (2026-06-15) — the strongest evidence
 
 **Method.** Each archived TA board (Wayback, `.scratch/wayback/all`; 77 ATP + 88 WTA, 2016–2026, depth
