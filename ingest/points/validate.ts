@@ -153,7 +153,10 @@ function bestN(events: PE[]): number {
   const mand = events.filter((e) => e.tier === "MAND_M");
   const finals = events.filter((e) => e.tier === "FINALS");
   const others = events.filter((e) => e.tier === "OTHER").sort((a, b) => b.pts - a.pts);
-  const otherSlots = tour === "ATP" ? 6 : 8; // 4+8+6=18 ATP; 4+4+8=16 WTA
+  // best-N: 4 slams + 8 mandatory Masters + best 6 others (ATP) / 4 PM + best 8 (WTA), + Finals as a bonus.
+  // (Tested "Finals occupies a counting slot": it makes Medvedev 2019 exact but breaks Tsitsipas/Berrettini
+  // — net 12->10 exact — so that's a rolling-window coincidence, not a rule. best-6 + Finals-bonus is right.)
+  const otherSlots = tour === "ATP" ? 6 : 8;
   const forced = slams.reduce((s, e) => s + e.pts, 0) + mand.reduce((s, e) => s + e.pts, 0);
   const topOthers = others.slice(0, otherSlots).reduce((s, e) => s + e.pts, 0);
   const finalsBonus = finals.reduce((s, e) => s + e.pts, 0);
