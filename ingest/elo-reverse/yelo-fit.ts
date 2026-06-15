@@ -74,6 +74,14 @@ function loadFullEloBoards(): { lastUpdate: number; overall: Map<string, number>
     });
 }
 const FULL_BOARDS = ANCHOR ? loadFullEloBoards() : [];
+// Opponents who appear on NO captured full-Elo board (deep challenger/ITF, true debutants) are below the
+// boards' soft ~1090 display floor and have no published rating at any date. A from-scratch forward Elo
+// over their few ITF matches barely moves off 1500 → structurally HIGH, over-crediting the target for
+// "beating" a phantom ~1480 player. A flat ~1325 (verified to zero out the off-board signed bias on the
+// 2026 ATP boards) is the least-biased stand-in. Carry-forward/back still applies to anyone on ≥1 board.
+const EVER_ON_BOARD = new Set<string>();
+for (const b of FULL_BOARDS) for (const id of b.overall.keys()) EVER_ON_BOARD.add(id);
+const OFF_BOARD_SEED = 1325;
 
 /** Opponent's "actual rating at the time" (Sackmann's phrase), estimated by LINEARLY INTERPOLATING the
  *  opponent's full-Elo between the two published boards that bracket the match date and that both list them.
@@ -106,7 +114,8 @@ function oppRatingAt(oppId: string, date: number, fallback: number): number {
     const f = Math.max(0, Math.min(1, (dayNum(date) - t0) / (t1 - t0)));
     return pv + f * (nv - pv);
   }
-  return pv ?? nv ?? fallback; // single-side carry-forward/back, else off-board → timeline fallback
+  if (pv !== undefined || nv !== undefined) return pv ?? nv; // single-side carry-forward/back
+  return EVER_ON_BOARD.has(oppId) ? fallback : OFF_BOARD_SEED; // never-on-board → flat off-board stand-in
 }
 
 /** PASS 1 — full-Elo overall timeline. Forward Elo over all counted matches (career n, both sides update);
@@ -159,7 +168,7 @@ function yeloFor(id: string, year: number, asOf: number, cfg: Cfg, tl = TL): St 
   for (const m of ms) {
     const isW = m.winnerId === id;
     const oppId = isW ? m.loserId : m.winnerId;
-    const oppReal = oppRatingAt(oppId, m.date, isW ? tl.lBefore.get(m.idx)! : tl.wBefore.get(m.idx)!);
+    const oppReal = oppRatingAt(oppId, m.playDate, isW ? tl.lBefore.get(m.idx)! : tl.wBefore.get(m.idx)!);
     const e = winP(yelo, oppReal, cfg.D);
     yelo += kOf(n, cfg) * ((isW ? 1 : 0) - e);
     n++; if (isW) wins++; else losses++;

@@ -175,3 +175,38 @@ pnpm elo:scatter                                       # Elo + yElo computed-vs-
   re-archives). yElo boards span **2021–2026** (none earlier on Wayback).
 - TA player pages (`cgi-bin/player-classic.cgi?p=<Name>`) embed a `var matchmx` array of every match — a
   per-player ground truth for the inclusion check (tournament-date granularity only).
+
+## 2026 byte-exact attempt (2026-06-15, this session) — two free wins + a hard data-resolution verdict
+
+Goal: zero discrepancy on the two 2026 ATP boards (`20260112`, 34 players; `20260223`, 265 — the
+`atp_season_yelo_ratings_20260227173228.html` file, "Last update 2026-02-23"). W/L is already **100% on both**
+(34/34, 265/265), so the *entire* remaining error is opponent-rating error.
+
+**Listing threshold is `≥3 wins`, not `≥5`.** The page prose ("five or more … wins") is stale boilerplate (the
+WTA copy even says "men's challenger" + a "qualiyfing" typo). Our `≥3`-win set matches both boards exactly
+(0 missing / 0 extra). No code change needed — W/L is scored on the board's players and is already correct.
+
+**Two verified improvements (applied to `yelo-fit.ts`, beneficial across ALL years/both tours):**
+1. **Interpolate opponents at `m.playDate`** (estimated match play date), not `m.date` (tournament start).
+   ATP med-of-medians 7.0→**5.4** (byte-exact 44→49), WTA 8.4→**5.9** (22→35); board `20260112` 7.1→**3.3**,
+   `20260223` 5.2→**4.1**.
+2. **Never-on-any-board opponents → flat `1325`** (`EVER_ON_BOARD` set + `OFF_BOARD_SEED`), replacing the
+   from-scratch fallback (~1480, structurally high). Zeroes the off-board +9.3 signed bias; `20260223` 4.1→**3.8**.
+
+**Verdict: true byte-exact is NOT achievable from public data.** TA's yElo uses each opponent's *internal,
+~daily* full-Elo; we only have TA's ~weekly, 1-decimal published boards, and every distinct Wayback capture is
+already fetched (capture density is maxed — the 21-day Feb-2→Feb-23 gap is TA's real publication cadence).
+Interpolating those weekly boards cannot pin an opponent finer than ~2–4 Elo even for a player whose opponents
+are all well-tracked (Medvedev's Brisbane 5-0 can't be driven below ~±1). Sackmann's Elo *generation* code and
+historical ratings are private (his own stated words).
+
+**The full-precision-engine path was built and tested — it does NOT beat interpolation.** `.scratch/elo-reverse/
+yelo-engine.ts` (board-anchored replay, re-seeding from each published board, full-precision between captures,
+career-N K) under every opponent model — frozen-at-tournament-entry (`20260112` 7.1 / `20260223` 5.6),
+live-climbing pre-match (8.1 / 4.6), 50/50 blend (5.8 / 3.7) — and a pure from-scratch engine (meanAbs ~15) are
+all **worse** than interpolation@playDate (3.3 / 3.8). The reason is structural: **the published boards ARE TA's
+ground truth (just sparse + rounded); any forward replay adds its own modelling error (seed precision, K, the
+private injury dock, intra-event order) on top — you cannot out-compute the source.** The full board *does*
+reproduce to median 0.11 under play order via a board-SEEDED short replay (`.scratch/elo-reverse/fullval.ts`),
+but that is the END-of-window state; yElo needs each opponent's *intra-event* value, which the weekly boards
+cannot supply. **Irreducible floor: `20260112` med ≈ 3.3, `20260223` med ≈ 3.8, byte-exact ≈ 0–2 per board.**
