@@ -239,6 +239,14 @@ Anisimova/Zheng are fixed. What remains:
 4. **ATP thin-grass** surface noise — TA's thin-sample surface handling is the one undocumented gap.
 5. **The entrant seed / dock-shape / baseline-K** — empirically fit or assumed (linear dock shape between
    the published endpoints; our own K formula for the recovery boost), not derived from TA.
+6. **Two latent injury-model imprecisions (adversarial review, kept by choice).** (a) The ≥1900 gate uses
+   `overall + clusterDock`, which slightly over-states a recovered player's level (clusterDock is frozen
+   while results-recovery wins points back). We KEEP it: empirically it errs in the safe direction (borderline
+   ~1900 players like Kartal stay on the correct side to match TA); the "correct" raw-`overall` gate wrongly
+   docks declined ex-elites and destabilises the seed fit, and an exact undocked-track fix isn't worth it
+   (failure modes are off-board). (b) The COVID un-dock adds back the rating subtraction but cannot reverse
+   the path-dependent K-boost, so an ex-docked player reads slightly high on 2020–21 boards — a small,
+   historical-only residual folded into the +15–20 offset (#3).
 
 ## 10. Tooling & re-derivation
 

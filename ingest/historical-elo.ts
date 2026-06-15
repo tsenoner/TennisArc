@@ -305,7 +305,14 @@ export class EloEngine {
     if (dockSuspended(dock, date)) return; // COVID: no penalty for pandemic-era comebacks
     const gap = activeLayoffDays(s.lastDate, date);
     if (gap < dock.triggerDays) return; // routine play, not a layoff
-    const preDockRating = s.overall + s.clusterDock; // the player's level before any cluster docking
+    // Gate: dock only a player who was ~elite (>=ratingFloor) pre-layoff. We use `overall + clusterDock`
+    // (the rating with this cluster's docks added back). KNOWN LATENT IMPRECISION (verified): once results-
+    // recovery has won points back, clusterDock is frozen while overall climbs, so this slightly OVER-states
+    // the true level — but empirically that errs in the SAFE direction (it keeps borderline ~1900 players,
+    // e.g. Kartal, on the right side of the gate to match TA). Gating on raw s.overall instead wrongly docks
+    // declined ex-elites and destabilises the fit; an exact fix needs a separate undocked track (not worth
+    // it — the failure modes are off-board). See docs/elo-investigation-findings.md §9.
+    const preDockRating = s.overall + s.clusterDock;
     if (preDockRating < dock.ratingFloor) return;
     // A layoff long after the last comeback starts a fresh cluster (clean-recovery reset).
     if (s.lastComeback !== 0 && yearsBetween(s.lastComeback, date) > dock.comebackResetYears) {
@@ -424,7 +431,9 @@ export function computeRatingsAsOfSorted(
   const best = new Map<string, { elo: ComputedElo; n: number; runnerUp: number }>();
   for (const [id, s] of engine.players) {
     // Injury/absence dock at EXTRACTION. For a board DURING the COVID suspension we un-dock everyone
-    // (add back the in-state clusterDock), since TA suspended the penalty board-wide then. Otherwise dock a
+    // (add back the in-state clusterDock), since TA suspended the penalty board-wide then. (Approximate:
+    // adding back the dock reverses the rating subtraction but not the boosted-K path the comeback already
+    // took, so an ex-docked player can read slightly high — a small, historical-only residual.) Otherwise dock a
     // player absent RIGHT NOW (open trailing gap, not yet returned): the open gap extends their cluster,
     // docking the marginal curve amount on the output. A player who has already returned carries their dock
     // IN STATE (applied during replay); active, settled players get 0 — the field is never deflated.
@@ -437,7 +446,7 @@ export function computeRatingsAsOfSorted(
             activeLayoffDays(s.lastDate, cutoffDate),
             s.clusterDays,
             s.clusterDock,
-            s.overall + s.clusterDock,
+            s.overall + s.clusterDock, // pre-layoff level for the gate (see detectReturn)
           );
     const surf = (raw: number, n: number): number | null => {
       const r = resolveSurfaceElo(raw, n, s.overall);
