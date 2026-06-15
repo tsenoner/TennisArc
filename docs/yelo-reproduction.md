@@ -39,12 +39,19 @@ strength is the whole point.
   For WTA the 125 quallies reconcile only when counted (e.g. Canberra-125 Q rows). **Neither tour counts
   numeric-ITF (W50/W75/W100) qualifying** — adding it regresses ~120 players per 2024 WTA board (adversarially
   verified). So: drop a qualifying match only when its level is neither tour-level nor (WTA) `C`.
-- **Retirements / defaults COUNT; only pure walkovers don't.** The discriminator is simply *were any games
-  played* — i.e. does the score string contain a digit. `6-3 4-6 2-1 RET`, `… DEF`, `… ABD` are contested and
-  have a winner → counted; `W/O` / `Walkover` / empty → dropped. **Proven by Djokovic's 2026 Australian Open:**
-  his yElo board shows **5-1**, which requires his QF win over Musetti's `RET`; his R16 `W/O` over Mensik is
-  *not* counted. This single rule took the latest ATP board from 71% → **100% W/L-exact**. (Earlier full-board
-  notes that lumped "RET/WO don't count" were conflating the two — only walkovers are excluded.)
+- **Retirements / defaults COUNT — but only from a spring-2025 recompute onward (ERA-dependent).** The
+  contested/not discriminator is *were any games played* — does the score string contain a digit. `6-3 4-6 2-1
+  RET`, `… DEF`, `… ABD` are contested and have a winner; `W/O` / `Walkover` / empty are not. **Pure walkovers
+  are never counted.** Retirements, however, TA only began counting at a **one-time recompute around April
+  2025**: every yElo board captured from ~2025-04 on counts RET for the *whole* season (proven by Djokovic's
+  2026 AO — board `5-1` requires his QF win over Musetti's `RET`; his R16 `W/O` is not counted), while every
+  board before — all 2021–2024 boards *and* the Jan–Mar 2025 boards — excludes it. The flip is razor-sharp and
+  identical on both tours (W/L-exact: RET-off wins every board ≤ 2025-03-17, RET-on wins every board ≥
+  2025-05-26; e.g. ATP `20241104` is **494/507 with RET off** vs 201 on, ATP `20260223` is **265/265 with RET
+  on** vs 188 off). So RET inclusion is gated **per board by capture date** (`lib.ts:RET_ERA_START`, midpoint
+  of the un-captured 2025-03-17 → 2025-05-26 window), *not* by match date — the recompute was retroactive. This
+  one finding lifted ATP W/L-exact from 65% to **95%** across all years and reconciles the earlier full-board
+  note ("RET/WO not counted", derived from 2016–2024 data) with the 2026 boards.
 - **NOT counted:** Challenger/ITF *qualifying* (except WTA-125 qual), pure walkovers, sub-$50K ITF, Olympics.
 - A season is attributed by a tournament's **end year**, so late-December season-openers (United Cup,
   Brisbane, Hong Kong) count in the **new** year, as TA does.
@@ -82,17 +89,33 @@ and K, which is what proved it was an opponent-rating-staleness problem, not a p
   / 8.4 (WTA)** (was 8.6 / 9.9 before interpolation) with byte-exact counts ~doubled (ATP 24→44, WTA 5→22).
   Carlos Alcaraz's 2026 season is **byte-exact** (2124 vs 2124.4 read straight off the boards). Points hug the
   diagonal in `pnpm elo:scatter` (yElo mode).
-- **W/L tally** (which matches counted): aggregate ATP **65%** / WTA **51%**, but **~100% early-season and on
-  the latest ATP board (265/265)**. It still degrades through a season because a deep board needs *every* one
-  of ~25 events attributed to the correct weekly board, and per-event boundary errors compound; the misses are
-  off-by-one at the **latest-event boundary**, not scope errors.
+- **W/L tally** (which matches counted): aggregate **ATP 95% (10201/10730), WTA 68% (8609/12690)**, by season:
+
+  | season | ATP W/L-exact | WTA W/L-exact |
+  |---|---|---|
+  | 2021 | 92% | 44% |
+  | 2022 | 94% | 85% |
+  | 2023 | 100% | 98% |
+  | 2024 | 93% | 66% |
+  | 2025 | 97% | 67% |
+  | 2026 | 100% | 77% |
+
+  ATP is essentially solved (the residual is the trailing in-progress-event boundary + a few corrupt captures).
+  WTA's lower figure is **entirely the ITF/WTA-125 journeywomen** and is largely irreducible: on WTA `20250908`
+  **48 of 160 misses are mathematically impossible** (the board's W or L exceeds the player's whole-season
+  match count under *any* scope — TA revised its match DB after these snapshots were frozen), and the rest need
+  counting ITF qualifying/sub-$50K, which the adversarial verifier proved regresses ~120 players per 2024 board.
+  Top-of-board WTA players reproduce as cleanly as ATP.
 
 ### What was wrong, and the irreducible floor
 
 The investigation (a dynamic 6-agent workflow, each finding adversarially re-verified on boards it did *not*
 optimise on) decomposed the residual into three independent pieces and fixed two; the third is a data limit:
 
-1. **Retirements weren't counted** → big W/L misses (fixed, see scope above). +94 → 100% on the latest ATP board.
+1. **Retirements weren't counted, then were over-counted on old boards** → the biggest W/L lever. Counting RET
+   makes 2025–2026 boards near-perfect but *over*-counts 2021–2024 boards, because TA only began counting RET
+   at a retroactive spring-2025 recompute (see scope). Gating RET per board by capture date took aggregate ATP
+   W/L from 65% → 95% (latest ATP board 188 → 265/265) and was the key to reconciling every season at once.
 2. **Opponents were read at the *nearest-prior* board** (or, earlier, a drifting forward pass). The prior board
    is up to ~30 days stale and opponents *climb* through the season, so a target's later wins were
    under-credited — a negative bias that is ~0 in January and grows to ~−11 by November, **insensitive to D/K**
@@ -116,11 +139,10 @@ Muguruza 84-32 = 2× her real 42-16 — so they score W/L-ok 0); bad source capt
 
 Fetching every distinct Wayback capture (not just monthly) gave 338 ATP / 240 WTA distinct full-Elo board
 dates (median gap **7 days**). Re-running the board-to-board replay (`replay.ts --clean`) against this dense
-set, plus the round-order fix below, gives a per-transition **median-of-medians of 0.14 (ATP) / 0.09 (WTA)** —
-**266/332 (ATP) and 178/230 (WTA) transitions reproduce to ≤1 Elo** (was median 3.0/1.4 on monthly boards).
-Weekly anchoring leaves almost no room for boundary noise to accumulate. (Counting retirements — correct, see
-scope — nudges these from 0.10/0.04 up to 0.14/0.09; a marginal, deliberate trade of full-board headline for
-the *correct* inclusion rule that the yElo boards prove.)
+set, plus the round-order + era-aware-RET + de-dup fixes, gives a per-transition **median-of-medians of 0.11
+(ATP) / 0.07 (WTA)** — **271/332 (ATP) and 181/230 (WTA) transitions reproduce to ≤1 Elo** (was median 3.0/1.4
+on monthly boards). Weekly anchoring leaves almost no room for boundary noise to accumulate. `replay.ts` gates
+RET by the same spring-2025 recompute date, so it stays consistent with the yElo era model.
 
 ⚠️ **Honest qualifier:** that 0.10/0.04 is an **all-players (idle-inclusive)** statistic — ~half of each
 board is idle players whose predicted value is just the carried-forward prior rating (residual trivially ~0).

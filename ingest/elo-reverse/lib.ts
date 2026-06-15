@@ -38,17 +38,27 @@ export interface Match {
  *  count every CONTESTED result EXCEPT pure walkovers, and (WTA) ITF below $50K. WTA tags ITF events by
  *  numeric prize tier (15/25/35/40/50/60/75/80/100); only >=50 counts. ATP levels are all real.
  *
- *  RETIREMENTS COUNT (verified 2026-06-15 from yElo boards): a retirement ("6-3 4-6 2-1 RET") or default/
- *  abandonment ("… DEF"/"… ABD") was contested and HAS a winner, so TA counts it as a normal W/L — proven by
- *  Djokovic AO-2026 (board 5-1 requires his QF win vs Musetti's RET; his R16 W/O vs Mensik is NOT counted).
- *  Only a pure WALKOVER ("W/O" / "Walkover" / empty — zero games played) is dropped. So the discriminator is
- *  simply "were any games played?" = does the score string contain a digit. */
+ *  This keeps everything CONTESTED: a pure WALKOVER ("W/O"/"Walkover"/empty — zero games played) is always
+ *  dropped; a retirement ("6-3 4-6 2-1 RET") or default/abandonment ("… DEF"/"… ABD") was contested and HAS a
+ *  winner, so it stays in the corpus. Whether retirements actually COUNT toward a rating is ERA-dependent (see
+ *  RET_ERA_START) — that gate lives in the consumers (yelo-fit / replay), keyed by board/window date, because
+ *  TA's spring-2025 recompute was retroactive. The discriminator here is just "were any games played?". */
 export function keepForElo(m: Match): boolean {
   if (!/\d/.test(m.score)) return false; // walkover / no games played (W/O, Walkover, empty): not counted
   const n = /^(\d+)/.exec(m.level)?.[1];
   if (n && Number(n) < 50) return false; // sub-$50K ITF (WTA) — not counted
   return true;
 }
+
+/** TA began counting RETIREMENTS in season yElo (and full Elo) at a one-time RECOMPUTE in spring 2025: every
+ *  board captured from ~April 2025 on counts RET for the WHOLE season, while boards captured before — all
+ *  2021-2024 boards AND the Jan–Mar 2025 boards — exclude it. Proven by the razor-sharp, both-tours-identical
+ *  flip in W/L-exact: RET-off wins every board through 2025-03-17, RET-on wins every board from 2025-05-26
+ *  (e.g. ATP 20241104 494/507 RET-off vs 201 on; ATP 20260223 265/265 RET-on vs 188 off). So RET inclusion is
+ *  decided per board by CAPTURE date, NOT match date (the recompute was retroactive). Exact cutover unknown —
+ *  no Wayback capture exists between 2025-03-17 and 2025-05-26 — so we gate at a midpoint in that window. */
+export const RET_ERA_START = 20250418;
+export const isRetirement = (m: Match): boolean => /\d/.test(m.score) && /\b(RET|DEF|ABD)\b/i.test(m.score);
 
 const SURF: Record<string, "Hard" | "Clay" | "Grass"> = { Hard: "Hard", Clay: "Clay", Grass: "Grass" };
 

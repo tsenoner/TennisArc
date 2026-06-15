@@ -8,7 +8,7 @@
 //   npx tsx ingest/elo-reverse/replay.ts ATP            # baseline (prior params, freeze)
 //   npx tsx ingest/elo-reverse/replay.ts ATP --clean    # exclude recompute boundaries
 //   npx tsx ingest/elo-reverse/replay.ts ATP --grid     # small grid over K numerator/seed
-import { loadBoards, loadMatches, nameIndex, windowMatches, fullKey, dayNum, keepForElo } from "./lib";
+import { loadBoards, loadMatches, nameIndex, windowMatches, fullKey, dayNum, keepForElo, isRetirement, RET_ERA_START } from "./lib";
 
 type Tour = "ATP" | "WTA";
 const tour = (process.argv[2] as Tour) ?? "ATP";
@@ -24,7 +24,10 @@ const kOf = (n: number, c: Cfg) => c.kNum / (n + c.kOff) ** c.kShape;
 const boards = loadBoards()[tour];
 const allMatches = loadMatches(tour, 2010);
 const { keyToId } = nameIndex(allMatches); // name->id index from the FULL set (RET/WO players still need ids)
-const matches = allMatches.filter(keepForElo); // TA's verified inclusion scope: drop walkovers/RET + sub-$50K ITF
+const matches = allMatches.filter(keepForElo); // TA's verified inclusion scope: drop walkovers + sub-$50K ITF
+// Retirements are era-dependent: TA only counts them from the spring-2025 recompute (see RET_ERA_START). A
+// board pair (prev→cur) is scored against cur's published values, so a window counts RET iff cur is post-recompute.
+const inEra = (m: typeof matches[number], curDate: number): boolean => curDate >= RET_ERA_START || !isRetirement(m);
 
 // board player name -> id, per board (cache)
 const boardIds = boards.map((b) => new Map(b.players.map((p) => [keyToId.get(fullKey(p.name)) ?? "", p] as const).filter(([id]) => id)));
@@ -60,7 +63,7 @@ function evaluate(cfg: Cfg) {
     if (prev) {
       const gap = dayNum(cur.lastUpdate) - dayNum(prev.lastUpdate);
       if (gap <= cfg.maxGap) {
-        const win = windowMatches(matches, prev.lastUpdate, cur.lastUpdate);
+        const win = windowMatches(matches, prev.lastUpdate, cur.lastUpdate).filter((m) => inEra(m, cur.lastUpdate));
         const st = new Map<string, St>();
         const get = (id: string): St => {
           let s = st.get(id);

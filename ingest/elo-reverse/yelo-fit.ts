@@ -15,7 +15,7 @@
 //   npx tsx ingest/elo-reverse/yelo-fit.ts ATP --pgrid    # K/D/seed grid
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadMatches, nameIndex, fullKey, keepForElo, roundRank, dayNum, type Match } from "./lib";
+import { loadMatches, nameIndex, fullKey, keepForElo, roundRank, dayNum, isRetirement, RET_ERA_START, type Match } from "./lib";
 import { parseBoard } from "./parse-boards";
 import type { YeloBoard } from "./parse-yelo";
 
@@ -151,8 +151,9 @@ const addD = (date: number, n: number): number => {
 
 /** PASS 2 — yElo for ONE player id over a season up to asOf (whole-tournament gating, end-year season). */
 function yeloFor(id: string, year: number, asOf: number, cfg: Cfg, tl = TL): St {
+  const countRet = asOf >= RET_ERA_START; // retirements only count on boards from the spring-2025 recompute on
   const ms = (byId.get(id) ?? []).filter(
-    (m) => Math.floor(m.endDate / 10000) === year && m.endDate <= asOf,
+    (m) => Math.floor(m.endDate / 10000) === year && m.endDate <= asOf && (countRet || !isRetirement(m)),
   );
   let yelo = cfg.seed, n = 0, wins = 0, losses = 0;
   for (const m of ms) {
