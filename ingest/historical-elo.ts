@@ -21,6 +21,10 @@ export interface EloConfig {
   seedFor: (level: string, round: string) => number;
   /** Injury/absence dock applied at rating-extraction time (see {@link LayoffDock}). Omit for no dock. */
   dock?: LayoffDock;
+  /** Era-gate retirements (see {@link RET_ELO_ERA_START}): when set, a replay whose cutoff is BEFORE this
+   *  date skips retirement results (TA only began counting RET at the spring-2025 recompute). Omit to count
+   *  retirements always (legacy behaviour). */
+  retEraStart?: number;
 }
 
 export const DEFAULT_ELO_CONFIG: EloConfig = { seedFor: () => 1500 };
@@ -151,9 +155,42 @@ export interface EloMatchRow {
   loserName: string;
   round: string;
   level: string; // tourney_level (G grand slam, D Davis/team, F finals, M/A/etc.)
+  score?: string; // raw score; used for walkover/retirement scope (omit-safe: treated as "games played")
 }
 
 const SURFACES: Record<string, EloSurface> = { Hard: "Hard", Clay: "Clay", Grass: "Grass" };
+
+// TA's verified full-board inclusion scope, reverse-engineered from TA's own boards (docs/yelo-reproduction.md,
+// docs/elo-investigation-findings.md). These mirror ingest/elo-reverse/lib.ts so the production engine and the
+// reverse-engineering tooling share one definition.
+
+/** TA began counting RETIREMENTS in the full board at a one-time spring-2025 recompute (retroactive): a board
+ *  frozen on/after this date counts RET for the WHOLE history; an earlier board excludes it. Walkovers are never
+ *  counted. So RET inclusion is decided by the SNAPSHOT (cutoff) date, not the match date. */
+export const RET_ELO_ERA_START = 20250418;
+const isRetirementRow = (r: EloMatchRow): boolean => !!r.score && /\d/.test(r.score) && /\b(RET|DEF|ABD)\b/i.test(r.score);
+
+/** Keep a row in the rating replay: drop pure WALKOVERS (no games played — "W/O"/"Walkover"/empty score) and
+ *  sub-$50K ITF (numeric tourney_level < 50). Everything contested at tour / Challenger / ITF-$50K+ stays.
+ *  A row with no score (hand-built/test) is treated as played. Retirements are kept HERE (era-gated at replay). */
+export function keepForEloRow(r: EloMatchRow): boolean {
+  if (r.score !== undefined && !/\d/.test(r.score)) return false; // walkover / no games played
+  const n = /^(\d+)/.exec(r.level)?.[1];
+  if (n && Number(n) < 50) return false; // sub-$50K ITF
+  return true;
+}
+
+/** Drop exact-duplicate feed rows (Sackmann's WTA qualifying/Challenger feed re-lists every WTA-125 match
+ *  twice). Keyed on date|round|winner|loser|score — a pair never legitimately collides on that key. */
+export function dedupeEloRows(rows: EloMatchRow[]): EloMatchRow[] {
+  const seen = new Set<string>();
+  return rows.filter((m) => {
+    const k = `${m.tourneyDate}|${m.round}|${m.winnerId}|${m.loserId}|${m.score ?? ""}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
 
 /**
  * Parse a Sackmann yearly matches CSV into Elo rows. Header-index lookup; the bare-`,` split is safe
@@ -176,6 +213,7 @@ export function parseEloMatchesCsv(
   const iLname = col("loser_name");
   const iRound = col("round");
   const iLevel = col("tourney_level");
+  const iScore = col("score");
   if ([iName, iDate, iWid, iLid, iWname, iLname, iRound, iLevel].includes(-1)) return [];
 
   const out: EloMatchRow[] = [];
@@ -200,6 +238,7 @@ export function parseEloMatchesCsv(
       loserName: cols[iLname] ?? "",
       round: cols[iRound] ?? "",
       level,
+      score: iScore === -1 ? "" : cols[iScore] ?? "",
     });
   }
   return out;
@@ -390,15 +429,28 @@ export interface ComputedRatings {
   byName: Map<string, ComputedElo>; // keyed by fullKey(name); ambiguous fullKeys are dropped
 }
 
+/** Chronological rank of a round WITHIN a tournament. Sackmann lists a tournament's matches FINAL-FIRST
+ *  (the final has the highest match_num, R128 the lowest), so naive input order processes the final
+ *  before its early rounds — letting a champion "beat" opponents still sitting at the entrant seed and
+ *  collapsing every unbeaten run to one value. We must replay in PLAY order: qualifying → round-robin →
+ *  R128 → … → F. Verified against TA's own boards (reverse-engineering, docs/yelo-reproduction.md): play
+ *  order tightened the board-replay residual measurably. Unknown rounds sort at R16 (mid-draw). */
+const ROUND_RANK: Record<string, number> = {
+  Q1: 1, Q2: 2, Q3: 3, Q4: 4, RR: 5, // qualifying then round-robin group stage (before the knockout)
+  R128: 10, R64: 11, R32: 12, R16: 13, QF: 14, SF: 15, BR: 16, F: 17,
+};
+const roundRank = (round: string): number => ROUND_RANK[round] ?? 13;
+
 /**
- * Sort rows into the deterministic replay order: (tourneyDate, original input index). Returns a NEW
- * array (input untouched). Sackmann shares one date across a whole tournament, so the original input
- * index is the only intra-date signal we have — a shuffled input must yield byte-identical output.
+ * Sort rows into the deterministic replay PLAY order: (tourneyDate, round-within-event, original input
+ * index). Returns a NEW array (input untouched). Sackmann shares one date across a whole tournament and
+ * lists its matches final-first, so we order by round (qualifying→F) before falling back to input index;
+ * a shuffled input must still yield byte-identical output.
  */
 export function sortEloRows(rows: EloMatchRow[]): EloMatchRow[] {
   return rows
     .map((row, idx) => ({ row, idx }))
-    .sort((a, b) => a.row.tourneyDate - b.row.tourneyDate || a.idx - b.idx)
+    .sort((a, b) => a.row.tourneyDate - b.row.tourneyDate || roundRank(a.row.round) - roundRank(b.row.round) || a.idx - b.idx)
     .map(({ row }) => row);
 }
 
@@ -419,8 +471,12 @@ export function computeRatingsAsOfSorted(
   config: EloConfig = DEFAULT_ELO_CONFIG,
 ): ComputedRatings {
   const engine = new EloEngine(config);
+  // Era-gate retirements by the SNAPSHOT date: a board frozen before the spring-2025 recompute excludes RET
+  // (TA's recompute was retroactive). When retEraStart is unset, retirements count always (legacy).
+  const countRet = config.retEraStart === undefined || cutoffDate >= config.retEraStart;
   for (const row of sortedRows) {
     if (row.tourneyDate >= cutoffDate) continue;
+    if (!countRet && isRetirementRow(row)) continue;
     engine.update(row);
   }
 

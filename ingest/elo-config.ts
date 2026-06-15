@@ -1,4 +1,4 @@
-import type { EloConfig, LayoffDock } from "./historical-elo";
+import { RET_ELO_ERA_START, type EloConfig, type LayoffDock } from "./historical-elo";
 
 // Per-tour entrant seeding for the TA-calibrated engine. A player's seed depends on their DEBUT level:
 // Challenger (level "C") or a qualifying round (round "Q*") seeds at `seedSub` (TA's "low 1200s"),
@@ -45,7 +45,14 @@ export const TA_LAYOFF_DOCK: LayoffDock = {
 export const seedConfig = (seedTour: number, seedSub: number): EloConfig => ({
   seedFor: (level, round) => (level === "C" || /^Q/.test(round) ? seedSub : seedTour),
   dock: TA_LAYOFF_DOCK,
+  retEraStart: RET_ELO_ERA_START, // era-gate retirements (transferred from the yElo reverse-engineering)
 });
 
-export const ATP_ELO_CONFIG: EloConfig = seedConfig(1550, 1170);
-export const WTA_ELO_CONFIG: EloConfig = seedConfig(1400, 1090);
+// Re-fitted 2026-06-15 after transferring the yElo learnings — PLAY-ORDER replay (round-within-event sort),
+// the full reverse-engineered SCOPE (drop walkovers + sub-$50K ITF + WTA-125 feed de-dup), and era-gated
+// retirements. Re-fit vs TA's published board (boards.json 20260504, top-50, dock ON): ATP 1400/1200 ->
+// overall meanAbs 5.6 (median 3.4, hard 10 clay 9), a ~3x improvement over the pre-transfer 15.4; WTA
+// 1350/1130 -> meanAbs 13.5 (hard 8 clay 11). The tour/sub SPLIT survives the re-fit (single-seed is far
+// worse — 141 ATP), but play order shifts the optimum lower (1400 vs the old 1550). See docs/elo-investigation-findings.md.
+export const ATP_ELO_CONFIG: EloConfig = seedConfig(1400, 1200);
+export const WTA_ELO_CONFIG: EloConfig = seedConfig(1350, 1130);

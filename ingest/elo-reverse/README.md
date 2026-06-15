@@ -50,5 +50,9 @@ Generated (gitignored): `boards.json`, `yelo-boards.json`, `yelo-scatter-{ATP,WT
 ## Note
 
 This tooling characterises TA's method; the **shipped** engine (`../historical-elo.ts` + `../elo-config.ts`)
-is the older from-scratch reconstruction and has not been migrated to these findings — see
-`docs/elo-investigation-findings.md` §0 for the pending corrections.
+is the from-scratch reconstruction. As of 2026-06-15 the key findings have been **transferred** to it:
+**play-order replay** (`sortEloRows` now sorts by round-within-event), the full **scope** (`keepForEloRow` +
+`dedupeEloRows` drop walkovers + sub-$50K ITF + the WTA-125 double-feed), and **era-gated retirements**
+(`retEraStart` in the config, cutoff-keyed). Seeds re-fit accordingly (ATP 1400/1200, WTA 1350/1130). Measured
+vs TA's board (boards.json 20260504, top-50): **ATP overall meanAbs 15.4 → 5.6** (~3×); WTA ~13. The
+injury/absence dock + 50/50 surface blend are unchanged.

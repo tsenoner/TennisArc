@@ -12,6 +12,8 @@ import { fetchMatchesCsv, fetchQualChallCsv, keepWtaQualItf } from "./durations"
 import {
   parseEloMatchesCsv,
   computeRatingsAsOfSorted,
+  dedupeEloRows,
+  keepForEloRow,
   sortEloRows,
   type EloMatchRow,
 } from "./historical-elo";
@@ -51,7 +53,7 @@ export async function loadSorted(tour: Tour, maxYear: number): Promise<EloMatchR
     const qc = await cachedCsv(`${tour}_qc_${y}.csv`, () => fetchQualChallCsv(tour, y).catch(() => null));
     if (qc) rows.push(...parseEloMatchesCsv(qc, itf));
   }
-  return sortEloRows(rows);
+  return sortEloRows(dedupeEloRows(rows.filter(keepForEloRow)));
 }
 
 const median = (a: number[]): number => {

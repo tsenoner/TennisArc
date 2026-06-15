@@ -119,7 +119,7 @@ function oppRatingAt(oppId: string, date: number, fallback: number): number {
     const f = Math.max(0, Math.min(1, (dayNum(date) - t0) / (t1 - t0)));
     return pv + f * (nv - pv);
   }
-  if (pv !== undefined || nv !== undefined) return pv ?? nv; // single-side carry-forward/back
+  if (pv !== undefined || nv !== undefined) return (pv ?? nv)!; // single-side carry-forward/back
   return EVER_ON_BOARD.has(oppId) ? fallback : OFF_BOARD_SEED; // never-on-board → flat off-board stand-in
 }
 
