@@ -45,7 +45,12 @@ const { keyToId } = nameIndex(allMatches);
 // reconcile only when counted). ATP does NOT count challenger (C) qualifying (Karol's TA page: yElo 21 = 57
 // chall − 36 quallies). Neither tour counts numeric-ITF (W50/W75/W100) qualifying. So the set below lists the
 // levels whose QUALIFYING counts; everything else's qualifying is dropped.
-const TOUR = new Set(tour === "ATP" ? ["G", "M", "A", "F"] : ["G", "PM", "P", "I", "F", "C"]);
+// WTA tour-level codes whose QUALIFYING TA counts. "W" (Eastbourne/Strasbourg/Bad Homburg/Cleveland… —
+// WTA 250/500 events Sackmann tags "W") was missing; its qualifying was wrongly dropped, costing ~180
+// board-players (incl. a top-100 cluster: Giorgi, Putintseva, Tomljanovic…). Verified: adding "W" lifts
+// WTA W/L-exact 66.9%→68.3% with no regression; adding ITF≥50 qual / walkovers / dropping Olympics all
+// REGRESS (grid-tested), so the inclusion rule is otherwise optimal.
+const TOUR = new Set(tour === "ATP" ? ["G", "M", "A", "F"] : ["G", "PM", "P", "I", "F", "C", "W"]);
 const isQual = (round: string): boolean => /^Q[1-4]$/.test(round); // Q1/Q2/Q3 — NOT QF (quarterfinal)
 const yeloScope = (m: Match): boolean =>
   !(isQual(m.round) && !TOUR.has(m.level)); // drop ITF (+ ATP challenger) qualifying; keep tour-level (+WTA-125) qualifying

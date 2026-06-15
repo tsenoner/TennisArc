@@ -200,6 +200,17 @@ Interpolating those weekly boards cannot pin an opponent finer than ~2–4 Elo e
 are all well-tracked (Medvedev's Brisbane 5-0 can't be driven below ~±1). Sackmann's Elo *generation* code and
 historical ratings are private (his own stated words).
 
+## Phase 3 verdict (2026-06-15): byte-exact yElo is impossible — now with a SECOND, independent proof
+
+The earlier conclusion (weekly 1-decimal boards can't pin a daily-Elo opponent finer than ~2-4) stands, and
+Phase 1 adds an independent, stronger proof: **the opponent match DATA itself drifts.** We proved (via TA's own
+`jsmatches`) that TA's match set differs from Sackmann's for many players — we can't even reproduce their exact
+W/L (ATP 94.9% / WTA 68.3% ceiling; see [`elo-investigation-findings.md`] and the W/L-irreducibility memo). If
+the opponent's match *results* aren't exactly right, their reconstructed Elo can't be either — so byte-exact
+yElo is doubly impossible from public Sackmann data, independent of board granularity. Current floor after the
+Phase-1 `W`-level fix is unchanged: **med-of-medians ATP 5.4 / WTA 5.9**, byte-exact on clean boards (Alcaraz
+2026). This is the data floor, not a model deficiency.
+
 **The full-precision-engine path was built and tested — it does NOT beat interpolation.** `.scratch/elo-reverse/
 yelo-engine.ts` (board-anchored replay, re-seeding from each published board, full-precision between captures,
 career-N K) under every opponent model — frozen-at-tournament-entry (`20260112` 7.1 / `20260223` 5.6),
