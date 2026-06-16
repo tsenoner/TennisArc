@@ -38,6 +38,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .seg .ctrl + .ctrl { border-left: 1px solid var(--line); }
 .ctrl.active { background: var(--accent); color: #fff; }
 .ctrl.theme { margin-left: auto; border: 1px solid var(--line); border-radius: 9px; }
+.ctrl.help { border: 1px solid var(--line); border-radius: 9px; font-weight: 700; line-height: 1; }
 .issues-link { border: 1px solid var(--line); border-radius: 9px; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
 
 /* mobile-only top-bar dropdowns (slam / lens) — hidden on desktop, the inline segments show instead */
@@ -183,6 +184,48 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .mi-scrim { display: none; }
 
 @keyframes mi-rise { from { transform: translateY(14%); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
+
+/* ============ Help modal ============
+   Unlike the in-flow match detail, Help is a genuine global overlay, so it IS a real
+   role="dialog" aria-modal with a scrim on every viewport. Desktop: a centred card.
+   Phones (≤720px block below): a bottom sheet, matching the rest of the app's sheets. */
+.help-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(4, 8, 12, .55);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.help-sheet { position: fixed; z-index: 61; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(640px, calc(100vw - 32px)); max-height: min(80vh, 760px);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: 0 18px 60px rgba(0, 0, 0, .5); }
+.help-sheet:focus { outline: none; }
+.help-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 13px 16px;
+  border-bottom: 1px solid var(--line); }
+.help-title { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.help-close { margin-left: auto; background: none; border: 0; color: var(--dim); cursor: pointer;
+  font: inherit; font-size: 16px; line-height: 1; padding: 4px 6px; }
+.help-close:hover { color: var(--text); }
+.help-content { overflow-y: auto; overscroll-behavior: contain; padding: 4px 16px 16px; }
+
+/* accordion: one <details> per "## " heading in docs/HELP.md */
+.help-sec { border-bottom: 1px solid var(--hairline); }
+.help-sec > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  padding: 13px 2px; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.help-sec > summary::-webkit-details-marker { display: none; }
+.help-sec > summary::before { content: "\25B8"; flex: none; color: var(--dim); font-size: 11px;
+  transition: transform .15s; }
+.help-sec[open] > summary::before { transform: rotate(90deg); }
+.help-body { font-size: 13px; line-height: 1.55; color: var(--text); padding: 0 2px 12px; }
+.help-body > :first-child { margin-top: 0; }
+.help-body p { margin: 0 0 8px; }
+.help-body a { color: var(--accent); }
+.help-body strong { color: var(--text); }
+.help-body ul, .help-body ol { margin: 0 0 8px; padding-left: 20px; }
+.help-body li { margin: 3px 0; }
+.help-body code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  background: var(--inset); border-radius: 4px; padding: 1px 5px; }
+.help-body pre { background: var(--inset); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; margin: 0 0 8px; overflow-x: auto; }
+.help-body pre code { background: none; padding: 0; line-height: 1.5; }
+.help-body em { color: var(--dim); }
 
 .loading { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); }
 .status { padding: 4px 14px 12px; color: var(--dim); font-size: 12px; }
@@ -350,15 +393,20 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    This block stays at the END of the file on purpose: many overrides below share the
    specificity of their base rules (.readout, .legend, …) and win the cascade by order. */
 @media (max-width: 720px) {
-  /* Width budget at 393px (iPhone 15): logo 28 + tour seg ~85 + slam dd ~78 + lens dd ~60
-     + theme 32 + icon-only Issues ~32 + 5×6px gaps + 20px padding ≈ 365px — real slack now,
-     so nothing wraps or clips. The tour seg must never absorb a deficit (it clipped "WTA"
-     to "WT" before), hence flex-shrink: 0 everywhere that matters. */
-  .controls { flex-wrap: nowrap; gap: 6px; padding: 8px 10px;
+  /* Width budget at 393px (iPhone 15), measured in WebKit: logo 28 + tour seg ~85 + slam dd ~70
+     + lens dd up to ~78 ("Country" — the widest label, the binding case) + a trailing icon trio
+     (theme · help · Issues, right-aligned by .ctrl.theme's margin-left:auto) + 6 gaps + 20px
+     h-padding. The trio is icon-only here. Adding the help "?" made it a FOURTH trailing control:
+     with 5px gaps + 7px trio side padding the Country lens shoved Issues ~11px past the edge,
+     where the shell's overflow:hidden clipped it. 4px gaps + 5px trio side padding buy ~7px of
+     slack on that widest lens, so nothing clips on any lens. The tour seg must never absorb a
+     deficit (it clipped "WTA" to "WT" before), hence flex-shrink: 0 below. */
+  .controls { flex-wrap: nowrap; gap: 4px; padding: 8px 10px;
     padding-top: calc(8px + env(safe-area-inset-top)); } /* clear the Dynamic Island when installed */
   .brand { margin-right: 2px; }
   .brand-name { display: none; }            /* logo only on phones */
   .ctrl { padding: 6px 9px; }
+  .ctrl.theme, .ctrl.help, .issues-link { padding: 6px 5px; }  /* icon-only trio: keep all four on one row */
   .tour-seg { flex-shrink: 0; }
   .issues-label { display: none; }          /* icon-only Issues link on phones */
   .only-wide { display: none; }             /* inline slam/lens segments → replaced by dropdowns */
@@ -443,13 +491,34 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .q-cap, .q-flag { display: none; }
 
   /* "Details ▾" → the detail tier rises as a bottom sheet over the bracket, with the same
-     grip/✕ grammar as the lens drawers; the scrim (rendered only while expanded) dims behind it */
+     grip/✕ grammar as the lens drawers; the scrim (rendered only while expanded) dims behind it.
+     Help docks the same way on phones (its ✕ in .help-bar is the dismiss), so the two SHARE the
+     bottom-sheet dock geometry below — defined once. Help's DESKTOP form is a centred card (its
+     base rule), so only the phone dock is shared, not the whole component. */
   .mi-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(4, 8, 12, .55); }
-  .stage .mi-detail { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
-    max-width: none; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
-    margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
-    padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
-    box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); animation: mi-rise .22s ease-out; }
+  .stage .mi-detail, .help-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; max-width: none; margin: 0;
+    border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
+    background: var(--panel); box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); /* upward — it docks at the bottom edge */
+    animation: mi-rise .22s ease-out; }
+  .stage .mi-detail { z-index: 41; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); }
+  /* Help deltas: it keeps z-index 61 from its base rule, undoes the centred-card transform, and
+     scrolls in .help-content (not the sheet itself, which stays an overflow:hidden flex column). */
+  .help-sheet { top: auto; transform: none; width: auto; max-height: 88dvh; }
+  .help-content { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+
+/* Sub-iPhone-15 phones (iPhone SE / 12-13 mini and other ≤375pt screens). The help "?" added a
+   FOURTH trailing control; even the tightened ≤720 header can't seat logo + ATP|WTA + slam dd +
+   the widest lens dd ("Country") + the icon trio on one row here, so Issues would clip off the
+   edge (the shell is overflow:hidden, so it'd be unreachable, not scrollable). Shave the dropdown
+   triggers, the gap and the trio a little more. This block only bites BELOW the iPhone-15 width,
+   so the 393px reference layout above is left exactly as measured. */
+@media (max-width: 380px) {
+  .controls { gap: 3px; }
+  .dd-trig { padding: 6px 6px; }
+  .ctrl.theme, .ctrl.help, .issues-link { padding: 6px 4px; }
 }
 
 /* Honour prefers-reduced-motion: suppress the only continuous motion (the live dot's infinite
@@ -457,5 +526,5 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    rule above by source order (same specificity). The dot stays visible (opacity reset to full). */
 @media (prefers-reduced-motion: reduce) {
   .ms-dot { animation: none; opacity: 1; }
-  .mi-detail, .stage .mi-detail { animation: none; }
+  .mi-detail, .stage .mi-detail, .help-sheet { animation: none; }
 }

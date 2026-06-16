@@ -35,6 +35,7 @@ interface AppState {
   panelOpen: boolean;
   panelExpanded: boolean;   // mobile bottom sheet: peek (false) vs tall (true)
   pinnedId: string | undefined; // tap/click-pinned player: path stays lit, readout names them
+  helpOpen: boolean;        // the Help modal (sourced from docs/HELP.md) — global overlay
 }
 
 function staleLabel(generatedAt: string | undefined, nowMs: number): string {
@@ -57,9 +58,70 @@ export function createApp(root: HTMLElement): () => void {
   const state: AppState = {
     tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
     colorDim: "time", seedSort: "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
-    openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined,
+    openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined, helpOpen: false,
   };
   let store: Store | undefined;
+
+  // ---- Help overlay ----
+  // Help is a TRUE global overlay, so it lives in its own host node OUTSIDE root.innerHTML.
+  // Two consequences fall out of that: (1) a background redraw (an in-flight load() resolving,
+  // a popstate) rebuilds root but never touches the modal, so its scroll position, expanded
+  // accordion sections, and keyboard focus all survive; (2) it is fully decoupled from draw()'s
+  // snapshot-gated branches, so the "?" trigger works the same whether or not a draw has loaded.
+  // The help module (and its markdown dependency) is code-split — imported only on first open,
+  // keeping it off the cold-start critical path for the users who never open Help.
+  const helpHost = document.createElement("div");
+  document.body.appendChild(helpHost);
+  let helpMod: Promise<typeof import("./help")> | undefined;
+  const helpBtn = () => root.querySelector<HTMLElement>('.ctrl.help[data-action="toggle-help"]');
+  const setHelp = (open: boolean): void => {
+    state.helpOpen = open;
+    // Opening over a top-bar dropdown? Dismiss it first (clear state + redraw root). Otherwise the
+    // .dd-pop stays rendered behind the about-to-be-inert background, and its window keydown handler
+    // stays armed — a stray Tab could then jump focus onto the (inert) trigger and need a 2nd Escape.
+    // Redrawing root is safe now: Help lives in helpHost, so the swap can't disturb the dialog.
+    if (open && state.openMenu) { state.openMenu = undefined; draw(); }
+    // The background is genuinely inert while the dialog is up: it can't be focused, clicked, or
+    // Tab-reached, and assistive tech skips it — so aria-modal is enforced, not merely asserted.
+    root.toggleAttribute("inert", open);
+    helpBtn()?.setAttribute("aria-expanded", String(open)); // keep the trigger's state cue honest, no redraw
+    if (!open) {
+      helpHost.replaceChildren();
+      helpBtn()?.focus();          // return focus to the trigger — never strand it on <body>
+      return;
+    }
+    void (helpMod ??= import("./help")).then(({ renderHelp }) => {
+      // Bail if: disposed / closed again before the chunk arrived, or already shown — a rapid
+      // open·close·open during the first load queues several .then callbacks on the one memoised
+      // promise; the firstChild check keeps the render idempotent (close empties helpHost).
+      if (signal.aborted || !state.helpOpen || helpHost.firstChild) return;
+      helpHost.innerHTML = renderHelp(true);
+      helpHost.querySelector<HTMLElement>(".help-sheet")?.focus();
+    });
+  };
+  // The scrim and the ✕ both dismiss; they live in helpHost (outside root), so root's click
+  // delegation never sees them — close from here.
+  helpHost.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest?.('[data-action="toggle-help"]')) setHelp(false);
+  }, { signal });
+  // Trap Tab inside the open dialog — belt-and-suspenders with the inert background above
+  // (covers any engine that doesn't fully honour `inert`). The real tab stops are the ✕, every
+  // accordion <summary>, and links in an OPEN section — a collapsed <details> keeps its links in
+  // the DOM but OUT of the tab order, so they must be excluded or the wrap mis-targets a hidden
+  // link. Re-queried each press so expanding a section is reflected immediately.
+  helpHost.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const f = [...helpHost.querySelectorAll<HTMLElement>('button:not([disabled]), summary, a[href]')]
+      .filter((el) => { const d = el.closest("details"); return !d || d.open || el.tagName === "SUMMARY"; });
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === helpHost.querySelector(".help-sheet"))) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault(); first.focus();
+    }
+  }, { signal });
 
   // Updated each draw so the (frequent) hover handler can build a readout without a full re-render.
   let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; isMatch: boolean } | undefined;
@@ -152,7 +214,7 @@ export function createApp(root: HTMLElement): () => void {
   const controlsOpts = () => ({
     tour: state.tour, colorDim: state.colorDim, theme: state.theme,
     index: state.index, year: state.year || undefined, slam: state.slam || undefined,
-    open: state.openMenu,
+    open: state.openMenu, helpOpen: state.helpOpen,
   });
 
   const draw = () => {
@@ -294,6 +356,9 @@ export function createApp(root: HTMLElement): () => void {
       `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}` +
         // CC BY-NC-SA: historical durations + ELO + birthdates come from Jeff Sackmann's data
         ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener noreferrer">Tennis Abstract</a></span></div>`;
+    // Help is NOT part of this innerHTML — it lives in helpHost (see setHelp) so this swap
+    // can't reset its scroll/accordion/focus. The "?" trigger above is re-rendered with the
+    // current aria-expanded via controlsOpts().helpOpen.
 
     // re-light the pinned path on the freshly-rendered arcs (innerHTML swap dropped the classes)
     if (pinned) {
@@ -476,6 +541,12 @@ export function createApp(root: HTMLElement): () => void {
       draw();
     } else if (a === "theme") {
       state.theme = nextTheme(state.theme); applyTheme(state.theme); saveTheme(state.theme); draw();
+    } else if (a === "toggle-help") {
+      // The header "?" trigger; the scrim and the ✕ close via helpHost's own listener. setHelp
+      // owns the inert background, focus move, and aria-expanded — no full redraw needed, and it
+      // mustn't fall through to the dropdown-focus restoration below (it would steal focus).
+      setHelp(!state.helpOpen);
+      return;
     } else if (a === "inspect" && el.dataset.match) {
       if (id && id === state.focusId) {
         // The focused section's own arc is the hub: tapping it zooms OUT one level (its
@@ -610,12 +681,13 @@ export function createApp(root: HTMLElement): () => void {
     items[next]?.focus();
   }, { signal });
 
-  // Escape unwinds the most recently opened layer, one per press: dropdown → match detail
-  // tier → match strip → lens drawer → pinned path → focused section. Focus stays the
-  // LAST rung — crumbs, the hub and browser Back are its primary exits.
+  // Escape unwinds the most recently opened layer, one per press: Help modal → dropdown →
+  // match detail tier → match strip → lens drawer → pinned path → focused section. Focus stays
+  // the LAST rung — crumbs, the hub and browser Back are its primary exits.
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
+    if (state.helpOpen) { setHelp(false); } // setHelp tears down the overlay + restores trigger focus
+    else if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
     else if (state.detailExpanded) {
       state.detailExpanded = false; draw();
       // mirror the click-collapse restoration: keyboard focus returns to the strip's toggle
@@ -656,5 +728,5 @@ export function createApp(root: HTMLElement): () => void {
     }
   })();
 
-  return () => ac.abort();
+  return () => { ac.abort(); root.removeAttribute("inert"); helpHost.remove(); };
 }
