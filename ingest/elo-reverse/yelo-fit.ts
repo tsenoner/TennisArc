@@ -15,7 +15,7 @@
 //   npx tsx ingest/elo-reverse/yelo-fit.ts ATP --pgrid    # K/D/seed grid
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadMatches, nameIndex, fullKey, keepForElo, roundRank, dayNum, addDays, isRetirement, medianUpper, round1, RET_ERA_START, type Match } from "./lib";
+import { loadMatches, nameIndex, fullKey, keepForElo, roundRank, dayNum, addDays, retInEra, medianUpper, round1, winProbabilityD, kFactorP, type Match } from "./lib";
 import { parseBoard } from "./parse-boards";
 import type { YeloBoard } from "./parse-yelo";
 
@@ -23,14 +23,12 @@ const ANCHOR = !process.argv.includes("--noanchor"); // anchor opponent timeline
 
 type Tour = "ATP" | "WTA";
 const tour = (process.argv[2] as Tour) ?? "ATP";
-const ONE = process.argv.includes("--board") ? Number(process.argv[process.argv.indexOf("--board") + 1]) : null;
-const TRACE = process.argv.includes("--trace") ? process.argv[process.argv.indexOf("--trace") + 1] : null;
+const boardArg = process.argv.includes("--board") ? process.argv[process.argv.indexOf("--board") + 1] : undefined;
+const ONE = boardArg !== undefined && Number.isFinite(Number(boardArg)) ? Number(boardArg) : null;
+const TRACE = (process.argv.includes("--trace") ? process.argv[process.argv.indexOf("--trace") + 1] : undefined) ?? null;
 
 interface Cfg { D: number; kNum: number; kOff: number; kShape: number; seed: number; tlSeed: number; tlStart: number }
 const BASE: Cfg = { D: 400, kNum: 250, kOff: 5, kShape: 0.4, seed: 1500, tlSeed: 1500, tlStart: 2008 };
-
-const winP = (rA: number, rB: number, D: number) => 1 / (1 + 10 ** ((rB - rA) / D));
-const kOf = (n: number, c: Cfg) => c.kNum / (n + c.kOff) ** c.kShape;
 
 const boards: YeloBoard[] = JSON.parse(
   readFileSync(resolve(process.cwd(), "ingest/elo-reverse/yelo-boards.json"), "utf8"),
@@ -156,9 +154,9 @@ function buildTimeline(cfg: Cfg): { wBefore: Map<number, number>; lBefore: Map<n
     const rw = elo.get(m.winnerId) ?? cfg.tlSeed, rl = elo.get(m.loserId) ?? cfg.tlSeed;
     wBefore.set(m.idx, rw); lBefore.set(m.idx, rl);
     const nw = cnt.get(m.winnerId) ?? 0, nl = cnt.get(m.loserId) ?? 0;
-    const e = winP(rw, rl, cfg.D);
-    elo.set(m.winnerId, rw + kOf(nw, cfg) * (1 - e));
-    elo.set(m.loserId, rl + kOf(nl, cfg) * (0 - (1 - e)));
+    const e = winProbabilityD(rw, rl, cfg.D);
+    elo.set(m.winnerId, rw + kFactorP(nw, cfg) * (1 - e));
+    elo.set(m.loserId, rl + kFactorP(nl, cfg) * (0 - (1 - e)));
     cnt.set(m.winnerId, nw + 1); cnt.set(m.loserId, nl + 1);
   }
   return { wBefore, lBefore };
@@ -176,17 +174,16 @@ for (const m of counted) {
 
 /** PASS 2 — yElo for ONE player id over a season up to asOf (whole-tournament gating, end-year season). */
 function yeloFor(id: string, year: number, asOf: number, cfg: Cfg, tl = TL): St {
-  const countRet = asOf >= RET_ERA_START; // retirements only count on boards from the spring-2025 recompute on
   const ms = (byId.get(id) ?? []).filter(
-    (m) => Math.floor(m.endDate / 10000) === year && m.endDate <= asOf && (countRet || !isRetirement(m)),
+    (m) => Math.floor(m.endDate / 10000) === year && m.endDate <= asOf && retInEra(m, asOf), // RET counts only post-recompute
   );
   let yelo = cfg.seed, n = 0, wins = 0, losses = 0;
   for (const m of ms) {
     const isW = m.winnerId === id;
     const oppId = isW ? m.loserId : m.winnerId;
     const oppReal = oppRatingAt(oppId, m.playDate, isW ? tl.lBefore.get(m.idx)! : tl.wBefore.get(m.idx)!);
-    const e = winP(yelo, oppReal, cfg.D);
-    yelo += kOf(n, cfg) * ((isW ? 1 : 0) - e);
+    const e = winProbabilityD(yelo, oppReal, cfg.D);
+    yelo += kFactorP(n, cfg) * ((isW ? 1 : 0) - e);
     n++; if (isW) wins++; else losses++;
     if (TRACE && fullKey(TRACE) === fullKey(isW ? m.winnerName : m.loserName))
       console.log(`  ${m.date} ${m.tourneyName.slice(0, 18).padEnd(18)} ${m.round.padEnd(4)} ${isW ? "W" : "L"} vs ${(isW ? m.loserName : m.winnerName).slice(0, 18).padEnd(18)} opp(real) ${oppReal.toFixed(0)} E ${(isW ? e : 1 - e).toFixed(3)} → ${yelo.toFixed(1)}`);

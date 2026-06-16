@@ -43,15 +43,24 @@ async function cachedCsv(name: string, fetcher: () => Promise<string | null>): P
   return csv;
 }
 
+// A 404 means Sackmann hasn't published that file (current year before publication / pre-coverage) — return
+// null so cachedCsv records it empty and we don't refetch. ANY other failure (429/5xx/network) MUST propagate:
+// caching a transient failure as an empty CSV would silently truncate that year on every later run, corrupting
+// both the seed fit and the opt-in regression fixture. (Mirrors backfill-elo.ts's abort-on-non-404.)
+const skip404 = (e: unknown): null => {
+  if (e instanceof Error && /HTTP 404/.test(e.message)) return null;
+  throw e;
+};
+
 /** Load + parse + sort ONCE per tour so the grid search only re-runs the (cheap) engine replay.
  *  Exported so the regression fixture reuses the same cached load. */
 export async function loadSorted(tour: Tour, maxYear: number): Promise<EloMatchRow[]> {
   const rows: EloMatchRow[] = [];
   const itf = tour === "WTA" ? keepWtaQualItf : undefined;
   for (let y = START_YEAR; y <= maxYear; y++) {
-    const main = await cachedCsv(`${tour}_${y}.csv`, () => fetchMatchesCsv(tour, y).catch(() => null));
+    const main = await cachedCsv(`${tour}_${y}.csv`, () => fetchMatchesCsv(tour, y).catch(skip404));
     if (main) rows.push(...parseEloMatchesCsv(main));
-    const qc = await cachedCsv(`${tour}_qc_${y}.csv`, () => fetchQualChallCsv(tour, y).catch(() => null));
+    const qc = await cachedCsv(`${tour}_qc_${y}.csv`, () => fetchQualChallCsv(tour, y).catch(skip404));
     if (qc) rows.push(...parseEloMatchesCsv(qc, itf));
   }
   return sortEloRows(dedupeEloRows(rows.filter(keepForEloRow)));

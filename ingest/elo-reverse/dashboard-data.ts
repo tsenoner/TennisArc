@@ -5,9 +5,9 @@
 //   npx tsx ingest/elo-reverse/dashboard-data.ts   →  ingest/elo-reverse/dashboard-data.json
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadBoards, loadMatches, nameIndex, fullKey, keepForElo, winProbability as winP, kFactor as kOf, round1, priorMatchCounter, replayWindow, isRecomputeBoundary } from "./lib";
+import { loadBoards, loadMatches, nameIndex, fullKey, keepForElo, winProbability as winP, kFactor as kOf, round1, priorMatchCounter, replayWindow, isRecomputeBoundary, BOARD_REPLAY } from "./lib";
 
-const SEED = 1200;
+const SEED = BOARD_REPLAY.seed;
 
 // status codes for the compact point form [nameIdx, ret, comp, m, statusCode]
 //  0 played · 1 idle · 2 new/debut (Elo) · 3 W/L≠TA (yElo)
@@ -76,7 +76,7 @@ function buildElo(tour: "ATP" | "WTA"): Dataset {
   const out: Snap[] = [];
   // fixed-param replay: SEED=1200, 45-day gap, library win-prob/K, no RET-era gate (see lib.replayWindow).
   for (const { i, prev, cur, gap, st, mcount, latest } of
-    replayWindow(boards, boardIds, matches, prior, { seed: SEED, maxGap: 45, winProb: winP, kFactor: kOf })) {
+    replayWindow(boards, boardIds, matches, prior, { seed: SEED, maxGap: BOARD_REPLAY.maxGap, winProb: winP, kFactor: kOf })) {
     const pts: RawPt[] = [];
     for (const [id, p] of boardIds[i]) {
       const had = latest.has(id);
@@ -113,11 +113,12 @@ const data = {
 };
 
 const OUT = resolve(process.cwd(), "ingest/elo-reverse/dashboard-data.json");
-writeFileSync(OUT, JSON.stringify(data));
+const json = JSON.stringify(data);
+writeFileSync(OUT, json);
 const kb = (s: unknown) => Math.round(JSON.stringify(s).length / 1024);
 for (const m of ["elo", "yelo"] as const)
   for (const t of ["ATP", "WTA"] as const) {
     const ds = data[m][t];
     console.log(`${m} ${t}: ${ds.snaps.length} snapshots, ${ds.snaps.reduce((s, x) => s + x.pts.length, 0)} pts, ${ds.names.length} names, ${kb(ds)} KB`);
   }
-console.log(`wrote ${OUT} (${kb(data)} KB total)`);
+console.log(`wrote ${OUT} (${Math.round(json.length / 1024)} KB total)`);

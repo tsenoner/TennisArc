@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 import type { Tour } from "../src/model";
 import { parseBoard as parseFullBoard } from "./elo-reverse/parse-boards";
 import { cdxTimestamps, fetchWaybackCapture } from "./elo-reverse/wayback";
+import { dedupeByDateKeepDeepest } from "./elo-reverse/lib";
 
 const RAW = resolve(process.cwd(), "data/wayback/raw");
 const OUT = resolve(process.cwd(), "ingest/fixtures/ta-elo-historical.json");
@@ -54,14 +55,12 @@ function buildFixture(): void {
   if (!existsSync(RAW)) throw new Error(`${RAW} missing — run with --fetch, or extract the tarball (see data/README.md)`);
   const out: Record<Tour, Board[]> = { ATP: [], WTA: [] };
   for (const t of ["ATP", "WTA"] as const) {
-    const byDate = new Map<number, Board>();
+    const parsed: Board[] = [];
     for (const f of readdirSync(RAW).filter((f) => f.startsWith(t.toLowerCase()) && f.endsWith(".html"))) {
       const b = parseBoard(readFileSync(resolve(RAW, f), "utf8"));
-      if (!b) continue;
-      const cur = byDate.get(b.date);
-      if (!cur || b.players.length > cur.players.length) byDate.set(b.date, b);
+      if (b) parsed.push(b);
     }
-    out[t] = [...byDate.values()].sort((a, b) => a.date - b.date);
+    out[t] = dedupeByDateKeepDeepest(parsed, (b) => b.date, (b) => b.players.length);
     const years = [...new Set(out[t].map((b) => Math.floor(b.date / 10000)))].sort();
     console.log(`${t}: ${out[t].length} board dates, ${out[t][0]?.date}..${out[t][out[t].length - 1]?.date}, years ${years.join(",")}`);
   }

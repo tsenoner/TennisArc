@@ -3,7 +3,7 @@
 // the browser. Stays alive until Ctrl-C.   npx tsx ingest/elo-reverse/serve.ts
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { resolve, extname } from "node:path";
+import { resolve, extname, sep } from "node:path";
 import { exec } from "node:child_process";
 
 const DIR = resolve(process.cwd(), "ingest/elo-reverse");
@@ -14,7 +14,9 @@ const server = createServer(async (req, res) => {
   const url = (req.url || "/").split("?")[0];
   const rel = url === "/" ? "dashboard.html" : decodeURIComponent(url.replace(/^\/+/, ""));
   const file = resolve(DIR, rel);
-  if (!file.startsWith(DIR)) { res.writeHead(403).end("forbidden"); return; }
+  // Boundary-aware containment check: a bare startsWith(DIR) also admits sibling dirs whose name has DIR as a
+  // prefix (e.g. ".../elo-reverse-private"), so require an exact match or a path-separator boundary after DIR.
+  if (file !== DIR && !file.startsWith(DIR + sep)) { res.writeHead(403).end("forbidden"); return; }
   try {
     const body = await readFile(file);
     res.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream", "cache-control": "no-cache" }).end(body);

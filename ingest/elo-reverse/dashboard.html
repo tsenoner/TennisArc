@@ -193,6 +193,7 @@ function drawScatter(){
   const special=mode==="elo"?2:3; // statusCode of the special group
   const isSpecial=p=>p[4]===special;
   const pts=t.pts.filter(p=>filter==="all"||!isSpecial(p));
+  if(!pts.length)return; // no points in this selection → svg already cleared; skip the NaN-scaled render
   const W=1100,H=720,m={l:64,r:22,t:18,b:54};
   const vals=pts.flatMap(p=>[p[1],p[2]]); let lo=Math.min(...vals),hi=Math.max(...vals);
   const pad=(hi-lo)*0.04||10; lo-=pad; hi+=pad;

@@ -251,7 +251,7 @@ export function parseEloMatchesCsv(
       loserName: cols[iLname] ?? "",
       round: cols[iRound] ?? "",
       level,
-      score: iScore === -1 ? "" : cols[iScore] ?? "",
+      score: iScore === -1 ? undefined : cols[iScore] ?? "",
     });
   }
   return out;

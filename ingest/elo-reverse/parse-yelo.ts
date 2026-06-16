@@ -11,6 +11,7 @@
 //   npx tsx ingest/elo-reverse/parse-yelo.ts
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { dedupeByDateKeepDeepest } from "./lib";
 
 const SRC = resolve(process.cwd(), "data/wayback/raw-full");
 const OUT = resolve(process.cwd(), "ingest/elo-reverse/yelo-boards.json");
@@ -69,14 +70,8 @@ function build(): void {
     if (b) out[tour].push(b);
   }
   // Dedup by lastUpdate: keep the DEEPEST board (most players) per as-of date.
-  for (const t of ["ATP", "WTA"] as const) {
-    const byDate = new Map<number, YeloBoard>();
-    for (const b of out[t]) {
-      const cur = byDate.get(b.lastUpdate);
-      if (!cur || b.players.length > cur.players.length) byDate.set(b.lastUpdate, b);
-    }
-    out[t] = [...byDate.values()].sort((a, b) => a.lastUpdate - b.lastUpdate);
-  }
+  for (const t of ["ATP", "WTA"] as const)
+    out[t] = dedupeByDateKeepDeepest(out[t], (b) => b.lastUpdate, (b) => b.players.length);
   writeFileSync(OUT, JSON.stringify(out));
   for (const t of ["ATP", "WTA"] as const) {
     const bs = out[t];

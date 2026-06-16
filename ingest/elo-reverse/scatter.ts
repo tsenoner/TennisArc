@@ -6,9 +6,9 @@
 //   npx tsx ingest/elo-reverse/scatter.ts   (or `pnpm elo:scatter` to build + open)
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { loadBoards, loadMatches, nameIndex, fullKey, keepForElo, winProbability as winP, kFactor as kOf, round1, priorMatchCounter, replayWindow, isRecomputeBoundary } from "./lib";
+import { loadBoards, loadMatches, nameIndex, fullKey, keepForElo, winProbability as winP, kFactor as kOf, round1, priorMatchCounter, replayWindow, isRecomputeBoundary, BOARD_REPLAY } from "./lib";
 
-const SEED = 1200, N_TRANSITIONS = 8;
+const SEED = BOARD_REPLAY.seed, N_TRANSITIONS = 8;
 
 interface Pt { name: string; ret: number; comp: number; d: number; m: number; status: "played" | "idle" | "new" }
 interface Trans { date: number; prevDate: number; gap: number; pts: Pt[]; stats: Record<string, number> }
@@ -24,7 +24,7 @@ function buildTour(tour: "ATP" | "WTA"): Trans[] {
   const out: Trans[] = [];
   // fixed-param replay: SEED=1200, 45-day gap, library win-prob/K, no RET-era gate (see lib.replayWindow).
   for (const { i, prev, cur, gap, st, mcount, latest } of
-    replayWindow(boards, boardIds, matches, prior, { seed: SEED, maxGap: 45, winProb: winP, kFactor: kOf })) {
+    replayWindow(boards, boardIds, matches, prior, { seed: SEED, maxGap: BOARD_REPLAY.maxGap, winProb: winP, kFactor: kOf })) {
     const pts: Pt[] = [];
     for (const [id, p] of boardIds[i]) {
       const had = latest.has(id);
@@ -41,8 +41,8 @@ function buildTour(tour: "ATP" | "WTA"): Trans[] {
         date: cur.lastUpdate, prevDate: prev.lastUpdate, gap, pts,
         stats: {
           n: scored.length, exact: abs.filter((x) => x <= 0.1).length, medAbs: round1(abs[abs.length >> 1] ?? 0),
-          w5: Math.round(100 * abs.filter((x) => x <= 5).length / abs.length),
-          w10: Math.round(100 * abs.filter((x) => x <= 10).length / abs.length), debuts: pts.length - scored.length,
+          w5: abs.length ? Math.round(100 * abs.filter((x) => x <= 5).length / abs.length) : 0,
+          w10: abs.length ? Math.round(100 * abs.filter((x) => x <= 10).length / abs.length) : 0, debuts: pts.length - scored.length,
         },
       });
     }

@@ -14,6 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { dedupeByDateKeepDeepest } from "./lib";
 
 // Raw archived boards live (gitignored) in data/wayback/raw, extracted from the COMMITTED tarball
 // data/wayback/ta-elo-boards-2016-2026.tar.gz. We auto-extract on first run so a clean checkout works.
@@ -119,14 +120,8 @@ function build(): void {
     }
   }
   // Dedup by lastUpdate (keep the deepest board per as-of date), then sort chronologically.
-  for (const t of ["ATP", "WTA"] as const) {
-    const byDate = new Map<number, Board>();
-    for (const b of out[t]) {
-      const cur = byDate.get(b.lastUpdate);
-      if (!cur || b.players.length > cur.players.length) byDate.set(b.lastUpdate, b);
-    }
-    out[t] = [...byDate.values()].sort((a, b) => a.lastUpdate - b.lastUpdate);
-  }
+  for (const t of ["ATP", "WTA"] as const)
+    out[t] = dedupeByDateKeepDeepest(out[t], (b) => b.lastUpdate, (b) => b.players.length);
   writeFileSync(OUT, JSON.stringify(out));
   for (const t of ["ATP", "WTA"] as const) {
     const bs = out[t];

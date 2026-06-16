@@ -8,26 +8,22 @@
 //   npx tsx ingest/elo-reverse/replay.ts ATP            # baseline (prior params, freeze)
 //   npx tsx ingest/elo-reverse/replay.ts ATP --clean    # exclude recompute boundaries
 //   npx tsx ingest/elo-reverse/replay.ts ATP --grid     # small grid over K numerator/seed
-import { loadBoards, loadMatches, nameIndex, fullKey, keepForElo, isRetirement, RET_ERA_START, priorMatchCounter, replayWindow, isRecomputeBoundary, medianUpper } from "./lib";
+import { loadBoards, loadMatches, nameIndex, fullKey, keepForElo, retInEra, priorMatchCounter, replayWindow, isRecomputeBoundary, medianUpper, winProbabilityD, kFactorP, BOARD_REPLAY } from "./lib";
 
 type Tour = "ATP" | "WTA";
 const tour = (process.argv[2] as Tour) ?? "ATP";
 const GRID = process.argv.includes("--grid");
 
 interface Cfg { D: number; kNum: number; kOff: number; kShape: number; seed: number; maxGap: number }
-const BASE: Cfg = { D: 400, kNum: 250, kOff: 5, kShape: 0.4, seed: 1200, maxGap: 45 };
+const BASE: Cfg = { D: 400, kNum: 250, kOff: 5, kShape: 0.4, seed: BOARD_REPLAY.seed, maxGap: BOARD_REPLAY.maxGap };
 const CLEAN = process.argv.includes("--clean"); // exclude recompute-boundary transitions
-
-const winP = (rA: number, rB: number, D: number) => 1 / (1 + 10 ** ((rB - rA) / D));
-const kOf = (n: number, c: Cfg) => c.kNum / (n + c.kOff) ** c.kShape;
 
 const boards = loadBoards()[tour];
 const allMatches = loadMatches(tour, 2010);
 const { keyToId } = nameIndex(allMatches); // name->id index from the FULL set (RET/WO players still need ids)
 const matches = allMatches.filter(keepForElo); // TA's verified inclusion scope: drop walkovers + sub-$50K ITF
-// Retirements are era-dependent: TA only counts them from the spring-2025 recompute (see RET_ERA_START). A
-// board pair (prev→cur) is scored against cur's published values, so a window counts RET iff cur is post-recompute.
-const inEra = (m: typeof matches[number], curDate: number): boolean => curDate >= RET_ERA_START || !isRetirement(m);
+// Retirements are era-dependent: TA only counts them from the spring-2025 recompute. A board pair (prev→cur)
+// is scored against cur's published values, so a window counts RET iff cur is post-recompute (shared retInEra).
 
 // board player name -> id, per board (cache)
 const boardIds = boards.map((b) => new Map(b.players.map((p) => [keyToId.get(fullKey(p.name)) ?? "", p] as const).filter(([id]) => id)));
@@ -42,7 +38,7 @@ function evaluate(cfg: Cfg) {
   // PARAMETRIC replay: cfg's D/K/seed/maxGap + the RET-era gate (eraGate). The shared windower carries-forward
   // TA's own board values and applies the window's matches; we score residuals against cur's published values.
   for (const { i, st, cur, latest } of replayWindow(boards, boardIds, matches, priorCount, {
-    seed: cfg.seed, maxGap: cfg.maxGap, winProb: (a, b) => winP(a, b, cfg.D), kFactor: (n) => kOf(n, cfg), eraGate: inEra,
+    seed: cfg.seed, maxGap: cfg.maxGap, winProb: (a, b) => winProbabilityD(a, b, cfg.D), kFactor: (n) => kFactorP(n, cfg), eraGate: retInEra,
   })) {
     // residual on players listed on BOTH prev and cur (idle players: predicted = seeded = prev value)
     const errs: number[] = [];

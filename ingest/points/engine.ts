@@ -25,8 +25,8 @@ const ATP_TBL = PT[0], WTA_TBL = PT[1]; // PT[4] = best-N spec (encoded in bestN
  *  calendar year, but the year-end ranking snapshot (published the final Monday) does NOT yet include them.
  *  Fall back to the calendar year when the id carries no 4-digit season prefix. */
 function seasonOf(m: Match): number {
-  const mPrefix = /^(\d{4})-/.exec(m.tourneyId);
-  return mPrefix ? +mPrefix[1] : Math.floor(m.date / 10000);
+  const ym = /^(\d{4})-/.exec(m.tourneyId);
+  return ym ? +ym[1] : Math.floor(m.date / 10000);
 }
 
 // Per-season `loadMatches(tour, year-1)` re-reads+re-parses the overlapping CSV set for every season (~17×/tour
@@ -68,10 +68,13 @@ function yearRange(key: string): [number, number] {
  *  then — if several remain — by draw: each variant's name carries the draw sizes it covers (e.g. 56_64D);
  *  pick the tightest variant whose largest covered size ≥ draw. */
 function resolveTable(tierObj: Record<string, any>, year: number, draw: number): RoundMap | null {
-  let cands = Object.keys(tierObj).filter((k) => !k.startsWith("_"));
-  const inYear = cands.filter((k) => { const [a, b] = yearRange(k); return year >= a && year <= b; });
-  cands = inYear.length ? inYear : cands;
-  if (!cands.length) return null;
+  const cands0 = Object.keys(tierObj).filter((k) => !k.startsWith("_"));
+  if (!cands0.length) return null;
+  const inYear = cands0.filter((k) => { const [a, b] = yearRange(k); return year >= a && year <= b; });
+  // No sub-key covers `year` (a season outside every encoded range — e.g. a newly-added future year): fall
+  // back to the NEWEST era (latest start year), not the arbitrary first key, since a new season resembles the
+  // most recent table. (For every in-range season this branch is unused, so existing results are unchanged.)
+  const cands = inYear.length ? inYear : [cands0.reduce((best, k) => (yearRange(k)[0] >= yearRange(best)[0] ? k : best))];
   if (cands.length === 1) return tierObj[cands[0]];
   // Draw sizes are ≤128; the regex can greedily swallow the leading year digits (e.g. "2014_2023_56_48D"),
   // so drop year-magnitude (≥1000) values and keep only the real draw sizes.
@@ -130,7 +133,7 @@ function wtaCls(m: Match, year: number): Cls {
   if (lv === "C" || /^[0-9]/.test(lv)) return { tier: "SKIP", table: null }; // WTA-125 / ITF
   const T = WTA_TIERS_BY_YEAR[String(year)] ?? {};
   const has = (list?: string[]) => (list ?? []).some((x) => norm(x) === nm);
-  const mand = year >= 2024 ? T.mandatory1000 : year >= 2021 ? T.mandatory1000 : T.premierMandatory;
+  const mand = year >= 2021 ? T.mandatory1000 : T.premierMandatory;
   if (has(mand)) return { tier: "MAND_M", table: WTA_TBL.WTA_1000_MANDATORY };
   const nonmand = year >= 2021 ? T.nonmand900 : T.premier5;
   if (has(nonmand)) return { tier: "OTHER", table: WTA_TBL.WTA_1000_NONMANDATORY_900 };
@@ -171,7 +174,8 @@ function finalsPoints(tour: "ATP" | "WTA", year: number, table: any, rec: { won:
     if (wonSF) return rr + 200;  // finalist (won SF)
     return rr;                   // SF loser / group exit: RR points only
   }
-  const t = resolveTable(table, year, 8)!;
+  const t = resolveTable(table, year, 8);
+  if (!t) return 0; // malformed/empty finals table for this season — score no points rather than crash
   const rrWins = rec.won.filter((m) => m.round === "RR").length;
   const rrPlayed = rrWins + rec.lost.filter((m) => m.round === "RR").length;
   const sfWin = rec.won.some((m) => m.round === "SF");
@@ -296,8 +300,9 @@ if (arg[0] === "--emit") {
   console.log(ok ? "\nKNOWN-ANSWER GATE: PASS" : "\nKNOWN-ANSWER GATE: FAIL");
   process.exit(ok ? 0 : 1);
 } else if (arg.find((a) => a.startsWith("--p="))) {
-  const tour = (arg[0] as "ATP" | "WTA") ?? "ATP";
-  const year = Number(arg[1] ?? 2023);
+  const pos = arg.filter((a) => !a.startsWith("--")); // tour/year are the non-flag positionals
+  const tour = (pos[0] as "ATP" | "WTA") ?? "ATP";
+  const year = Number(pos[1] ?? 2023);
   const want = sig(arg.find((a) => a.startsWith("--p="))!.slice(4));
   const all = seasonMatches(tour, year);
   const { evName, idName } = eventsForPlayer(tour, year, all);

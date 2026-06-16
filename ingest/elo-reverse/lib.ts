@@ -4,16 +4,27 @@
 // and provides name<->id joins so a board player can be tied to their Sackmann matches.
 //
 // Re-exports winProbability / kFactor from the production engine so every analysis uses one source.
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fullKey } from "../names";
-import { winProbability, kFactor, dayNumber, roundRank, keepForEloScope } from "../historical-elo";
+import { winProbability, kFactor, dayNumber, roundRank, keepForEloScope, RET_ELO_ERA_START } from "../historical-elo";
 import type { Board, BoardPlayer } from "./parse-boards";
 
 export { winProbability, kFactor, fullKey, roundRank };
 // Re-export the engine's day-number helper under lib's public name (consumers import `dayNum` unchanged).
 export { dayNumber as dayNum };
 export type { Board, BoardPlayer };
+
+// Parametric Elo helpers for the reverse-engineering grids (replay.ts / yelo-fit.ts sweep D and the K shape,
+// so they can't use the FIXED production winProbability/kFactor). winProbabilityD(a,b,400) and
+// kFactorP(n,{kNum:250,kOff:5,kShape:0.4}) reproduce the production law — one definition shared by both tools.
+export const winProbabilityD = (rA: number, rB: number, D: number): number => 1 / (1 + 10 ** ((rB - rA) / D));
+export const kFactorP = (n: number, c: { kNum: number; kOff: number; kShape: number }): number =>
+  c.kNum / (n + c.kOff) ** c.kShape;
+
+// Fixed board-replay params shared by replay.ts / scatter.ts / dashboard-data.ts so the three views can't
+// drift: the entrant seed for a never-seen player, and the max board-pair day-gap to replay.
+export const BOARD_REPLAY = { seed: 1200, maxGap: 45 } as const;
 
 const CACHE = resolve(process.cwd(), "ingest/.cache/elo");
 
@@ -60,6 +71,11 @@ export function keepForElo(m: Match): boolean {
  *  no Wayback capture exists between 2025-03-17 and 2025-05-26 — so we gate at a midpoint in that window. */
 export { RET_ELO_ERA_START as RET_ERA_START } from "../historical-elo";
 export const isRetirement = (m: Match): boolean => /\d/.test(m.score) && /\b(RET|DEF|ABD)\b/i.test(m.score);
+
+/** Per-match RET-era inclusion gate shared by replay.ts and yelo-fit.ts: a board/window as-of `date` counts a
+ *  retirement only from TA's spring-2025 recompute on (RET_ELO_ERA_START); before that, retirements are
+ *  excluded. Non-retirement matches always count. One definition of the era rule for both tools. */
+export const retInEra = (m: Match, date: number): boolean => date >= RET_ELO_ERA_START || !isRetirement(m);
 
 const SURF: Record<string, "Hard" | "Clay" | "Grass"> = { Hard: "Hard", Clay: "Clay", Grass: "Grass" };
 
@@ -126,7 +142,10 @@ export function playDate(date: number, drawSize: number, level: string, round: s
   const total = Math.max(1, Math.round(Math.log2(Math.max(2, drawSize)))); // # main-draw rounds
   const rn = total - depth + 1; // 1 = first round … total = final
   const off = total <= 1 ? span : Math.round(((rn - 1) / (total - 1)) * span);
-  return addDays(date, Math.min(off, span));
+  // Clamp to [0, span]: a round label deeper than the draw size implies (depth > total — e.g. an "R64" tagged in
+  // a 32-draw event) makes rn <= 0 and a NEGATIVE offset, which would place the match BEFORE the event start. A
+  // main-draw match never precedes day 0 (qualifying is handled above), so floor the offset at the event start.
+  return addDays(date, Math.max(0, Math.min(off, span)));
 }
 
 /** Estimated final-match (event END) date — used to attribute a whole tournament to a season/board. */
@@ -137,6 +156,8 @@ export function estEnd(date: number, drawSize: number, level: string): number {
 /** Load + parse every Sackmann yearly CSV for a tour, sorted by (date, input index). Keeps extra columns
  *  the engine's parser drops. `fromYear` lets callers skip deep history they don't need (faster). */
 export function loadMatches(tour: "ATP" | "WTA", fromYear = 2014): Match[] {
+  if (!existsSync(CACHE))
+    throw new Error(`${CACHE} missing — populate the Sackmann CSV cache first: npx tsx ingest/calibrate-elo.ts`);
   const files = readdirSync(CACHE)
     .filter((f) => f.startsWith(`${tour}_`) && f.endsWith(".csv"))
     .filter((f) => Number(f.match(/_(\d{4})\.csv$/)?.[1] ?? 0) >= fromYear)
@@ -188,6 +209,17 @@ export function loadBoards(): { ATP: Board[]; WTA: Board[] } {
   return JSON.parse(readFileSync(resolve(process.cwd(), "ingest/elo-reverse/boards.json"), "utf8"));
 }
 
+/** Dedup a board list by as-of date, keeping the DEEPEST capture (most players) per date, sorted ascending.
+ *  Shared by parse-boards.ts / parse-yelo.ts / elo-wayback.ts (same rule, different board shapes/date fields). */
+export function dedupeByDateKeepDeepest<T>(items: T[], dateOf: (t: T) => number, sizeOf: (t: T) => number): T[] {
+  const byDate = new Map<number, T>();
+  for (const it of items) {
+    const cur = byDate.get(dateOf(it));
+    if (!cur || sizeOf(it) > sizeOf(cur)) byDate.set(dateOf(it), it);
+  }
+  return [...byDate.values()].sort((a, b) => dateOf(a) - dateOf(b));
+}
+
 /** id -> canonical display name (most frequent), and fullKey(name) -> dominant id (>=4x runner-up,
  *  matching the engine's AMBIGUITY_DOMINANCE). Lets a board player (name only) be tied to a Sackmann id. */
 export function nameIndex(matches: Match[]): { idName: Map<string, string>; keyToId: Map<string, string>; idCount: Map<string, number> } {
@@ -223,27 +255,10 @@ export function nameIndex(matches: Match[]): { idName: Map<string, string>; keyT
   return { idName, keyToId, idCount };
 }
 
-/** Resolve each board player to a Sackmann id via fullKey. Returns name->id and the unmatched names. */
-export function resolveBoard(board: Board, keyToId: Map<string, string>): { id: Map<string, string>; unmatched: string[] } {
-  const id = new Map<string, string>();
-  const unmatched: string[] = [];
-  for (const p of board.players) {
-    const hit = keyToId.get(fullKey(p.name));
-    if (hit) id.set(p.name, hit);
-    else unmatched.push(p.name);
-  }
-  return { id, unmatched };
-}
-
 /** Matches that BELONG to the window between two board as-of dates, by estimated tournament END date:
  *  prev.lastUpdate < endDate <= cur.lastUpdate. (A tournament shows up on the first board after it ends.) */
 export function windowMatches(matches: Match[], prevDate: number, curDate: number): Match[] {
   return matches.filter((m) => m.endDate > prevDate && m.endDate <= curDate);
-}
-
-/** Convenience: index a board's players by name for O(1) lookup of elo/age/rank. */
-export function byName(board: Board): Map<string, BoardPlayer> {
-  return new Map(board.players.map((p) => [p.name, p]));
 }
 
 // ---- shared board-replay window machinery (scatter.ts / dashboard-data.ts / replay.ts) ----

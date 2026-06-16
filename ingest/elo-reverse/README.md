@@ -61,7 +61,7 @@ Generated (gitignored): `boards.json`, `yelo-boards.json`, `yelo-scatter-{ATP,WT
 - **Dense captures:** `data/wayback/raw-full/` (gitignored, `fetch-wayback.ts`) — 412 ATP + 271 WTA full-Elo
   + 34 ATP + 36 WTA yElo distinct-content captures.
 - **Monthly tarball:** `data/wayback/ta-elo-boards-2016-2026.tar.gz` (committed) → `data/wayback/raw/`.
-- **Sackmann match CSVs:** `ingest/.cache/elo/` (gitignored; `pnpm backfill-elo` if empty).
+- **Sackmann match CSVs:** `ingest/.cache/elo/` (gitignored; populated by `npx tsx ingest/calibrate-elo.ts`. Note `pnpm backfill-elo` fetches straight into the snapshots and does **not** write this cache).
 
 ## Note
 
