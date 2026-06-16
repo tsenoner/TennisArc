@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseMatchesCsv, applyDurations, type SlamDurationRow } from "./durations";
+import { parseMatchesCsv, applyDurations, qualChallUrl, keepWtaQualItf, type SlamDurationRow } from "./durations";
 import type { Match, Player } from "../src/model";
 
 const csv = readFileSync(resolve(__dirname, "fixtures/matches-sample.csv"), "utf8");
@@ -124,4 +124,21 @@ describe("applyDurations", () => {
     applyDurations(matches, players, aoRows);
     expect(matches.m.durationSec).toBe(1234);
   });
+});
+
+test("qualChallUrl builds the qual/challenger file URL per tour", () => {
+  expect(qualChallUrl("ATP", 2024)).toBe(
+    "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_matches_qual_chall_2024.csv");
+  expect(qualChallUrl("WTA", 2024)).toBe(
+    "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_matches_qual_itf_2024.csv");
+});
+
+test("keepWtaQualItf keeps >=50K ITF tiers and all non-numeric (non-ITF) levels", () => {
+  expect(keepWtaQualItf("50")).toBe(true);
+  expect(keepWtaQualItf("60")).toBe(true);    // $60K is >= $50K (was previously omitted)
+  expect(keepWtaQualItf("100")).toBe(true);
+  expect(keepWtaQualItf("25")).toBe(false);   // sub-$50K ITF -> excluded
+  expect(keepWtaQualItf("15")).toBe(false);
+  expect(keepWtaQualItf("W")).toBe(true);      // non-ITF WTA level -> kept
+  expect(keepWtaQualItf("G")).toBe(true);
 });

@@ -1,15 +1,19 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Snapshot, Tour } from "../src/model";
-import { fetchMatchesCsv } from "./durations";
+import { fetchMatchesCsv, fetchQualChallCsv, keepWtaQualItf } from "./durations";
 import { TOURNEY } from "./names";
 import {
   applyHistoricalElo,
   computeRatingsAsOfSorted,
+  dedupeEloRows,
+  keepForEloRow,
   parseEloMatchesCsv,
   sortEloRows,
+  type EloConfig,
   type EloMatchRow,
 } from "./historical-elo";
+import { ATP_ELO_CONFIG, WTA_ELO_CONFIG } from "./elo-config";
 
 // Recompute surface-aware historical Elo for every on-disk snapshot, frozen at each slam's own start
 // date, from Jeff Sackmann's FULL match history (every event per tour, not just slams). The only
@@ -20,21 +24,34 @@ import {
 //   pnpm backfill-elo 2016 2017  # specific years
 const OUT_DIR = resolve(process.cwd(), "public/data");
 const SLAMS_DIR = resolve(OUT_DIR, "slams");
-const START_YEAR = 2000;
+// Full Sackmann history. Tour-level exists 1968+ (Challengers only 2008+, qualifying 2011+, so the deep
+// past is tour-level only). The deeper burn-in matures the rating scale; the entrant seed is re-fit for
+// this start in elo-config.ts. ELO_START_YEAR overrides for experiments.
+const START_YEAR = Number(process.env.ELO_START_YEAR) || 1968;
 
 /** Fetch + parse Sackmann CSVs START_YEAR..maxYear for one tour into a single EloMatchRow[], sorted
  *  ONCE into replay order so every per-snapshot recompute reuses it via computeRatingsAsOfSorted. */
 async function loadTourRows(tour: Tour, maxYear: number): Promise<EloMatchRow[]> {
   const rows: EloMatchRow[] = [];
+  // keepForEloRow (post-parse) now applies the FULL reverse-engineered scope to BOTH tours/feeds — drop
+  // walkovers + sub-$50K ITF — so the level-only WTA itfFilter is no longer needed (subsumed + extended).
+  const itfFilter = tour === "WTA" ? keepWtaQualItf : undefined;
+  // A 404 means Sackmann hasn't published that file yet (the current year before publication; pre-2008
+  // challengers) — skip it. ANY other failure (429/5xx/network) must ABORT: silently dropping a year
+  // would truncate the replayed history and ship wrong ratings for every snapshot after it.
+  const skip404 = (label: string) => (e: unknown): null => {
+    if (e instanceof Error && /HTTP 404/.test(e.message)) { console.warn(`${tour} ${label}: not published (404) — skipping`); return null; }
+    throw e;
+  };
   for (let year = START_YEAR; year <= maxYear; year++) {
-    const csv = await fetchMatchesCsv(tour, year).catch((err) => {
-      console.warn(`${tour} ${year}: matches CSV unavailable (${err}) — skipping that year`);
-      return null;
-    });
-    if (csv) rows.push(...parseEloMatchesCsv(csv));
+    const main = await fetchMatchesCsv(tour, year).catch(skip404(`${year} main`));
+    if (main) rows.push(...parseEloMatchesCsv(main));
+    const qc = await fetchQualChallCsv(tour, year).catch(skip404(`${year} qual`));
+    if (qc) rows.push(...parseEloMatchesCsv(qc, itfFilter));
   }
-  return sortEloRows(rows);
+  return sortEloRows(dedupeEloRows(rows.filter(keepForEloRow)));
 }
+const configFor = (tour: Tour): EloConfig => (tour === "ATP" ? ATP_ELO_CONFIG : WTA_ELO_CONFIG);
 
 /** The shared tourney_date for a (year, slam) in the fetched rows, or null if Sackmann has no such
  *  event yet (current-slam lag) — that absence is the coverage gate, NOT a reason to write null elo. */
@@ -82,7 +99,7 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const { byName } = computeRatingsAsOfSorted(rows, cutoff);
+      const { byName } = computeRatingsAsOfSorted(rows, cutoff, configFor(snap.tour));
       // Snapshot the prior elo so we can detect a true no-op (idempotent re-runs leave git clean).
       const before = JSON.stringify(Object.values(snap.players).map((p) => p.elo ?? null));
       const { matched, unmatched } = applyHistoricalElo(snap.players, byName);

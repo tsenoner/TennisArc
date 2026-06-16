@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Player } from "../src/model";
@@ -12,7 +12,12 @@ import {
   computeRatingsAsOfSorted,
   sortEloRows,
   applyHistoricalElo,
+  activeLayoffDays,
+  layoffPenalty,
+  DEFAULT_ELO_CONFIG,
+  type EloConfig,
   type EloMatchRow,
+  type LayoffDock,
 } from "./historical-elo";
 
 const csv = readFileSync(resolve(__dirname, "fixtures/elo-matches-sample.csv"), "utf8");
@@ -107,15 +112,14 @@ describe("resolveSurfaceElo", () => {
   it("returns null for an unplayed surface (count 0)", () => {
     expect(resolveSurfaceElo(1700, 0, 1500)).toBeNull();
   });
-  it("blends a thin sample toward overall (w = count/burnIn)", () => {
-    // count 1, burnIn 10 -> w = 0.1: 0.1*surface + 0.9*overall
-    expect(resolveSurfaceElo(1700, 1, 1500)).toBeCloseTo(0.1 * 1700 + 0.9 * 1500, 10);
-    // a near-1500 surface with little data should sit close to overall, not the noisy surface value
-    expect(resolveSurfaceElo(1505, 2, 1600)).toBeCloseTo(0.2 * 1505 + 0.8 * 1600, 10);
+  it("is a flat 50/50 blend of overall and surface at any nonzero count", () => {
+    // TA methodology: 0.5*overall + 0.5*surface regardless of sample size.
+    expect(resolveSurfaceElo(1700, 1, 1500)).toBeCloseTo(0.5 * 1700 + 0.5 * 1500, 10); // 1600
+    expect(resolveSurfaceElo(1505, 2, 1600)).toBeCloseTo(0.5 * 1505 + 0.5 * 1600, 10); // 1552.5
   });
-  it("returns the pure surface rating once the sample reaches burnIn", () => {
-    expect(resolveSurfaceElo(1700, 10, 1500)).toBe(1700);
-    expect(resolveSurfaceElo(1700, 25, 1500)).toBe(1700);
+  it("uses the same 50/50 blend at high counts (no burn-in, no pure-surface mode)", () => {
+    expect(resolveSurfaceElo(1700, 10, 1500)).toBe(0.5 * 1700 + 0.5 * 1500); // 1600
+    expect(resolveSurfaceElo(1700, 25, 1500)).toBe(0.5 * 1700 + 0.5 * 1500); // 1600
   });
 });
 
@@ -264,5 +268,176 @@ describe("applyHistoricalElo", () => {
     const players: Record<string, Player> = { p: player("p", "Rafael Nadal") };
     applyHistoricalElo(players, all.byName);
     expect(Object.keys(players.p.elo!).sort()).toEqual(["clay", "grass", "hard", "overall"]);
+  });
+});
+
+test("parseEloMatchesCsv drops rows whose level the predicate rejects", () => {
+  const csv = [
+    "tourney_name,surface,tourney_date,winner_id,loser_id,winner_name,loser_name,round,tourney_level",
+    "A,Hard,20240101,1,2,W A,L B,R32,C",   // level C -> kept by predicate below
+    "B,Hard,20240101,3,4,W C,L D,R32,15",  // level 15 -> rejected
+  ].join("\n");
+  const all = parseEloMatchesCsv(csv);
+  expect(all).toHaveLength(2); // default keeps everything
+  const filtered = parseEloMatchesCsv(csv, (lvl) => lvl !== "15");
+  expect(filtered).toHaveLength(1);
+  expect(filtered[0].level).toBe("C");
+});
+
+test("parseEloMatchesCsv carries round and level for seeding", () => {
+  const csv = [
+    "tourney_name,surface,tourney_date,winner_id,loser_id,winner_name,loser_name,round,tourney_level",
+    "Some Challenger,Hard,20240101,1,2,A B,C D,Q1,C",
+  ].join("\n");
+  const rows = parseEloMatchesCsv(csv);
+  expect(rows[0].round).toBe("Q1");
+  expect(rows[0].level).toBe("C");
+});
+
+const seedRow = (o: Partial<EloMatchRow> = {}) => ({
+  tourneyName: "T", tourneyDate: 20240101, surface: "Hard" as const,
+  winnerId: "1", loserId: "2", winnerName: "Win A", loserName: "Lose B",
+  round: "R32", level: "A", ...o,
+});
+test("seedFor controls the entrant rating; default is 1500", () => {
+  expect(DEFAULT_ELO_CONFIG.seedFor("A", "R32")).toBe(1500);
+  // A debut loser starts at the seed and drops kFactor(0)*0.5 ≈ 65.66 after one loss, so they end
+  // just below the seed. Shifting the seed shifts that whole window by the same amount.
+  const def = computeRatingsAsOf([seedRow()], 20240102);
+  expect(def.byId.get("2")!.overall).toBeLessThan(1500);
+  expect(def.byId.get("2")!.overall).toBeGreaterThan(1400); // 1500 - 65.66 ≈ 1434.34
+  const cfg: EloConfig = { seedFor: (level) => (level === "C" ? 1230 : 1500) };
+  const cust = computeRatingsAsOf([seedRow({ level: "C" })], 20240102, cfg);
+  expect(cust.byId.get("2")!.overall).toBeLessThan(1230);
+  expect(cust.byId.get("2")!.overall).toBeGreaterThan(1130); // 1230 - 65.66 ≈ 1164.34
+  // The two configs differ by exactly the seed gap (1500 - 1230 = 270): same dynamics, shifted floor.
+  expect(def.byId.get("2")!.overall - cust.byId.get("2")!.overall).toBeCloseTo(270, 9);
+  // `round` is part of the seed signature too: a qualifying-round (Q*) debutant can be seeded apart
+  // from a main-draw one. Guards against the round arg being dropped from the seedFor(level, round) call.
+  const roundCfg: EloConfig = { seedFor: (_level, round) => (round.startsWith("Q") ? 1200 : 1500) };
+  const q = computeRatingsAsOf([seedRow({ round: "Q1" })], 20240102, roundCfg);
+  expect(q.byId.get("2")!.overall).toBeLessThan(1200);
+  expect(q.byId.get("2")!.overall).toBeGreaterThan(1100); // 1200 - 65.66 ≈ 1134.34
+});
+
+test("byName prefers the dominant Sackmann id over a same-name low-match phantom", () => {
+  // Two ids share fullKey "starplayer": id "1" plays 4 matches, id "2" a single phantom match
+  // (mirrors Mensik: 212 real matches under one id, 11 under a qual/challenger duplicate id).
+  const rows: EloMatchRow[] = [
+    seedRow({ winnerId: "1", winnerName: "Star Player", loserId: "9a", loserName: "Opp A", tourneyDate: 20240101 }),
+    seedRow({ winnerId: "1", winnerName: "Star Player", loserId: "9b", loserName: "Opp B", tourneyDate: 20240108 }),
+    seedRow({ winnerId: "1", winnerName: "Star Player", loserId: "9c", loserName: "Opp C", tourneyDate: 20240115 }),
+    seedRow({ winnerId: "9d", winnerName: "Opp D", loserId: "1", loserName: "Star Player", tourneyDate: 20240122 }),
+    seedRow({ winnerId: "2", winnerName: "Star Player", loserId: "9e", loserName: "Opp E", tourneyDate: 20240129 }),
+  ];
+  const { byId, byName } = computeRatingsAsOf(rows, 20240201);
+  expect(byName.get("starplayer")).toBe(byId.get("1")); // dominant id (4 matches) wins over phantom (1)
+});
+
+test("byName still drops genuinely ambiguous same-name ids with comparable match counts", () => {
+  const rows: EloMatchRow[] = [
+    seedRow({ winnerId: "10", winnerName: "Twin Name", loserId: "8a", loserName: "X A", tourneyDate: 20240101 }),
+    seedRow({ winnerId: "10", winnerName: "Twin Name", loserId: "8b", loserName: "X B", tourneyDate: 20240108 }),
+    seedRow({ winnerId: "11", winnerName: "Twin Name", loserId: "8c", loserName: "X C", tourneyDate: 20240115 }),
+    seedRow({ winnerId: "11", winnerName: "Twin Name", loserId: "8d", loserName: "X D", tourneyDate: 20240122 }),
+  ];
+  const { byName } = computeRatingsAsOf(rows, 20240201);
+  expect(byName.get("twinname")).toBeUndefined(); // 2 vs 2 matches -> ambiguous -> dropped
+});
+
+describe("activeLayoffDays (TA injury/absence: off-season is not counted)", () => {
+  it("counts only the Feb 1–Oct 1 competitive window", () => {
+    // Last match 1 Feb, asOf 1 Oct same year => the whole ~Feb1-Oct1 window (~242 days).
+    expect(activeLayoffDays(20200201, 20201001)).toBeGreaterThan(230);
+    expect(activeLayoffDays(20200201, 20201001)).toBeLessThan(250);
+  });
+  it("excludes the winter off-season between two seasons", () => {
+    // Last match 1 Oct 2020, asOf 1 Feb 2021: the entire gap is off-season => 0 active days.
+    expect(activeLayoffDays(20201001, 20210201)).toBe(0);
+  });
+  it("is 0 for the all-rows sentinel cutoff and for no prior match", () => {
+    expect(activeLayoffDays(20200201, 99999999)).toBe(0); // sentinel > 30,000,000
+    expect(activeLayoffDays(0, 20210101)).toBe(0); // never played
+  });
+});
+
+describe("layoffPenalty (100 @ 8wk -> 150 @ ~1yr, gated at >=1900)", () => {
+  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1900, recoveryMatches: 20, recoveryMult: 1.5, comebackResetYears: 2 };
+  it("is 0 below the 8-week trigger", () => {
+    expect(layoffPenalty(dock, 55, 2200)).toBe(0);
+    expect(layoffPenalty(dock, 56, 2200)).toBe(100); // exactly at the trigger
+  });
+  it("is 0 below the rating floor, regardless of layoff length", () => {
+    expect(layoffPenalty(dock, 300, 1899)).toBe(0);
+    expect(layoffPenalty(dock, 300, 1900)).toBeGreaterThan(100); // exactly at the floor -> docked
+  });
+  it("rises linearly to the 150 plateau and clamps there", () => {
+    const mid = layoffPenalty(dock, Math.round((56 + 365) / 2), 2000);
+    expect(mid).toBeCloseTo(125, 0); // halfway between 100 and 150
+    expect(layoffPenalty(dock, 365, 2000)).toBeCloseTo(150, 6);
+    expect(layoffPenalty(dock, 10_000, 2000)).toBeCloseTo(150, 6); // clamped, never exceeds maxPenalty
+  });
+});
+
+test("the dock is applied at extraction only to absent players >= the rating floor", () => {
+  // A low ratingFloor (1400) so a seeded-1500 player triggers, isolating the wiring from a 1900 climb.
+  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1400, recoveryMatches: 20, recoveryMult: 1.5, comebackResetYears: 2 };
+  const cfg: EloConfig = { seedFor: () => 1500, dock };
+  const noDock: EloConfig = { seedFor: () => 1500 };
+  const r = [seedRow({ winnerId: "1", winnerName: "Abs Ent", loserId: "2", loserName: "Op P", tourneyDate: 20200201 })];
+  const cutoff = 20210101; // long after the Feb-2020 match -> absent
+
+  const undockedRec = computeRatingsAsOf(r, cutoff, noDock).byId.get("1")!;
+  const undocked = undockedRec.overall;
+  const docked = computeRatingsAsOf(r, cutoff, cfg).byId.get("1")!;
+  const expected = layoffPenalty(dock, activeLayoffDays(20200201, cutoff), undocked);
+  expect(expected).toBeGreaterThan(100); // a real dock got applied
+  expect(docked.overall).toBeCloseTo(undocked - expected, 6); // overall docked by exactly the penalty
+  expect(docked.hard!).toBeCloseTo(undockedRec.hard! - expected, 6); // surface docked by the same penalty
+
+  // Gate: a floor above the player's rating -> no dock. Active player (recent match) -> no dock.
+  const highFloor: EloConfig = { seedFor: () => 1500, dock: { ...dock, ratingFloor: 9999 } };
+  expect(computeRatingsAsOf(r, cutoff, highFloor).byId.get("1")!.overall).toBeCloseTo(undocked, 6);
+  const recent = computeRatingsAsOf(r, 20200301, cfg).byId.get("1")!.overall; // only ~4 weeks out
+  const recentNo = computeRatingsAsOf(r, 20200301, noDock).byId.get("1")!.overall;
+  expect(recent).toBeCloseTo(recentNo, 6); // below the 8-week trigger -> no dock
+});
+
+describe("on-return dock + combine-and-differential", () => {
+  const dock: LayoffDock = { triggerDays: 56, minPenalty: 100, maxPenalty: 150, maxDays: 365, ratingFloor: 1400, recoveryMatches: 20, recoveryMult: 1.5, comebackResetYears: 2 };
+  const cfg: EloConfig = { seedFor: () => 1500, dock };
+  const win = (id: string, opp: string, date: number) => row({ winnerId: id, loserId: opp, tourneyDate: date, surface: null });
+
+  it("docks the STATE on a return from a >= trigger in-season gap and opens the boosted-K window", () => {
+    const e = new EloEngine(cfg);
+    e.update(win("1", "2", 20200201)); // debut win, no prior gap
+    expect(e.players.get("1")!.clusterDock).toBe(0);
+    e.update(win("1", "3", 20200601)); // return from a ~121 active-day gap -> dock fires
+    const c1 = e.players.get("1")!.clusterDock;
+    expect(c1).toBeGreaterThan(100); // above the curve's 100 floor
+    expect(c1).toBeLessThan(125); // ~110 for 121 days, well under the 150 cap
+    expect(e.players.get("1")!.recoveryLeft).toBe(19); // 20-match window opened, the return match consumed 1
+  });
+
+  it("charges only the DIFFERENTIAL for a second layoff within the combine window", () => {
+    const e = new EloEngine(cfg);
+    e.update(win("1", "2", 20200201));
+    e.update(win("1", "3", 20200601)); // first return ~121d
+    const c1 = e.players.get("1")!.clusterDock;
+    e.update(win("1", "4", 20200901)); // second return ~92d, combines (within 2yr)
+    const c2 = e.players.get("1")!.clusterDock;
+    expect(c2).toBeGreaterThan(c1); // the cluster grew
+    expect(c2 - c1).toBeLessThan(c1); // ...but only by the differential, far less than a fresh ~110 dock
+    expect(c2).toBeLessThanOrEqual(dock.maxPenalty); // bounded by the curve cap, never stacks past 150
+  });
+
+  it("starts a FRESH cluster for a layoff > comebackResetYears after the last comeback", () => {
+    const e = new EloEngine(cfg);
+    e.update(win("1", "2", 20200201));
+    e.update(win("1", "3", 20200601)); // first cluster (~121d), lastComeback = 20200601
+    e.update(win("1", "4", 20230601)); // 3 years later (> 2yr) -> reset: cluster = the new gap ONLY
+    const s = e.players.get("1")!;
+    expect(s.clusterDays).toBe(activeLayoffDays(20200601, 20230601)); // reset, NOT cumulative (121 + gap)
+    expect(s.clusterDock).toBeGreaterThan(100); // a full fresh dock (curve caps at 150 for this long gap)
   });
 });

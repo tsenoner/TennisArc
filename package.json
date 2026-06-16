@@ -18,7 +18,10 @@
     "backfill-durations": "tsx ingest/backfill-durations.ts",
     "backfill-finals": "tsx ingest/backfill-finals.ts",
     "backfill-seeds": "tsx ingest/backfill-seeds.ts",
-    "backfill-elo": "tsx ingest/backfill-elo.ts"
+    "backfill-elo": "tsx ingest/backfill-elo.ts",
+    "elo:scatter": "tsx ingest/elo-reverse/parse-boards.ts && tsx ingest/elo-reverse/parse-yelo.ts && tsx ingest/elo-reverse/yelo-fit.ts ATP --scatter && tsx ingest/elo-reverse/yelo-fit.ts WTA --scatter && tsx ingest/elo-reverse/dashboard-data.ts && tsx ingest/points/engine.ts --emit && tsx ingest/elo-reverse/serve.ts",
+    "elo:scatter-legacy": "tsx ingest/elo-reverse/scatter.ts && open ingest/elo-reverse/elo-scatter.html",
+    "elo:check-points": "tsx ingest/points/engine.ts --check"
   },
   "dependencies": {
     "d3-hierarchy": "^3.1.2",

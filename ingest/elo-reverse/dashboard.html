@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TennisArc — Elo / yElo / Points reproduction</title>
+<style>
+  :root{
+    --bg:#0f1115;--panel:#181b22;--panel2:#11141a;--ink:#e8eaed;--mut:#9aa0aa;--grid:#2a2e37;
+    --diag:#6b7380;--accent:#5db0ff;
+    --c2:#3fbf6f;--c10:#e0c341;--c30:#e8843c;--cbig:#e0524a;--cspecial:#7d6cff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{padding:16px 20px 4px}
+  h1{font-size:17px;margin:0 0 2px}
+  .sub{color:var(--mut);font-size:12.5px;max-width:1100px}
+  .controls{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:10px 20px}
+  .controls label{color:var(--mut);font-size:12px;margin-right:6px}
+  .seg{display:inline-flex;border:1px solid var(--grid);border-radius:7px;overflow:hidden}
+  .seg button{background:var(--panel);color:var(--ink);border:0;padding:6px 14px;cursor:pointer;font:inherit}
+  .seg button[aria-pressed=true]{background:var(--accent);color:#06121f;font-weight:600}
+  .wrap{padding:0 12px 8px}
+  svg{display:block;width:100%;height:auto;max-width:1180px;margin:0 auto}
+  section{max-width:1180px;margin:0 auto;padding:0 8px}
+  .h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:14px 6px 2px}
+  .stats{padding:4px 8px 6px;color:var(--mut);font-size:12.5px}
+  .stats b{color:var(--ink)}
+  .pt{cursor:pointer}
+  .bar{cursor:pointer}
+  .bar:hover{opacity:.82}
+  #tip{position:fixed;pointer-events:none;background:#0b0d11f2;border:1px solid var(--grid);border-radius:8px;
+    padding:8px 10px;font-size:12.5px;opacity:0;transition:opacity .07s;max-width:280px;z-index:9;box-shadow:0 6px 24px #0008}
+  #tip .nm{font-weight:600;margin-bottom:3px}
+  #tip .row{color:var(--mut)} #tip .d{font-weight:600}
+  .legend{display:flex;gap:14px;align-items:center;color:var(--mut);font-size:12px;padding:2px 14px 10px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:5px}
+  .dot{width:10px;height:10px;border-radius:50%}
+  .sw{width:11px;height:11px;border-radius:2px}
+  .loading{padding:40px 22px;color:var(--mut)}
+  .hidden{display:none!important}
+  .pillrow{display:flex;gap:8px;flex-wrap:wrap;padding:2px 8px 8px}
+  .pill{background:var(--panel);border:1px solid var(--grid);border-radius:20px;padding:3px 11px;font-size:12px;color:var(--mut)}
+  .pill b{color:var(--ink)}
+</style>
+</head>
+<body>
+<header>
+  <h1>TennisArc — Tennis Abstract reproduction dashboard</h1>
+  <div class="sub" id="subtitle">Reproducing TA's published ratings &amp; the tours' ranking points from Jeff Sackmann's match data. Computed vs. retrieved, every snapshot we have.</div>
+</header>
+
+<div class="controls">
+  <span><label>View</label><span class="seg" id="mode">
+    <button data-m="elo" aria-pressed="true">Elo (full board)</button>
+    <button data-m="yelo">yElo (season)</button>
+    <button data-m="points">Points</button>
+  </span></span>
+  <span><label>Tour</label><span class="seg" id="tour">
+    <button data-t="ATP" aria-pressed="true">ATP</button>
+    <button data-t="WTA">WTA</button>
+  </span></span>
+  <span id="filterWrap"><label>Scatter</label><span class="seg" id="filter">
+    <button data-f="scored" aria-pressed="true">matched</button>
+    <button data-f="all">+ unmatched</button>
+  </span></span>
+</div>
+
+<div id="loading" class="loading">Loading dashboard data…</div>
+
+<!-- ELO / YELO VIEW -->
+<div id="ratingView" class="hidden">
+  <div class="h2" id="timelineTitle">Accuracy timeline — every snapshot (click a bar to inspect)</div>
+  <div class="wrap"><svg id="timeline" viewBox="0 0 1180 230" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <div class="legend" id="timelineLegend">
+    <span class="chip"><span class="sw" style="background:var(--c2)"></span>|Δ|≤2</span>
+    <span class="chip"><span class="sw" style="background:var(--c10)"></span>≤10</span>
+    <span class="chip"><span class="sw" style="background:var(--c30)"></span>≤30</span>
+    <span class="chip"><span class="sw" style="background:var(--cbig)"></span>&gt;30</span>
+    <span class="chip"><span class="sw" style="background:#3a3f49"></span>recompute boundary</span>
+    <span class="chip" style="margin-left:8px">line = median |Δ|</span>
+  </div>
+
+  <div class="h2" id="scatterTitle">Selected snapshot — computed vs retrieved</div>
+  <div class="stats" id="stats"></div>
+  <div class="wrap"><svg id="plot" viewBox="0 0 1100 720" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <div class="legend">
+    <span class="chip"><span class="dot" style="background:var(--c2)"></span>|Δ|≤2</span>
+    <span class="chip"><span class="dot" style="background:var(--c10)"></span>≤10</span>
+    <span class="chip"><span class="dot" style="background:var(--c30)"></span>≤30</span>
+    <span class="chip"><span class="dot" style="background:var(--cbig)"></span>&gt;30</span>
+    <span class="chip"><span class="dot" style="background:var(--cspecial)"></span><span id="specialLabel">debut</span></span>
+  </div>
+</div>
+
+<!-- POINTS VIEW -->
+<div id="pointsView" class="hidden">
+  <div class="controls" style="padding-top:0">
+    <span><label>Year</label><span class="seg" id="pyear"></span></span>
+  </div>
+  <div class="pillrow" id="pointsSummary"></div>
+  <div class="sub" id="pointsNote" style="padding:0 8px 6px"></div>
+  <div class="h2">Computed earned-points vs official year-end (top 30)</div>
+  <div class="wrap"><svg id="pointsPlot" viewBox="0 0 1180 760" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <div class="legend">
+    <span class="chip"><span class="sw" style="background:var(--accent)"></span>computed (best-N)</span>
+    <span class="chip"><span class="sw" style="background:#444b57"></span>official year-end</span>
+    <span class="chip"><span class="dot" style="background:var(--c2)"></span>exact</span>
+    <span class="chip"><span class="dot" style="background:var(--c10)"></span>±10</span>
+    <span class="chip"><span class="dot" style="background:var(--cbig)"></span>off</span>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+const NS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+const tip=$("tip");
+let DATA=null, PDATA=null;
+let mode="elo", tour="ATP", filter="scored", sel=0, pyear=null;
+
+const COL={le2:"var(--c2)",le10:"var(--c10)",le30:"var(--c30)",gt30:"var(--cbig)",special:"var(--cspecial)"};
+const BUCKETS=[["le2","var(--c2)"],["le10","var(--c10)"],["le30","var(--c30)"],["gt30","var(--cbig)"],["special","var(--cspecial)"]];
+const fmtDate=d=>{const s=String(d);return s.slice(0,4)+"-"+s.slice(4,6)+"-"+s.slice(6,8);};
+function el(svg,tag,attrs,text){const n=document.createElementNS(NS,tag);for(const k in attrs)n.setAttribute(k,attrs[k]);if(text!=null)n.textContent=text;svg.appendChild(n);return n;}
+function showTip(e,html){tip.style.opacity=1;tip.style.left=Math.min(e.clientX+14,innerWidth-290)+"px";tip.style.top=Math.min(e.clientY+14,innerHeight-120)+"px";tip.innerHTML=html;}
+const hideTip=()=>tip.style.opacity=0;
+
+// ------------- dataset accessors -------------
+const ds=()=> (mode==="elo"?DATA.elo:DATA.yelo)[tour];      // {names, snaps}
+const snaps=()=> ds().snaps;
+const nameOf=i=> ds().names[i];
+
+// ============ TIMELINE (stacked-bar composition + median|Δ| line) ============
+function drawTimeline(){
+  const svg=$("timeline"); while(svg.firstChild)svg.removeChild(svg.firstChild);
+  const S=snaps(); if(!S.length)return;
+  const W=1180,H=230,m={l:46,r:46,t:12,b:30};
+  const iw=W-m.l-m.r, ih=H-m.t-m.b;
+  const bw=iw/S.length, gap=Math.min(1,bw*0.12);
+  const maxMed=Math.max(10,...S.map(s=>s.stats.medAbs));
+  // frame
+  el(svg,"rect",{x:m.l,y:m.t,width:iw,height:ih,fill:"var(--panel2)",stroke:"var(--grid)","stroke-width":1});
+  // y gridlines (composition 0/50/100%)
+  [0,.25,.5,.75,1].forEach(f=>{const y=m.t+ih*(1-f);
+    el(svg,"line",{x1:m.l,y1:y,x2:m.l+iw,y2:y,stroke:"var(--grid)","stroke-width":.6});
+    el(svg,"text",{x:m.l-6,y:y+3,fill:"var(--mut)","font-size":9.5,"text-anchor":"end"},Math.round(f*100)+"%");});
+  // bars: normalized composition (each bar fills full height)
+  S.forEach((s,i)=>{
+    const x=m.l+i*bw;
+    const tot=s.buckets.le2+s.buckets.le10+s.buckets.le30+s.buckets.gt30+s.buckets.special||1;
+    let acc=0;
+    if(s.boundary){ // recompute boundary — draw muted, not bucketed
+      el(svg,"rect",{x:x+gap,y:m.t,width:bw-2*gap,height:ih,fill:"#3a3f49","fill-opacity":.6,class:"bar","data-i":i});
+    } else {
+      for(const[k,c]of BUCKETS){const v=s.buckets[k];if(!v)continue;const h=ih*v/tot;
+        el(svg,"rect",{x:x+gap,y:m.t+ih-acc-h,width:bw-2*gap,height:h,fill:c,"fill-opacity":i===sel?1:.86,class:"bar","data-i":i});
+        acc+=h;}
+    }
+    if(i===sel){el(svg,"rect",{x:x+gap-0.5,y:m.t-2,width:bw-2*gap+1,height:ih+4,fill:"none",stroke:"#fff","stroke-width":1.4});}
+  });
+  // median|Δ| line (secondary axis, right)
+  const ly=v=>m.t+ih*(1-Math.min(1,v/maxMed));
+  let dpath="";
+  S.forEach((s,i)=>{if(s.boundary)return;const x=m.l+i*bw+bw/2;const y=ly(s.stats.medAbs);dpath+=(dpath?"L":"M")+x.toFixed(1)+" "+y.toFixed(1);});
+  el(svg,"path",{d:dpath,fill:"none",stroke:"#cfd6e0","stroke-width":1,"stroke-opacity":.55});
+  // right axis label for median scale
+  [0,maxMed/2,maxMed].forEach(v=>{const y=ly(v);el(svg,"text",{x:m.l+iw+6,y:y+3,fill:"var(--mut)","font-size":9.5},Math.round(v));});
+  // x ticks: year boundaries
+  let lastYr=null;
+  S.forEach((s,i)=>{const yr=String(s.date).slice(0,4);if(yr!==lastYr){lastYr=yr;const x=m.l+i*bw;
+    el(svg,"line",{x1:x,y1:m.t,x2:x,y2:m.t+ih,stroke:"#454b57","stroke-width":.6,"stroke-dasharray":"2 3"});
+    el(svg,"text",{x:x+2,y:H-9,fill:"var(--mut)","font-size":10},yr);}});
+  // interaction
+  svg.querySelectorAll(".bar").forEach(b=>{
+    const i=+b.dataset.i,s=S[i];
+    b.addEventListener("mousemove",e=>showTip(e,
+      '<div class="nm">'+fmtDate(s.date)+(s.boundary?' · recompute boundary':'')+'</div>'+
+      (s.boundary?'<div class="row">idle players shifted en masse — excluded from accuracy</div>':
+        '<div class="row">n=<b style="color:var(--ink)">'+s.stats.n+'</b> · median |Δ| <b style="color:var(--ink)">'+s.stats.medAbs+'</b></div>'+
+        '<div class="row">≤2 '+s.buckets.le2+' · ≤10 '+s.buckets.le10+' · ≤30 '+s.buckets.le30+' · &gt;30 '+s.buckets.gt30+(s.buckets.special?' · ◆'+s.buckets.special:'')+'</div>'+
+        '<div class="row">within ±5 '+s.stats.w5+'% · within ±10 '+s.stats.w10+'% · exact '+s.stats.exact+'</div>')));
+    b.addEventListener("mouseleave",hideTip);
+    b.addEventListener("click",()=>{sel=i;drawTimeline();drawScatter();});
+  });
+}
+
+// ============ SCATTER (selected snapshot) ============
+function drawScatter(){
+  const svg=$("plot"); const S=snaps(); const t=S[sel];
+  while(svg.firstChild)svg.removeChild(svg.firstChild); if(!t)return;
+  const special=mode==="elo"?2:3; // statusCode of the special group
+  const isSpecial=p=>p[4]===special;
+  const pts=t.pts.filter(p=>filter==="all"||!isSpecial(p));
+  if(!pts.length)return; // no points in this selection → svg already cleared; skip the NaN-scaled render
+  const W=1100,H=720,m={l:64,r:22,t:18,b:54};
+  const vals=pts.flatMap(p=>[p[1],p[2]]); let lo=Math.min(...vals),hi=Math.max(...vals);
+  const pad=(hi-lo)*0.04||10; lo-=pad; hi+=pad;
+  const sx=v=>m.l+(v-lo)/(hi-lo)*(W-m.l-m.r), sy=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
+  el(svg,"rect",{x:m.l,y:m.t,width:W-m.l-m.r,height:H-m.t-m.b,fill:"none",stroke:"#333845","stroke-width":1});
+  const step=(hi-lo)>900?200:100; const t0=Math.ceil(lo/step)*step;
+  for(let v=t0;v<=hi;v+=step){const x=sx(v),y=sy(v);
+    el(svg,"line",{x1:x,y1:m.t,x2:x,y2:H-m.b,stroke:"#2f343d","stroke-width":1});
+    el(svg,"line",{x1:m.l,y1:y,x2:W-m.r,y2:y,stroke:"#2f343d","stroke-width":1});
+    el(svg,"text",{x:x,y:H-m.b+18,fill:"var(--mut)","font-size":11.5,"text-anchor":"middle"},v);
+    el(svg,"text",{x:m.l-9,y:y+4,fill:"var(--mut)","font-size":11.5,"text-anchor":"end"},v);}
+  el(svg,"line",{x1:sx(lo),y1:sy(lo),x2:sx(hi),y2:sy(hi),stroke:"var(--diag)","stroke-width":1.6,"stroke-dasharray":"6 5"});
+  el(svg,"text",{x:m.l+(W-m.l-m.r)/2,y:H-14,fill:"var(--ink)","font-size":13,"text-anchor":"middle"},mode==="elo"?"retrieved — TA published Elo":"retrieved — TA published yElo");
+  el(svg,"text",{transform:"translate(18,"+(m.t+(H-m.t-m.b)/2)+") rotate(-90)",fill:"var(--ink)","font-size":13,"text-anchor":"middle"},mode==="elo"?"computed — board replay":"computed — season-reset yElo");
+  const colour=p=>{if(isSpecial(p))return "var(--cspecial)";const a=Math.abs(p[2]-p[1]);return a<=2?"var(--c2)":a<=10?"var(--c10)":a<=30?"var(--c30)":"var(--cbig)";};
+  pts.slice().sort((a,b)=>Math.abs(a[2]-a[1])-Math.abs(b[2]-b[1])).forEach(p=>{
+    const c=el(svg,"circle",{cx:sx(p[1]),cy:sy(p[2]),r:isSpecial(p)?3.2:3.7,fill:colour(p),"fill-opacity":.85,class:"pt"});
+    const d=Math.round((p[2]-p[1])*10)/10;
+    const tag=mode==="elo"?(isSpecial(p)?" · debut":""):(isSpecial(p)?" · W/L≠TA":"");
+    c.addEventListener("mousemove",e=>showTip(e,
+      '<div class="nm">'+nameOf(p[0])+tag+'</div>'+
+      '<div class="row">retrieved (TA): <b style="color:var(--ink)">'+p[1]+'</b></div>'+
+      '<div class="row">computed: <b style="color:var(--ink)">'+p[2]+'</b></div>'+
+      '<div class="d" style="color:'+colour(p)+'">discrepancy: '+(d>0?"+":"")+d+'</div>'+
+      '<div class="row">'+p[3]+' match'+(p[3]===1?"":"es")+'</div>'));
+    c.addEventListener("mouseleave",hideTip);
+  });
+  // stats line (the legend bar) + scatter title
+  const st=t.stats;
+  $("specialLabel").textContent = mode==="elo"?"debut (seeded)":"W/L≠TA (boundary)";
+  const tail = mode==="elo"
+    ? st.special+' debuts (seeded)'
+    : st.special+' W/L≠TA (latest-event boundary)';
+  $("stats").innerHTML='<b>'+st.n+'</b> '+(mode==="elo"?"established players":"W/L-matched players")+
+    ' · median |Δ| <b>'+st.medAbs+'</b> Elo · within ±5 <b>'+st.w5+'%</b> · within ±10 <b>'+st.w10+
+    '%</b> · byte-exact (|Δ|≤0.1) <b>'+st.exact+'</b> · '+tail;
+  $("scatterTitle").textContent=(mode==="elo"?"Elo board ":"yElo board ")+fmtDate(t.date)+
+    (mode==="elo"?"  (replayed from "+fmtDate(t.prevDate)+")":"  (season reset → board)");
+  $("subtitle").innerHTML=mode==="elo"
+    ? "Full-board replay: computed = TA board[prev] + that window's Sackmann matches → board[cur]; retrieved = TA's published board. Diagonal = exact."
+    : "Season yElo: computed = every player reset to 1500 on Jan 1, replayed vs opponents' REAL Elo (only target updates); retrieved = TA's published yElo board. Purple = our W/L count differs from TA's.";
+}
+
+// ============ POINTS VIEW ============
+function drawPointsYears(){
+  const seg=$("pyear"); seg.innerHTML="";
+  const years=(PDATA&&PDATA[tour])?Object.keys(PDATA[tour]).sort():[];
+  if(!years.length){seg.innerHTML='<button disabled>no data</button>';pyear=null;return;}
+  if(!years.includes(pyear))pyear=years[years.length-1];
+  years.forEach(y=>{const b=document.createElement("button");b.textContent=y;b.dataset.y=y;
+    b.setAttribute("aria-pressed",String(y===pyear));
+    b.onclick=()=>{pyear=y;[...seg.children].forEach(x=>x.setAttribute("aria-pressed",String(x===b)));drawPoints();};
+    seg.appendChild(b);});
+}
+function drawPoints(){
+  const svg=$("pointsPlot"); while(svg.firstChild)svg.removeChild(svg.firstChild);
+  const summary=$("pointsSummary"); summary.innerHTML="";
+  const rec=PDATA&&PDATA[tour]&&PDATA[tour][pyear];
+  if(!rec){el(svg,"text",{x:590,y:380,fill:"var(--mut)","font-size":14,"text-anchor":"middle"},"No points data — run the points engine.");return;}
+  const rows=rec.rows; // [{rank,player,official,computed,d,joined}]
+  const exact=rows.filter(r=>r.joined&&r.d===0).length;
+  const w10=rows.filter(r=>r.joined&&Math.abs(r.d)<=10).length;
+  const nj=rows.filter(r=>r.joined).length;
+  summary.innerHTML=
+    '<span class="pill">tour <b>'+tour+'</b></span>'+
+    '<span class="pill">season <b>'+pyear+'</b></span>'+
+    '<span class="pill">exact <b>'+exact+'/'+nj+'</b></span>'+
+    '<span class="pill">within ±10 <b>'+w10+'/'+nj+'</b></span>'+
+    (rec.era?'<span class="pill">era <b>'+rec.era+'</b></span>':'');
+  $("pointsNote").textContent=rec.note||"";
+  const W=1180,H=Math.max(420,28*rows.length+60),m={l:150,r:90,t:14,b:30};
+  svg.setAttribute("viewBox","0 0 "+W+" "+H);
+  const iw=W-m.l-m.r;
+  const maxV=Math.max(...rows.map(r=>Math.max(r.official||0,r.computed||0)),1);
+  const sx=v=>m.l+(v/maxV)*iw;
+  const rh=(H-m.t-m.b)/rows.length, bh=Math.min(9,rh*0.34);
+  rows.forEach((r,i)=>{
+    const y=m.t+i*rh+rh/2;
+    el(svg,"text",{x:m.l-8,y:y+1,fill:"var(--ink)","font-size":11.5,"text-anchor":"end"},r.rank+". "+r.player);
+    if(!r.joined){el(svg,"text",{x:m.l+8,y:y+1,fill:"var(--mut)","font-size":11},"no match data join");return;}
+    // official (grey, upper) + computed (blue, lower)
+    el(svg,"rect",{x:m.l,y:y-bh-1,width:sx(r.official)-m.l,height:bh,fill:"#444b57"});
+    el(svg,"rect",{x:m.l,y:y+1,width:sx(r.computed)-m.l,height:bh,fill:"var(--accent)"});
+    const col=r.d===0?"var(--c2)":Math.abs(r.d)<=10?"var(--c10)":"var(--cbig)";
+    el(svg,"text",{x:Math.max(sx(r.official),sx(r.computed))+6,y:y+3,fill:col,"font-size":11},
+      (r.d>0?"+":"")+r.d+(r.d===0?"  ✓":""));
+    const g=el(svg,"rect",{x:m.l,y:y-bh-1,width:iw,height:2*bh+2,fill:"transparent",class:"bar"});
+    g.addEventListener("mousemove",e=>showTip(e,
+      '<div class="nm">'+r.rank+". "+r.player+'</div>'+
+      '<div class="row">official: <b style="color:var(--ink)">'+r.official+'</b></div>'+
+      '<div class="row">computed: <b style="color:var(--ink)">'+r.computed+'</b></div>'+
+      '<div class="d" style="color:'+col+'">Δ '+(r.d>0?"+":"")+r.d+'</div>'));
+    g.addEventListener("mouseleave",hideTip);
+  });
+}
+
+// ============ view switching ============
+function render(){
+  const isPoints=mode==="points";
+  $("ratingView").classList.toggle("hidden",isPoints);
+  $("pointsView").classList.toggle("hidden",!isPoints);
+  $("filterWrap").classList.toggle("hidden",isPoints);
+  if(isPoints){
+    $("subtitle").textContent="Points-earned reproduction: computed = best-N of per-tournament tier+round points from Sackmann match data; official = published year-end ranking. Per-event points reproduce exactly (ATP); year-end totals carry a structural floor (see note per season).";
+    drawPointsYears();drawPoints();
+  }
+  else{ if(sel>=snaps().length)sel=snaps().length-1; if(sel<0)sel=0; drawTimeline();drawScatter(); }
+}
+
+$("mode").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;mode=b.dataset.m;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed",String(x===b)));
+  if(mode!=="points")sel=snaps().length-1; render();});
+$("tour").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;tour=b.dataset.t;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed",String(x===b)));
+  if(mode!=="points")sel=snaps().length-1; render();});
+$("filter").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;filter=b.dataset.f;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed",String(x===b)));drawScatter();});
+
+// ============ load ============
+Promise.all([
+  fetch("./dashboard-data.json").then(r=>r.json()),
+  fetch("./points-data.json").then(r=>r.ok?r.json():null).catch(()=>null),
+]).then(([d,p])=>{
+  DATA=d; PDATA=p; $("loading").classList.add("hidden");
+  sel=snaps().length-1; render();
+}).catch(err=>{$("loading").textContent="Failed to load data: "+err;});
+</script>
+</body>
+</html>
