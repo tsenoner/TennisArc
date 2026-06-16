@@ -393,17 +393,20 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    This block stays at the END of the file on purpose: many overrides below share the
    specificity of their base rules (.readout, .legend, …) and win the cascade by order. */
 @media (max-width: 720px) {
-  /* Width budget at 393px (iPhone 15): logo 28 + tour seg ~85 + slam dd ~78 + lens dd ~60
-     + a trailing icon trio (theme · help · Issues) + 6×5px gaps + 20px padding. The trio is
-     icon-only here and tightened to 6px side padding so all three stay on one row (a fourth
-     control vs the old pair would otherwise push Issues off the 393px edge). The tour seg must
-     never absorb a deficit (it clipped "WTA" to "WT" before), hence flex-shrink: 0 below. */
-  .controls { flex-wrap: nowrap; gap: 5px; padding: 8px 10px;
+  /* Width budget at 393px (iPhone 15), measured in WebKit: logo 28 + tour seg ~85 + slam dd ~70
+     + lens dd up to ~78 ("Country" — the widest label, the binding case) + a trailing icon trio
+     (theme · help · Issues, right-aligned by .ctrl.theme's margin-left:auto) + 6 gaps + 20px
+     h-padding. The trio is icon-only here. Adding the help "?" made it a FOURTH trailing control:
+     with 5px gaps + 7px trio side padding the Country lens shoved Issues ~11px past the edge,
+     where the shell's overflow:hidden clipped it. 4px gaps + 5px trio side padding buy ~7px of
+     slack on that widest lens, so nothing clips on any lens. The tour seg must never absorb a
+     deficit (it clipped "WTA" to "WT" before), hence flex-shrink: 0 below. */
+  .controls { flex-wrap: nowrap; gap: 4px; padding: 8px 10px;
     padding-top: calc(8px + env(safe-area-inset-top)); } /* clear the Dynamic Island when installed */
   .brand { margin-right: 2px; }
   .brand-name { display: none; }            /* logo only on phones */
   .ctrl { padding: 6px 9px; }
-  .ctrl.theme, .ctrl.help, .issues-link { padding: 6px 7px; }  /* icon-only trio: keep one row */
+  .ctrl.theme, .ctrl.help, .issues-link { padding: 6px 5px; }  /* icon-only trio: keep all four on one row */
   .tour-seg { flex-shrink: 0; }
   .issues-label { display: none; }          /* icon-only Issues link on phones */
   .only-wide { display: none; }             /* inline slam/lens segments → replaced by dropdowns */
@@ -488,19 +491,34 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .q-cap, .q-flag { display: none; }
 
   /* "Details ▾" → the detail tier rises as a bottom sheet over the bracket, with the same
-     grip/✕ grammar as the lens drawers; the scrim (rendered only while expanded) dims behind it */
+     grip/✕ grammar as the lens drawers; the scrim (rendered only while expanded) dims behind it.
+     Help docks the same way on phones (its ✕ in .help-bar is the dismiss), so the two SHARE the
+     bottom-sheet dock geometry below — defined once. Help's DESKTOP form is a centred card (its
+     base rule), so only the phone dock is shared, not the whole component. */
   .mi-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(4, 8, 12, .55); }
-  .stage .mi-detail { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
-    max-width: none; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
-    margin: 0; border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
-    padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); background: var(--panel);
-    box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); animation: mi-rise .22s ease-out; }
-
-  /* Help docks as a bottom sheet like the other panels; its ✕ in .help-bar is the dismiss. */
-  .help-sheet { top: auto; left: 0; right: 0; bottom: 0; transform: none;
-    width: auto; max-width: none; max-height: 88dvh; border-bottom: 0;
-    border-radius: 18px 18px 0 0; animation: mi-rise .22s ease-out; }
+  .stage .mi-detail, .help-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; max-width: none; margin: 0;
+    border: 1px solid var(--line); border-bottom: 0; border-radius: 18px 18px 0 0;
+    background: var(--panel); box-shadow: 0 -12px 40px rgba(0, 0, 0, .5); /* upward — it docks at the bottom edge */
+    animation: mi-rise .22s ease-out; }
+  .stage .mi-detail { z-index: 41; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); }
+  /* Help deltas: it keeps z-index 61 from its base rule, undoes the centred-card transform, and
+     scrolls in .help-content (not the sheet itself, which stays an overflow:hidden flex column). */
+  .help-sheet { top: auto; transform: none; width: auto; max-height: 88dvh; }
   .help-content { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+
+/* Sub-iPhone-15 phones (iPhone SE / 12-13 mini and other ≤375pt screens). The help "?" added a
+   FOURTH trailing control; even the tightened ≤720 header can't seat logo + ATP|WTA + slam dd +
+   the widest lens dd ("Country") + the icon trio on one row here, so Issues would clip off the
+   edge (the shell is overflow:hidden, so it'd be unreachable, not scrollable). Shave the dropdown
+   triggers, the gap and the trio a little more. This block only bites BELOW the iPhone-15 width,
+   so the 393px reference layout above is left exactly as measured. */
+@media (max-width: 380px) {
+  .controls { gap: 3px; }
+  .dd-trig { padding: 6px 6px; }
+  .ctrl.theme, .ctrl.help, .issues-link { padding: 6px 4px; }
 }
 
 /* Honour prefers-reduced-motion: suppress the only continuous motion (the live dot's infinite

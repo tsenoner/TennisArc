@@ -313,7 +313,7 @@ const DIM_LABELS: Record<ColorDim, string> = { time: "Time", seed: "Seed", count
 export function renderControls(opts: {
   tour: Tour; colorDim: ColorDim; theme: Theme;
   index?: SlamIndex; year?: number; slam?: string;
-  open?: "slam" | "lens";
+  open?: "slam" | "lens"; helpOpen?: boolean;
 }): string {
   const tours: Tour[] = ["ATP", "WTA"];
   const tourBtn = (t: Tour) =>
@@ -376,7 +376,9 @@ export function renderControls(opts: {
     switcher + slamDD +
     lensInline + lensDD +
     `<button class="ctrl theme" data-action="theme" aria-label="Toggle theme">${opts.theme === "dark" ? "☀" : "☾"}</button>` +
-    `<button class="ctrl help" data-action="toggle-help" aria-haspopup="dialog" aria-label="Help">?</button>` +
+    // aria-expanded mirrors the dialog's open state (kept in sync live by setHelp on toggle),
+    // matching the slam/lens dd-trig disclosure pattern above so SR users hear the state change.
+    `<button class="ctrl help" data-action="toggle-help" aria-haspopup="dialog" aria-expanded="${!!opts.helpOpen}" aria-label="Help">?</button>` +
     // Octicon "issue-opened"; the text label hides on phones (icon-only) to free header width
     `<a class="ctrl issues-link" href="https://github.com/tsenoner/TennisArc/issues" target="_blank" rel="noopener noreferrer" aria-label="Report an issue on GitHub">` +
     `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>` +

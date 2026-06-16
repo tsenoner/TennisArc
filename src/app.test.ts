@@ -863,25 +863,94 @@ describe("quarter-focus keyboard handles (sr-only twin → visible focus surroga
 });
 
 describe("Help modal (sourced from docs/HELP.md)", () => {
+  // The overlay lives in its own host appended to <body> (OUTSIDE #app), so a background redraw
+  // can never wipe its scroll/accordion/focus; it is code-split, so opening is async (awaited
+  // below via vi.waitFor). Closing is synchronous.
+  const sheet = () => document.querySelector<HTMLElement>(".help-sheet");
+  const awaitOpen = () => vi.waitFor(() => { if (!sheet()) throw new Error("help sheet not mounted yet"); });
+
   it("the header ? button opens the dialog; ✕, scrim and Escape each close it", async () => {
     const root = await mountApp();
     const helpBtn = () => root.querySelector<HTMLElement>('.ctrl.help[data-action="toggle-help"]')!;
     expect(helpBtn()).not.toBeNull();
-    expect(root.querySelector(".help-sheet")).toBeNull();           // closed at boot
+    expect(helpBtn().getAttribute("aria-expanded")).toBe("false"); // trigger reflects closed state at boot
+    expect(sheet()).toBeNull();                                    // closed at boot
 
-    click(helpBtn());                                               // open
-    expect(root.querySelector('.help-sheet[role="dialog"]')).not.toBeNull();
-    expect(root.querySelector(".help-sec[open]")).not.toBeNull();   // first section expanded
+    click(helpBtn());                                              // open (lazy-loads the help chunk)
+    await awaitOpen();
+    expect(document.querySelector('.help-sheet[role="dialog"]')).not.toBeNull();
+    expect(document.querySelector(".help-sec[open]")).not.toBeNull(); // first section expanded
+    expect(helpBtn().getAttribute("aria-expanded")).toBe("true");  // …and the trigger now reads expanded
+    expect(root.hasAttribute("inert")).toBe(true);                 // background is inert while the dialog is up
 
-    click(root.querySelector<HTMLElement>(".help-close")!);         // ✕ closes
-    expect(root.querySelector(".help-sheet")).toBeNull();
+    click(document.querySelector<HTMLElement>(".help-close")!);    // ✕ closes (synchronous)
+    expect(sheet()).toBeNull();
+    expect(helpBtn().getAttribute("aria-expanded")).toBe("false");
+    expect(root.hasAttribute("inert")).toBe(false);                // …and the background is interactive again
 
-    click(helpBtn());                                               // reopen, then scrim-tap closes
-    click(root.querySelector<HTMLElement>(".help-scrim")!);
-    expect(root.querySelector(".help-sheet")).toBeNull();
+    click(helpBtn());                                              // reopen, then scrim-tap closes
+    await awaitOpen();
+    click(document.querySelector<HTMLElement>(".help-scrim")!);
+    expect(sheet()).toBeNull();
 
-    click(helpBtn());                                               // reopen, then Escape closes (top rung)
+    click(helpBtn());                                              // reopen, then Escape closes (top rung)
+    await awaitOpen();
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    expect(root.querySelector(".help-sheet")).toBeNull();
+    expect(sheet()).toBeNull();
+  });
+
+  it("moves focus into the dialog, traps Tab at both ends, and returns focus on close", async () => {
+    const root = await mountApp();
+    const helpBtn = () => root.querySelector<HTMLElement>('.ctrl.help[data-action="toggle-help"]')!;
+
+    click(helpBtn());
+    await awaitOpen();
+    const sheetEl = sheet()!;
+    expect(document.activeElement).toBe(sheetEl);                 // focus moves into the dialog on open
+
+    // Expand every section so its links join the tab order — jsdom focuses <button>/<a href>
+    // reliably, so we assert wrap against those boundaries (the trap also counts <summary>).
+    const host = sheetEl.parentElement!;                          // helpHost (sibling of #app, under <body>)
+    host.querySelectorAll<HTMLDetailsElement>(".help-sec").forEach((d) => (d.open = true));
+    const stops = [...host.querySelectorAll<HTMLElement>('button:not([disabled]), summary, a[href]')]
+      .filter((el) => { const d = el.closest("details"); return !d || (d as HTMLDetailsElement).open || el.tagName === "SUMMARY"; });
+    const first = stops[0], last = stops[stops.length - 1];
+    expect(first.classList.contains("help-close")).toBe(true);    // the ✕ is the first stop
+    expect(last.tagName).toBe("A");                               // a credit link is the last stop (sections open)
+
+    const tab = (el: Element, shiftKey = false) => {
+      const e = new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true });
+      el.dispatchEvent(e);
+      return e;
+    };
+    last.focus();
+    expect(tab(last).defaultPrevented).toBe(true);                // forward Tab off the last stop…
+    expect(document.activeElement).toBe(first);                   // …wraps to the first
+    first.focus();
+    expect(tab(first, true).defaultPrevented).toBe(true);         // shift+Tab off the first…
+    expect(document.activeElement).toBe(last);                    // …wraps to the last
+
+    click(host.querySelector<HTMLElement>(".help-close")!);
+    expect(sheet()).toBeNull();
+    expect(document.activeElement).toBe(helpBtn());               // focus returns to the trigger on close
+  });
+
+  it("dismisses an open top-bar dropdown when Help opens (no stale menu behind the inert modal)", async () => {
+    const root = await mountApp();
+    const helpBtn = () => root.querySelector<HTMLElement>('.ctrl.help[data-action="toggle-help"]')!;
+    const slamTrig = root.querySelector<HTMLElement>('[data-action="toggle-menu"][data-menu="slam"]')!;
+
+    click(slamTrig);
+    expect(root.querySelector(".dd-pop")).not.toBeNull();         // the slam menu is open…
+
+    click(helpBtn());                                             // …and opening Help must clear it
+    await awaitOpen();
+    // The teeth: revert the openMenu-clear in setHelp and this line fails — the .dd-pop is left
+    // rendered (root isn't redrawn) behind the now-inert background.
+    expect(root.querySelector(".dd-pop")).toBeNull();             // dropdown gone, not stranded behind the modal
+    expect(root.hasAttribute("inert")).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // Escape closes Help (no second rung needed)
+    expect(sheet()).toBeNull();
   });
 });
