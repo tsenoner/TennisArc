@@ -6,6 +6,7 @@ import {
   renderCenterSection, renderCrumbs, renderQuarterFocusButtons,
   renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, type ReadoutInfo,
 } from "./render";
+import { renderHelp } from "./help";
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { createStore, type Store } from "./store";
@@ -35,6 +36,7 @@ interface AppState {
   panelOpen: boolean;
   panelExpanded: boolean;   // mobile bottom sheet: peek (false) vs tall (true)
   pinnedId: string | undefined; // tap/click-pinned player: path stays lit, readout names them
+  helpOpen: boolean;        // the Help modal (sourced from docs/HELP.md) — global overlay
 }
 
 function staleLabel(generatedAt: string | undefined, nowMs: number): string {
@@ -57,7 +59,7 @@ export function createApp(root: HTMLElement): () => void {
   const state: AppState = {
     tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
     colorDim: "time", seedSort: "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
-    openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined,
+    openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined, helpOpen: false,
   };
   let store: Store | undefined;
 
@@ -293,7 +295,8 @@ export function createApp(root: HTMLElement): () => void {
       renderLegend(state.colorDim, state.seedSort) +
       `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}` +
         // CC BY-NC-SA: historical durations + ELO + birthdates come from Jeff Sackmann's data
-        ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener noreferrer">Tennis Abstract</a></span></div>`;
+        ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener noreferrer">Tennis Abstract</a></span></div>` +
+      renderHelp(state.helpOpen);
 
     // re-light the pinned path on the freshly-rendered arcs (innerHTML swap dropped the classes)
     if (pinned) {
@@ -476,6 +479,14 @@ export function createApp(root: HTMLElement): () => void {
       draw();
     } else if (a === "theme") {
       state.theme = nextTheme(state.theme); applyTheme(state.theme); saveTheme(state.theme); draw();
+    } else if (a === "toggle-help") {
+      // One action serves the header "?" trigger, the scrim, and the ✕ — each just flips the flag.
+      state.helpOpen = !state.helpOpen;
+      draw();
+      // Move focus into the just-opened dialog (Escape/✕/scrim close it); on close, return it to
+      // the header trigger so keyboard users aren't dropped on <body>.
+      if (state.helpOpen) root.querySelector<HTMLElement>(".help-sheet")?.focus();
+      else root.querySelector<HTMLElement>('.ctrl.help[data-action="toggle-help"]')?.focus();
     } else if (a === "inspect" && el.dataset.match) {
       if (id && id === state.focusId) {
         // The focused section's own arc is the hub: tapping it zooms OUT one level (its
@@ -610,12 +621,13 @@ export function createApp(root: HTMLElement): () => void {
     items[next]?.focus();
   }, { signal });
 
-  // Escape unwinds the most recently opened layer, one per press: dropdown → match detail
-  // tier → match strip → lens drawer → pinned path → focused section. Focus stays the
-  // LAST rung — crumbs, the hub and browser Back are its primary exits.
+  // Escape unwinds the most recently opened layer, one per press: Help modal → dropdown →
+  // match detail tier → match strip → lens drawer → pinned path → focused section. Focus stays
+  // the LAST rung — crumbs, the hub and browser Back are its primary exits.
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
+    if (state.helpOpen) { state.helpOpen = false; draw(); root.querySelector<HTMLElement>('.ctrl.help[data-action="toggle-help"]')?.focus(); }
+    else if (state.openMenu) { const m = state.openMenu; state.openMenu = undefined; draw(); ddTrigger(m)?.focus(); }
     else if (state.detailExpanded) {
       state.detailExpanded = false; draw();
       // mirror the click-collapse restoration: keyboard focus returns to the strip's toggle

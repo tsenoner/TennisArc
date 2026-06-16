@@ -861,3 +861,27 @@ describe("quarter-focus keyboard handles (sr-only twin → visible focus surroga
     expect(corner().classList.contains("q-focus")).toBe(false);       // …cleared on blur
   });
 });
+
+describe("Help modal (sourced from docs/HELP.md)", () => {
+  it("the header ? button opens the dialog; ✕, scrim and Escape each close it", async () => {
+    const root = await mountApp();
+    const helpBtn = () => root.querySelector<HTMLElement>('.ctrl.help[data-action="toggle-help"]')!;
+    expect(helpBtn()).not.toBeNull();
+    expect(root.querySelector(".help-sheet")).toBeNull();           // closed at boot
+
+    click(helpBtn());                                               // open
+    expect(root.querySelector('.help-sheet[role="dialog"]')).not.toBeNull();
+    expect(root.querySelector(".help-sec[open]")).not.toBeNull();   // first section expanded
+
+    click(root.querySelector<HTMLElement>(".help-close")!);         // ✕ closes
+    expect(root.querySelector(".help-sheet")).toBeNull();
+
+    click(helpBtn());                                               // reopen, then scrim-tap closes
+    click(root.querySelector<HTMLElement>(".help-scrim")!);
+    expect(root.querySelector(".help-sheet")).toBeNull();
+
+    click(helpBtn());                                               // reopen, then Escape closes (top rung)
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(root.querySelector(".help-sheet")).toBeNull();
+  });
+});

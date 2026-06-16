@@ -76,6 +76,14 @@ describe("renderControls", () => {
     expect(inline).not.toContain('role="menuitem');
   });
 
+  it("renders a Help (?) button that toggles the help dialog and is labelled for a11y", () => {
+    const html = renderControls({ tour: "ATP", colorDim: "time", theme: "dark" });
+    expect(html).toContain('data-action="toggle-help"');
+    expect(html).toMatch(/class="ctrl help"[^>]*aria-label="Help"/);
+    // it sits in the right cluster, after the theme toggle and before the issues link
+    expect(html).toMatch(/data-action="theme"[\s\S]*data-action="toggle-help"[\s\S]*issues-link/);
+  });
+
   it("appends a GitHub issues link that opens in a new tab safely", () => {
     const html = renderControls({ tour: "ATP", colorDim: "time", theme: "dark" });
     expect(html).toContain('href="https://github.com/tsenoner/TennisArc/issues"');
