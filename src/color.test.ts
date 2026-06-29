@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
 import { colorScale, COLOR_DIMS, type ArcColorInput } from "./color";
 
-const arc = (occupant: string | null, depth = 1): ArcColorInput => ({ occupant, depth });
+const arc = (occupant: string | null, depth = 1, projected = false, live = false): ArcColorInput => ({ occupant, depth, projected, live });
 
 describe("colorScale", () => {
   it("exposes the supported dimensions", () => {
@@ -59,6 +59,89 @@ describe("colorScale", () => {
     for (const dim of COLOR_DIMS) {
       expect(colorScale(dim, s)(arc(null))).toMatch(/^(#|rgb)/);
     }
+  });
+});
+
+describe("colorScale time lens — pending vs played", () => {
+  // HEAT (played) returns "rgb(...)"; NEUTRAL (pending / unknown) is the hex "#3a4350".
+  // So a colour starting with "#" is the grey pending tone; "rgb(" is real heat.
+  const PENDING = /^#/;
+  const PLAYED = /^rgb/;
+
+  it("greys a projected (not-yet-decided) arc instead of forward-filling heat", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 }); // whole draw played
+    const scale = colorScale("time", s);
+    const final = Object.values(s.matches).find((m) => m.nextMatchId === null)!;
+    const champ = final.winner === "p1" ? final.p1! : final.p2!;
+    // a DECIDED inner arc for the champ is warm heat…
+    expect(scale(arc(champ, 1, false))).toMatch(PLAYED);
+    // …but the SAME champ on a PROJECTED arc is pending → neutral grey, never forward-filled heat
+    expect(scale(arc(champ, 1, true))).toMatch(PENDING);
+    expect(scale(arc(champ, 1, true))).toBe(scale(arc(null)));
+  });
+
+  it("greys a decided arc whose occupant has no court time yet (nothing played)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    const scale = colorScale("time", s);
+    const numRounds = s.rounds.length;
+    // p0 has zero on-court time → neutral grey, NOT HEAT(0)'s teal "fresh" tone
+    expect(scale(arc("p0", numRounds, false))).toMatch(PENDING);
+    expect(scale(arc("p0", numRounds, false))).toBe(scale(arc(null)));
+  });
+
+  it("still colours a played, decided arc with warm heat (regression guard)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    const scale = colorScale("time", s);
+    const final = Object.values(s.matches).find((m) => m.nextMatchId === null)!;
+    const champ = final.winner === "p1" ? final.p1! : final.p2!;
+    expect(scale(arc(champ, 1, false))).toMatch(PLAYED);
+  });
+
+  it("exposes a `pending` predicate: true for projected / unknown / zero-time, false for played", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 }); // whole draw played
+    const scale = colorScale("time", s);
+    expect(typeof scale.pending).toBe("function");
+    const final = Object.values(s.matches).find((m) => m.nextMatchId === null)!;
+    const champ = final.winner === "p1" ? final.p1! : final.p2!;
+    expect(scale.pending!(arc(champ, 1, false))).toBe(false); // played, decided
+    expect(scale.pending!(arc(champ, 1, true))).toBe(true);   // projection
+    expect(scale.pending!(arc(null, 1, false))).toBe(true);   // unknown occupant
+  });
+
+  it("marks a zero-time occupant pending when nothing has been played", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    const scale = colorScale("time", s);
+    expect(scale.pending!(arc("p0", s.rounds.length, false))).toBe(true);
+  });
+
+  it("keeps a live (in-progress) arc coloured by court time instead of greying it", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 }); // occupants have court time
+    const scale = colorScale("time", s);
+    const final = Object.values(s.matches).find((m) => m.nextMatchId === null)!;
+    const champ = final.winner === "p1" ? final.p1! : final.p2!;
+    // an undecided (projected) arc is pending grey — UNLESS the match is live, which still accrues time
+    expect(scale.pending!(arc(champ, 1, true, false))).toBe(true);  // projected, not live → pending
+    expect(scale.pending!(arc(champ, 1, true, true))).toBe(false);  // live → coloured by its court time
+    expect(scale(arc(champ, 1, true, true))).toMatch(PLAYED);
+  });
+
+  it("keeps a JUST-STARTED live arc (zero recorded time) coloured, not grey pending", () => {
+    // A live match before any duration is logged: cumulativeOnCourt skips matches with no
+    // durationSec, so the occupant's through() is 0. The zero-time clause must NOT win over `live`,
+    // or the arc would render grey "not played yet" while also carrying the live hatch + breathing.
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 }); // nobody has time
+    const scale = colorScale("time", s);
+    expect(scale.pending!(arc("p0", s.rounds.length, true, true))).toBe(false); // live → not pending
+    expect(scale(arc("p0", s.rounds.length, true, true))).toMatch(PLAYED);      // heat (HEAT(0)), never grey
+    // the same arc, NOT live, stays pending grey
+    expect(scale.pending!(arc("p0", s.rounds.length, true, false))).toBe(true);
+    expect(scale(arc("p0", s.rounds.length, true, false))).toMatch(PENDING);
+  });
+
+  it("seed and country lenses expose no `pending` predicate (projections keep their hue)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    expect(colorScale("seed", s).pending).toBeUndefined();
+    expect(colorScale("country", s).pending).toBeUndefined();
   });
 });
 

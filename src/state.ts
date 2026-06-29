@@ -36,6 +36,7 @@ export interface SunNode {
   matchId: string;            // the match this node represents (leaf → its round-0 match)
   occupant: string | null;    // playerId (decided winner or projected); null = unknown (both feeders TBD)
   projected: boolean;         // occupant is a projection, not a decided result
+  live: boolean;              // this node's match is in progress (provisional time accruing, no winner yet)
   depth: number;              // 0 = champion (centre)
   children: SunNode[];
 }
@@ -117,10 +118,13 @@ export function buildSunburst(s: Snapshot): SunNode {
     const children: SunNode[] = feeders.length
       ? feeders.map((f, i) => build(f, depth + 1, `${id}.${i}`))
       : [
-          { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, depth: depth + 1, children: [] },
-          { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, depth: depth + 1, children: [] },
+          { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, live: false, depth: depth + 1, children: [] },
+          { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, live: false, depth: depth + 1, children: [] },
         ];
-    return { id, matchId: m.id, occupant, projected: decided === null, depth, children };
+    // `live` requires no decided result yet (SunNode.live = "in progress, no winner"). A data-lag
+    // match — winner already set while status still reads "live" — must NOT be both decided and
+    // live, or render would draw it named + heat-filled AND hatched/breathing (and possibly .out).
+    return { id, matchId: m.id, occupant, projected: decided === null, live: decided === null && m.status === "live", depth, children };
   };
   return build(finalMatch(s), 0, "r");
 }

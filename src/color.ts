@@ -24,9 +24,13 @@ const COUNTRY_HL = { dark: "#4ea1ff", light: "#1b63b4" } as const;   // keep in 
 export const HEAT_STOPS = ["#2f6f8f", "#d9a441", "#e0683c"];
 export const SEED_STOPS = ["#352170", "#6d3fd4", "#a36bff", "#e2cdff"];
 
-/** The per-arc inputs a colour function reads: who occupies the arc and which ring (depth) it is. */
-export interface ArcColorInput { occupant: string | null; depth: number; }
-export type ColorFn = (arc: ArcColorInput) => string;
+/** The per-arc inputs a colour function reads: who occupies the arc, which ring (depth) it is,
+ *  and whether the arc is a projection (no decided result feeding it yet). */
+export interface ArcColorInput { occupant: string | null; depth: number; projected: boolean; live?: boolean; }
+/** Maps an arc to a fill. The Time lens also exposes `pending`: arcs with no real court time yet
+ *  (unknown / projected / still-zero), which render.ts styles as `.arc.pending` scaffold. Other
+ *  lenses leave `pending` undefined so their projected arcs keep their seed/nationality hue. */
+export interface ColorFn { (arc: ArcColorInput): string; pending?(arc: ArcColorInput): boolean; }
 
 export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string, seedSort: SeedSort = "seed", theme: Theme = "dark"): ColorFn {
   if (dim === "time") {
@@ -36,11 +40,27 @@ export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string,
     const cum = cumulativeOnCourt(s);
     const numRounds = s.rounds.length;
     const t = scaleLinear<number>().domain([0, cum.max]).range([0, 1]).clamp(true);
-    return ({ occupant, depth }) => {
-      if (!occupant) return NEUTRAL[theme];
-      const round = Math.max(0, Math.min(numRounds - depth, numRounds - 1));
-      return HEAT(t(cum.through(occupant, round)));
+    const ringRound = (depth: number) => Math.max(0, Math.min(numRounds - depth, numRounds - 1));
+    // Time is a measured fact: only DECIDED arcs whose occupant has actually been on court carry
+    // heat. An arc is "pending" when it has no real court time yet — an unknown occupant, a
+    // not-yet-played projection, or a decided occupant still on zero minutes (e.g. a walkover
+    // advance, or the unplayed entrant leaves of round 0, which are decided:false yet hold no
+    // result). Pending arcs read as the NEUTRAL grey, never HEAT(0): the cool "fresh" tone is a
+    // real low value, so painting the unplayed half with it makes it look like a dead zone.
+    // A LIVE match is the one exception: it keeps its heat even at zero recorded time, because it
+    // is real, current play (the hatch/breathing mark it live). So `live` short-circuits BOTH the
+    // projection test AND the zero-time test — a just-started live match with no duration logged
+    // yet stays heat (HEAT(0)), never falling through to the grey "not played yet" tier.
+    const pending = ({ occupant, depth, projected, live }: ArcColorInput): boolean =>
+      !occupant || (!live && (projected || cum.through(occupant, ringRound(depth)) <= 0));
+    const fn: ColorFn = (a) => {
+      // mirrors `pending`, but computes cum.through ONCE and reuses it for the heat value
+      if (!a.occupant || (!a.live && a.projected)) return NEUTRAL[theme];
+      const sec = cum.through(a.occupant, ringRound(a.depth));
+      return !a.live && sec <= 0 ? NEUTRAL[theme] : HEAT(t(sec));
     };
+    fn.pending = pending;
+    return fn;
   }
   if (dim === "seed") {
     // Same violet ramp in both sub-modes — only the meaning changes (top seed ↔ strongest by ELO),
