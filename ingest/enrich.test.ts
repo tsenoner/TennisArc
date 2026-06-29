@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { enrichMatch } from "./enrich";
+import { enrichMatch, fillMissingCountries } from "./enrich";
 import { eventSample, statsSample, liveEventSample } from "./fixtures/event-sample";
+import { flagAssetUrl } from "../src/flags";
 import type { Match, Player } from "../src/model";
 
 const baseMatch = (over: Partial<Match> = {}): Match => ({
@@ -57,5 +58,63 @@ describe("enrichMatch", () => {
     const m = enrichMatch(baseMatch(), retEvent, statsSample, players(), 0);
     expect(m.status).toBe("retired");
     expect(m.durationSec).toBe(1822 + 600); // partial time still counts
+  });
+});
+
+describe("fillMissingCountries", () => {
+  const player = (id: string, country: string): Player => ({
+    id, name: id, country, seed: null, entry: null, ranking: null,
+    ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+  });
+
+  it("looks up only blank-country players (not-yet-played entrants) and fills them", async () => {
+    const players: Record<string, Player> = {
+      100: player("100", "ITA"),   // already enriched from a played match — must be skipped
+      235576: player("235576", ""), // not-yet-played — needs a country
+      999: player("999", ""),
+    };
+    const seen: number[] = [];
+    const lookup = async (teamId: number): Promise<string | null> => {
+      seen.push(teamId);
+      return teamId === 235576 ? "USA" : "GBR";
+    };
+
+    const res = await fillMissingCountries(players, lookup);
+
+    expect(seen.sort((a, b) => a - b)).toEqual([999, 235576]); // the enriched player is never looked up
+    expect(players["100"].country).toBe("ITA");   // existing country untouched
+    expect(players["235576"].country).toBe("USA");
+    expect(players["999"].country).toBe("GBR");
+    expect(res).toEqual({ filled: 2, missing: 2 });
+  });
+
+  it("skips non-entrant placeholders (SofaScore future-slot 'teams') when entrantIds is given", async () => {
+    const players: Record<string, Player> = {
+      235576: player("235576", ""), // real round-0 entrant
+      900001: player("900001", ""), // placeholder like "Qf1" — never an arc occupant
+    };
+    const seen: number[] = [];
+    const lookup = async (id: number) => { seen.push(id); return "USA"; };
+
+    const res = await fillMissingCountries(players, lookup, new Set(["235576"]));
+
+    expect(seen).toEqual([235576]);              // the placeholder is never looked up
+    expect(players["235576"].country).toBe("USA");
+    expect(players["900001"].country).toBe("");  // left untouched
+    expect(res).toEqual({ filled: 1, missing: 1 });
+  });
+
+  it("leaves a player blank when the lookup yields nothing (no spurious country)", async () => {
+    const players: Record<string, Player> = { 42: player("42", "") };
+    const res = await fillMissingCountries(players, async () => null);
+    expect(players["42"].country).toBe("");
+    expect(res).toEqual({ filled: 0, missing: 1 });
+  });
+
+  it("turns a flagless entrant into one that renders a flag (the reported symptom)", async () => {
+    const players: Record<string, Player> = { 235576: player("235576", "") };
+    expect(flagAssetUrl(players["235576"].country)).toBeNull(); // before: "" → no flag
+    await fillMissingCountries(players, async () => "USA");
+    expect(flagAssetUrl(players["235576"].country)).not.toBeNull(); // after: USA → flag
   });
 });

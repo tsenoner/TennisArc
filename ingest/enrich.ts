@@ -99,3 +99,37 @@ export function enrichMatch(
     stats: live ? null : buildStats(stats),
   };
 }
+
+/**
+ * Backfill the country of every player still missing one after per-match enrichment.
+ *
+ * Country reaches us only via per-event detail (enrichMatch, above), and the ingest fetches
+ * event detail solely for finished/live matches. A not-yet-played entrant therefore keeps the
+ * default `country: ""` from normalizeCuptrees — and `flagAssetUrl("")` is null, so their arc
+ * draws no flag even though we know who they are from the draw. Here we look the country up
+ * straight off each such player's SofaScore team, in the same ISO alpha-3 namespace the played
+ * players already use (so the Country lens/panel don't fragment one nation into two codes).
+ *
+ * `lookup` is injected (the network call lives in sofascore.ts) so this stays a pure, testable
+ * transform. It's a no-op for complete slams, where every match is finished and thus enriched.
+ *
+ * `entrantIds`, when given, restricts the backfill to those player ids — pass the real draw
+ * entrants (round-0 participants). SofaScore seeds the players map with placeholder "teams" for
+ * unresolved future slots ("R16P1", "Qf1", …) that have no country and never render as an arc
+ * occupant; without this they'd each cost a pointless team lookup every refresh.
+ */
+export async function fillMissingCountries(
+  players: Record<string, Player>,
+  lookup: (teamId: number) => Promise<string | null>,
+  entrantIds?: Set<string>,
+): Promise<{ filled: number; missing: number }> {
+  const missing = Object.values(players).filter(
+    (p) => !p.country && (!entrantIds || entrantIds.has(p.id)),
+  );
+  let filled = 0;
+  for (const p of missing) {
+    const country = await lookup(Number(p.id));
+    if (country) { p.country = country; filled++; }
+  }
+  return { filled, missing: missing.length };
+}

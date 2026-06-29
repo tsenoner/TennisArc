@@ -2,9 +2,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
 import { DRAW_SIZE, SLAMS, activeSlam, type SlamConfig } from "./config";
-import { openContext, fetchTournament, resolveSeasonId } from "./sofascore";
+import { openContext, fetchTournament, resolveSeasonId, fetchTeamCountry } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
-import { enrichMatch } from "./enrich";
+import { enrichMatch, fillMissingCountries } from "./enrich";
 import { fetchElo, applyElo } from "./elo";
 import { fetchPlayers, applyBirthdates } from "./players";
 import { availableSlamOf, mergeIndex, backfillTargets } from "./manifest";
@@ -27,6 +27,18 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
       if (!e?.detail) continue;
       snap.matches[match.id] = enrichMatch(match, e.detail as any, (e.stats as any) ?? null, snap.players, nowSec);
     }
+    // Not-yet-played entrants get no country from the (finished/live-only) event detail above,
+    // so their flag would be missing — look it up off the team instead. Scope to the real draw
+    // entrants (round-0 participants); SofaScore also seeds placeholder future-slot "teams" with
+    // no country that never render. No-op once every match is finished, so complete slams pay nothing.
+    const entrantIds = new Set<string>();
+    for (const m of Object.values(snap.matches)) {
+      if (m.roundIndex !== 0) continue;
+      if (m.p1) entrantIds.add(m.p1);
+      if (m.p2) entrantIds.add(m.p2);
+    }
+    const { filled, missing } = await fillMissingCountries(snap.players, (teamId) => fetchTeamCountry(page, teamId), entrantIds);
+    if (missing) console.log(`${cfg.slam} ${tour}: countries backfilled ${filled}/${missing} not-yet-played entrants`);
     // Tennis Abstract publishes *current* ratings only — stamping them onto a past year's
     // snapshot would be anachronistic, so historical backfills keep elo=null.
     if (cfg.year === new Date().getUTCFullYear()) {
