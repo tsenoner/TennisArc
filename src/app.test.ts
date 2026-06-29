@@ -101,6 +101,9 @@ function pickArc(root: HTMLElement): HTMLElement {
 }
 const pinnedRows = (root: HTMLElement) => root.querySelectorAll(".row-pinned");
 const litArcs = (root: HTMLElement) => root.querySelectorAll(".sunburst path.arc-hl");
+/** Switch to a colour lens by its control button (the Seed lens is the only one with a centre pill). */
+const setLens = (root: HTMLElement, dim: string) =>
+  click(root.querySelector<HTMLElement>(`[data-action="colordim"][data-dim="${dim}"]`)!);
 
 /** Mount the app and wait for the bracket (async bootstrap: fetch index → snapshot → draw). */
 async function mountApp(): Promise<HTMLElement> {
@@ -424,8 +427,19 @@ describe("createApp lifecycle", () => {
 });
 
 describe("finalist pill + corner readout", () => {
+  it("shows the centre champion pill only on the Seed lens, not on Time or Country", async () => {
+    const root = await mountApp();
+    expect(root.querySelector(".center-id")).toBeNull();      // Time lens (default): clean centre
+    setLens(root, "seed");
+    expect(root.querySelector(".center-id")).not.toBeNull();  // Seed lens: predicted champion pill
+    expect(root.querySelector(".center-id")!.textContent).not.toBe("");
+    setLens(root, "country");
+    expect(root.querySelector(".center-id")).toBeNull();      // Country lens: clean centre again
+  });
+
   it("keeps naming the finalist in the centre while another player is pinned", async () => {
     const root = await mountApp();
+    setLens(root, "seed");                                   // centre pill shows only on the Seed lens
     const champ = root.querySelector<HTMLElement>('path.arc[data-id="r"]')!.dataset.occupant!;
     const arc = [...root.querySelectorAll<HTMLElement>("path.arc[data-occupant]")]
       .find((a) => a.dataset.occupant && a.dataset.occupant !== champ)!;
@@ -815,6 +829,7 @@ describe("quarter-owner corner labels", () => {
 describe("centre pill while focused", () => {
   it("restores the pill naming the focused occupant (their on-arc hub label is dropped) and idles the card", async () => {
     const root = await mountApp();
+    setLens(root, "seed");                                            // centre pill shows only on the Seed lens
     mockBack();
     click(qArc(root)); click(qArc(root));                             // focus the quarter
     const occ = qArc(root).dataset.occupant!;                         // focused hub's occupant
@@ -839,6 +854,7 @@ describe("centre pill while focused", () => {
       return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
     }) as typeof fetch;
     const root = await mountApp();
+    setLens(root, "seed");                                               // centre pill shows only on the Seed lens
     click(root.querySelector<HTMLElement>('.q-owner[data-id="r.0.0"]')!); // caption-only, still tappable
     const pill = root.querySelector(".center-id.center-sec")!;
     expect(pill).not.toBeNull();

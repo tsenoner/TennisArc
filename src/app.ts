@@ -314,19 +314,22 @@ export function createApp(root: HTMLElement): () => void {
     const floatIdle = !pinned;
     roCurrent = defaultId; roIdle = floatIdle; // the markup below renders the float readout for defaultId
 
-    // The finalist holds the chart centre as a minimal flag + surname pill; their full
-    // card appears in the float readout on hover, like anyone else's. While a section is
-    // focused, the pill names the focused occupant instead (their on-arc hub label is
+    // The finalist holds the chart centre as a minimal flag + surname pill — but ONLY on the Seed
+    // lens; the Time and Country lenses keep the centre clean (the float readout still names
+    // players on hover, and the crumbs name a focused section). On Seed the pill names the
+    // champion, or — while a section is focused — the focused occupant (its on-arc hub label is
     // dropped above), falling back to the section's title when no occupant is known yet.
     let centerId = "";
-    if (state.focusId) {
-      const fp = focusOcc ? snap.players[focusOcc] : undefined;
-      centerId = fp
-        ? renderCenterId(fp.country, surname(fp.name), focusArc?.projected ?? false)
-        : renderCenterSection(sectionTitle(snap, tree, state.focusId));
-    } else if (tree.occupant) {
-      const champ = snap.players[tree.occupant];
-      centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
+    if (state.colorDim === "seed") {
+      if (state.focusId) {
+        const fp = focusOcc ? snap.players[focusOcc] : undefined;
+        centerId = fp
+          ? renderCenterId(fp.country, surname(fp.name), focusArc?.projected ?? false)
+          : renderCenterSection(sectionTitle(snap, tree, state.focusId));
+      } else if (tree.occupant) {
+        const champ = snap.players[tree.occupant];
+        centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
+      }
     }
     const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
 
