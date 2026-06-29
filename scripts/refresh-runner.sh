@@ -45,18 +45,26 @@ descendants() {                 # print a PID and all its descendants — snapsh
 
 scripts/publish-data.sh &
 JOB=$!
-( sleep "$TENNISARC_TIMEOUT"
-  if kill -0 "$JOB" 2>/dev/null; then
+# Watchdog. The timer lives in the `if` CONDITION so the normal-completion path can cancel it by
+# killing this subshell's `sleep` child (below) and cleanly skip the kill. Once we DO start killing,
+# `sleep 20 || true` keeps the escalation going even if that grace sleep is interrupted, so the
+# SIGKILL backstop always fires for anything that ignored or outlived the SIGTERM.
+( if sleep "$TENNISARC_TIMEOUT" && kill -0 "$JOB" 2>/dev/null; then
     echo "refresh-runner: publish-data.sh exceeded ${TENNISARC_TIMEOUT}s — killing the run" >&2
     PIDS="$(descendants "$JOB")"
     kill -TERM $PIDS 2>/dev/null || true   # SIGTERM first so publish-data.sh's EXIT trap can clean up
-    sleep 20
-    kill -KILL $PIDS 2>/dev/null || true
+    sleep 20 || true
+    kill -KILL $PIDS 2>/dev/null || true   # backstop: reap anything that ignored/outlived SIGTERM
   fi
 ) &
 WATCHDOG=$!
 
 STATUS=0
 wait "$JOB" || STATUS=$?         # `|| ...` stops `set -e` bailing before we reap the watchdog
-kill -TERM $(descendants "$WATCHDOG") 2>/dev/null || true   # finished on its own → cancel the timer
+# Cancel the timer by killing ONLY the watchdog's `sleep` child — never the subshell itself, or we'd
+# abort an in-flight TERM→KILL escalation and strand the very orphans it was reaping. If the watchdog
+# already fired, this just shortens its grace; the `wait` then lets its SIGKILL pass run to the end
+# before we exit (so launchd can't reap a half-finished kill).
+pkill -P "$WATCHDOG" 2>/dev/null || true
+wait "$WATCHDOG" 2>/dev/null || true
 exit "$STATUS"

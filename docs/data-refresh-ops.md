@@ -14,7 +14,7 @@ written for both).
 
 ```
 launchd (com.tennisarc.refresh, every 1800s)
-  └─ /bin/bash -lc 'exec ~/Library/Application Support/TennisArc/run-refresh.sh'   ← a SNAPSHOT copy
+  └─ /bin/bash -lc 'exec "$HOME/Library/Application Support/TennisArc/run-refresh.sh"'   ← a SNAPSHOT copy
        └─ syncs the dedicated clone ~/Library/Application Support/TennisArc/refresh to origin/main
             └─ scripts/publish-data.sh   (ingest → carry-forward → durations → reindex → force-push)
                  └─ pnpm ingest → headless Chromium → SofaScore
@@ -74,20 +74,27 @@ as-is on the Pi too.)
 launchctl list com.tennisarc.refresh | grep -E '"PID"|LastExitStatus'
 #   "PID" present  → a run is in progress (or wedged — cross-check the log mtime below)
 #   no "PID" line  → idle, waiting for the next tick
-#   LastExitStatus → 0 = clean; 9/137 = it was SIGKILLed (e.g. by the watchdog or by hand)
+#   LastExitStatus → 0 = clean; 143 = the watchdog SIGTERMed it (the usual self-clearing timeout);
+#                    137 = SIGKILLed (it ignored SIGTERM through the 20s grace, or was killed by hand)
 
 # 2. Is it actually making progress, or frozen? A healthy run touches the log every cycle.
 ls -l  ~/Library/Logs/tennisarc-refresh.log     # mtime older than ~30 min while "PID" is set ⇒ wedged
 tail -40 ~/Library/Logs/tennisarc-refresh.log    # last lines tell you which slam/step it reached
 
-# 3. Suspected wedge — see the stuck process tree (publish-data.sh + node + chrome-headless-shell):
+# 3. Suspected wedge — see the stuck process tree (publish-data.sh + node + chrome-headless-shell).
+#    `ps -p "$RUN_PID"` alone shows only the runner; walk the descendants like the watchdog does.
 RUN_PID=$(launchctl list com.tennisarc.refresh | sed -n 's/.*"PID" = \([0-9]*\).*/\1/p')
-ps -o pid,ppid,stat,etime,command -p "$RUN_PID"        # ELAPSED in days = definitely stuck
+descendants() { echo "$1"; for c in $(pgrep -P "$1" 2>/dev/null); do descendants "$c"; done; }
+ps -o pid,ppid,stat,etime,command -p "$(descendants "$RUN_PID" | paste -sd, -)"  # ELAPSED in days = stuck
 
-# 4. Clear it. The watchdog should now prevent indefinite hangs, but to kill by hand:
-#    list the tree, then kill with LITERAL pids (see the zsh gotcha below), TERM then KILL.
-pkill -TERM -P "$RUN_PID"; kill -TERM "$RUN_PID"       # children first, then the parent
-#    if anything survives, repeat with -KILL. Leftover git state self-heals: the next run does
+# 4. Clear it. The watchdog should now prevent indefinite hangs, but to kill the whole tree by hand,
+#    reuse the descendants walk from step 3 — `pkill -P` only hits DIRECT children and would strand
+#    the chrome-headless-shell grandchildren (the very leak the watchdog tree-walks to avoid).
+PIDS="$(descendants "$RUN_PID")"
+kill -TERM ${=PIDS} 2>/dev/null                        # zsh: ${=PIDS} splits the list (see gotcha below)
+sleep 20
+kill -KILL ${=PIDS} 2>/dev/null                        # anything that ignored SIGTERM through the grace
+#    Leftover git state self-heals: the next run does
 #    `git reset --hard origin/main && git clean` in the clone and `git branch -D data-pub`.
 
 # 5. Run immediately (don't wait up to 30 min) — also the way to recover after clearing a wedge:
