@@ -135,7 +135,7 @@ export function renderQuarterFocusButtons(quarters: QuarterLabel[]): string {
  *  curved labels, a 12-o'clock round axis, and quarter-owner corner handles. */
 export function renderSunburst(
   arcs: LayoutArc[], color: ColorFn, size: number, labels?: SunburstLabels, rings?: RingLabel[],
-  quarters?: QuarterLabel[],
+  quarters?: QuarterLabel[], eliminated?: Set<string>,
 ): string {
   const c = size / 2;
   const defs: string[] = [];
@@ -155,7 +155,15 @@ export function renderSunburst(
   const paths = arcs
     .map((a) => {
       const d = arcGen(a) ?? "";
-      const cls = a.projected ? "arc projected" : "arc";
+      // Arc emphasis tiers (all presentation): .pending = no court time yet (Time-lens scaffold,
+      // solid seams so an in-progress half reads as structure); .live = match in progress (active,
+      // teal-edged, coloured by its current time); .out = a decided occupant who is eliminated,
+      // dimmed so the players still in stand out. A live arc is projected (no winner) so it carries
+      // no on-arc name; an .out arc is never projected, so the two tiers never collide.
+      const cls = (a.projected ? "arc projected" : "arc")
+        + (color.pending?.(a) ? " pending" : "")
+        + (a.live ? " live" : "")
+        + (!a.projected && a.occupant && eliminated?.has(a.occupant) ? " out" : "");
       if (labels && !a.projected && a.occupant && labels.anchors.has(a.id)) {
         // Country lens: a flag image at the arc centroid, rotated tangentially like the
         // curved labels (flipped on the bottom half so it never hangs upside-down).
@@ -395,13 +403,17 @@ export function renderPanelFab(dim: ColorDim, seedSort: SeedSort = "seed"): stri
   return `<button class="panel-fab" data-action="panel" aria-label="Open ${escapeHtml(label)} panel">${escapeHtml(label)}</button>`;
 }
 
-export function renderLegend(dim: ColorDim, seedSort: SeedSort = "seed"): string {
+export function renderLegend(dim: ColorDim, seedSort: SeedSort = "seed", hasPending = false): string {
   if (dim === "country") return `<div class="legend">Colour: nationality</div>`;
   const label = dim === "time" ? "fresh → most court time"
     : dim === "seed" && seedSort === "elo" ? "weaker → stronger (ELO)"
     : "unseeded → top seed";
   const grad = dim === "seed" ? "legend-grad seed" : "legend-grad";
-  return `<div class="legend"><span class="${grad}" aria-hidden="true"></span><span>${label}</span></div>`;
+  // Early in a slam the Time wheel is mostly "not yet played" grey — name it so the scaffold
+  // doesn't read as a gap. Only the Time lens has a pending tier; other lenses colour projections.
+  const pendingKey = dim === "time" && hasPending
+    ? `<span class="legend-key"><i class="legend-pending" aria-hidden="true"></i>not played yet</span>` : "";
+  return `<div class="legend"><span class="${grad}" aria-hidden="true"></span><span>${label}</span>${pendingKey}</div>`;
 }
 
 /** Mobile bottom-sheet chrome shared by every lens panel: a grip pill that toggles

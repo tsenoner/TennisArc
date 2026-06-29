@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -231,6 +231,8 @@ export function createApp(root: HTMLElement): () => void {
     const tree = buildSunburst(snap);
     const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
     const color = colorScale(state.colorDim, snap, state.selectedCountry, state.seedSort, state.theme);
+    const eliminated = eliminatedSet(snap);                       // dim knocked-out players (.arc.out)
+    const hasPending = arcs.some((a) => color.pending?.(a) ?? false); // any "not played yet" arcs → legend key
     // Round axis (R128 … Final), one per ring, derived from the laid-out arcs so it follows focus/zoom.
     const ringSeen = new Map<number, { y0: number; y1: number }>();
     for (const a of arcs) if (a.depth >= 1 && !ringSeen.has(a.depth)) ringSeen.set(a.depth, { y0: a.y0, y1: a.y1 });
@@ -348,11 +350,11 @@ export function createApp(root: HTMLElement): () => void {
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst">${crumbs}${strip}<div class="chart" tabindex="-1">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings, qLabels)}` +
+        `<div class="sunburst">${crumbs}${strip}<div class="chart" tabindex="-1">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings, qLabels, eliminated)}` +
           centerId + `</div>` + (qLabels ? renderQuarterFocusButtons(qLabels) : "") + roFloat + `</div>` +
         `<div class="side">${panel}</div>` +
       `</div>` +
-      renderLegend(state.colorDim, state.seedSort) +
+      renderLegend(state.colorDim, state.seedSort, hasPending) +
       `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}` +
         // CC BY-NC-SA: historical durations + ELO + birthdates come from Jeff Sackmann's data
         ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener noreferrer">Tennis Abstract</a></span></div>`;

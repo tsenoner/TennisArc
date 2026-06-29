@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
-import { buildSunburst, winnerId, timeOnCourt, timeLeaderboard } from "./state";
+import { buildSunburst, winnerId, timeOnCourt, timeLeaderboard, type SunNode } from "./state";
 import { surfaceElo, projectFavorite, winProbability } from "./state";
 import type { Player } from "./model";
 
@@ -42,6 +42,18 @@ describe("buildSunburst", () => {
     // leaves (entrants) are known, not projected
     const leaf = (n: typeof root): typeof root => (n.children.length ? leaf(n.children[0]) : n);
     expect(leaf(root).projected).toBe(false);
+  });
+
+  it("flags the node of a live match (so it colours by live time, not pending grey)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    s.matches["0-1"] = { ...s.matches["0-1"], status: "live", winner: null, durationSec: 1800, durationProvisional: true };
+    const find = (n: SunNode): SunNode | undefined =>
+      n.matchId === "0-1" && n.children.length ? n : n.children.map(find).find(Boolean);
+    expect(find(buildSunburst(s))?.live).toBe(true);
+    // a scheduled sibling match's node is not live
+    const find00 = (n: SunNode): SunNode | undefined =>
+      n.matchId === "0-0" && n.children.length ? n : n.children.map(find00).find(Boolean);
+    expect(find00(buildSunburst(s))?.live).toBe(false);
   });
 });
 
