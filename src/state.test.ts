@@ -55,6 +55,17 @@ describe("buildSunburst", () => {
       n.matchId === "0-0" && n.children.length ? n : n.children.map(find00).find(Boolean);
     expect(find00(buildSunburst(s))?.live).toBe(false);
   });
+
+  it("does not flag a node live when the match already has a decided winner (data-lag guard)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    // winner set while status still reads "live" — must resolve to decided (projected:false), NOT live
+    s.matches["0-1"] = { ...s.matches["0-1"], status: "live", winner: "p1" };
+    const find = (n: SunNode): SunNode | undefined =>
+      n.matchId === "0-1" && n.children.length ? n : n.children.map(find).find(Boolean);
+    const node = find(buildSunburst(s));
+    expect(node?.live).toBe(false);
+    expect(node?.projected).toBe(false);
+  });
 });
 
 describe("timeOnCourt", () => {

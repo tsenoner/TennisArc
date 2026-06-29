@@ -25,9 +25,11 @@ const arcGen = d3arc<LayoutArc>()
 // A diagonal "in-progress" hatch tiled over live-match arcs (Option A): a STATIC, non-colour,
 // non-motion redundant cue (WCAG 1.4.1) — distinct from the dimmed-out tier and legible without
 // colour perception or animation. Line colour/opacity is themed in CSS (.live-hatch-line).
+// The line sits at the tile's mid-x (2.5), not its edge (0): a stroke on the x=0 boundary has its
+// left half clipped by the tile viewport (overflow:hidden), so it would render at ~half weight.
 const LIVE_HATCH =
   `<pattern id="liveHatch" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">` +
-  `<line class="live-hatch-line" x1="0" y1="0" x2="0" y2="5"></line></pattern>`;
+  `<line class="live-hatch-line" x1="2.5" y1="0" x2="2.5" y2="5"></line></pattern>`;
 
 export interface SunburstLabels {
   anchors: Set<string>;

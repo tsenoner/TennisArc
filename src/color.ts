@@ -44,14 +44,21 @@ export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string,
     // Time is a measured fact: only DECIDED arcs whose occupant has actually been on court carry
     // heat. An arc is "pending" when it has no real court time yet — an unknown occupant, a
     // not-yet-played projection, or a decided occupant still on zero minutes (e.g. a walkover
-    // advance). Pending arcs read as the NEUTRAL grey, never HEAT(0): the cool "fresh" tone is a
+    // advance, or the unplayed entrant leaves of round 0, which are decided:false yet hold no
+    // result). Pending arcs read as the NEUTRAL grey, never HEAT(0): the cool "fresh" tone is a
     // real low value, so painting the unplayed half with it makes it look like a dead zone.
-    // A LIVE match keeps its heat (provisional time is accruing right now) even though it is
-    // "projected" (undecided) — it is the one projection that represents real, current play.
+    // A LIVE match is the one exception: it keeps its heat even at zero recorded time, because it
+    // is real, current play (the hatch/breathing mark it live). So `live` short-circuits BOTH the
+    // projection test AND the zero-time test — a just-started live match with no duration logged
+    // yet stays heat (HEAT(0)), never falling through to the grey "not played yet" tier.
     const pending = ({ occupant, depth, projected, live }: ArcColorInput): boolean =>
-      !occupant || (projected && !live) || cum.through(occupant, ringRound(depth)) <= 0;
-    const fn: ColorFn = (a) =>
-      pending(a) ? NEUTRAL[theme] : HEAT(t(cum.through(a.occupant!, ringRound(a.depth))));
+      !occupant || (!live && (projected || cum.through(occupant, ringRound(depth)) <= 0));
+    const fn: ColorFn = (a) => {
+      // mirrors `pending`, but computes cum.through ONCE and reuses it for the heat value
+      if (!a.occupant || (!a.live && a.projected)) return NEUTRAL[theme];
+      const sec = cum.through(a.occupant, ringRound(a.depth));
+      return !a.live && sec <= 0 ? NEUTRAL[theme] : HEAT(t(sec));
+    };
     fn.pending = pending;
     return fn;
   }

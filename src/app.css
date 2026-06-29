@@ -269,7 +269,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 /* Option B — a slow opacity "breathing" pulse draws the eye to a live match. Opacity-only
    (compositor-cheap), ~3 s (well under the 3 Hz seizure threshold), never scaling/blinking/red.
    The hatch above is the static floor, so reduced-motion (and hover-dim) just drop the pulse. */
-@keyframes live-breathe { 0%, 100% { opacity: .42; } 50% { opacity: .74; } }
+/* trough stays at the .5 static floor (≥ the .45 plain-projected opacity) so a live arc is never
+   momentarily fainter than the dashed projections it is meant to stand out from; peak draws the eye. */
+@keyframes live-breathe { 0%, 100% { opacity: .5; } 50% { opacity: .85; } }
 .arc.live { animation: live-breathe 3.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .arc.live { animation: none; } }
 .sunburst.arc-dim-mode .arc.live { animation: none; }   /* let the hover-dim opacity take over */
@@ -316,6 +318,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    no accent stroke, so the highlight reads the same under every lens colouring) */
 .sunburst.arc-dim-mode path.arc { opacity: .22; transition: opacity .12s; }
 .sunburst path.arc.arc-hl { opacity: 1; }
+/* the live hatch is a sibling overlay (class arc-hatch, NOT .arc), so the dim rule above doesn't
+   reach it — fade it with its arc, but keep it bright on the highlighted (adjacent) arc, else the
+   hatch lines float fully-opaque over a dimmed-to-.22 wheel while another player is highlighted. */
+.sunburst.arc-dim-mode .arc-hatch { opacity: .22; transition: opacity .12s; }
+.sunburst.arc-dim-mode .arc.arc-hl + .arc-hatch { opacity: 1; }
 .readout { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 158px; text-align: center; pointer-events: none; }
 .readout.filled { padding: 9px 12px; border-radius: 14px; border: 1px solid var(--line);
   background: var(--panel);  /* opaque fallback for browsers without color-mix() */

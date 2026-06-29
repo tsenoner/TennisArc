@@ -125,6 +125,19 @@ describe("colorScale time lens — pending vs played", () => {
     expect(scale(arc(champ, 1, true, true))).toMatch(PLAYED);
   });
 
+  it("keeps a JUST-STARTED live arc (zero recorded time) coloured, not grey pending", () => {
+    // A live match before any duration is logged: cumulativeOnCourt skips matches with no
+    // durationSec, so the occupant's through() is 0. The zero-time clause must NOT win over `live`,
+    // or the arc would render grey "not played yet" while also carrying the live hatch + breathing.
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 }); // nobody has time
+    const scale = colorScale("time", s);
+    expect(scale.pending!(arc("p0", s.rounds.length, true, true))).toBe(false); // live → not pending
+    expect(scale(arc("p0", s.rounds.length, true, true))).toMatch(PLAYED);      // heat (HEAT(0)), never grey
+    // the same arc, NOT live, stays pending grey
+    expect(scale.pending!(arc("p0", s.rounds.length, true, false))).toBe(true);
+    expect(scale(arc("p0", s.rounds.length, true, false))).toMatch(PENDING);
+  });
+
   it("seed and country lenses expose no `pending` predicate (projections keep their hue)", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     expect(colorScale("seed", s).pending).toBeUndefined();

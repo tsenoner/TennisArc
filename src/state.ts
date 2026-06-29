@@ -121,7 +121,10 @@ export function buildSunburst(s: Snapshot): SunNode {
           { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, live: false, depth: depth + 1, children: [] },
           { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, live: false, depth: depth + 1, children: [] },
         ];
-    return { id, matchId: m.id, occupant, projected: decided === null, live: m.status === "live", depth, children };
+    // `live` requires no decided result yet (SunNode.live = "in progress, no winner"). A data-lag
+    // match — winner already set while status still reads "live" — must NOT be both decided and
+    // live, or render would draw it named + heat-filled AND hatched/breathing (and possibly .out).
+    return { id, matchId: m.id, occupant, projected: decided === null, live: decided === null && m.status === "live", depth, children };
   };
   return build(finalMatch(s), 0, "r");
 }
