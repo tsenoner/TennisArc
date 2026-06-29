@@ -46,6 +46,8 @@ scripts/publish-data.sh   # pnpm ingest → force-push the `data` branch (index.
 
 Schedule it via `launchd`/`cron` while your machine is online. The deployed app reads the `data` branch when `VITE_DATA_BASE_URL` is set, and always falls back to the committed same-origin seed in `public/data/`.
 
+The live scheduler setup (launchd label, snapshot path, logs), its failure modes — a hung Playwright run wedges the whole schedule because launchd never overlaps runs — and a step-by-step "is it healthy / how to unstick it" runbook are in [`docs/data-refresh-ops.md`](docs/data-refresh-ops.md). `scripts/refresh-runner.sh` wraps the publish under a watchdog timeout so a stuck browser can no longer block every future tick.
+
 ## Deploy (Vercel)
 
 **Live:** https://tennisarc.vercel.app — Vercel (Vite preset, output `dist/`), serving the committed real Roland Garros 2026 data, installable + offline-capable. Redeploy after changes with `vercel deploy --prod`.

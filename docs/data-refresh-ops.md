@@ -1,0 +1,122 @@
+# Data refresh ops — the live 30-min SofaScore pull
+
+> Operational runbook for the residential-IP data refresh: how it's wired, how it can wedge, and
+> how to tell what's going on without guessing. Companion to the README "Refreshing data" section
+> (the *why* — Cloudflare blocks datacenter IPs) and `scripts/refresh-runner.sh` / `scripts/publish-data.sh`
+> (the *what*). This doc is the *where it runs and how to unstick it*.
+
+## The chain
+
+SofaScore's API 403s datacenter IPs (Cloudflare), so the refresh **cannot** run on GitHub-hosted
+Actions or Vercel — it runs on a residential machine. Today that's the author's Mac via a launchd
+agent; later it moves to an always-on Raspberry Pi via a systemd timer (`refresh-runner.sh` is
+written for both).
+
+```
+launchd (com.tennisarc.refresh, every 1800s)
+  └─ /bin/bash -lc 'exec ~/Library/Application Support/TennisArc/run-refresh.sh'   ← a SNAPSHOT copy
+       └─ syncs the dedicated clone ~/Library/Application Support/TennisArc/refresh to origin/main
+            └─ scripts/publish-data.sh   (ingest → carry-forward → durations → reindex → force-push)
+                 └─ pnpm ingest → headless Chromium → SofaScore
+                      └─ force-push the `data` branch  →  Vercel app reads it (when VITE_DATA_BASE_URL is set)
+```
+
+## Where it lives (Mac)
+
+| Thing | Path / value |
+| --- | --- |
+| launchd label | `com.tennisarc.refresh` |
+| plist | `~/Library/LaunchAgents/com.tennisarc.refresh.plist` |
+| interval | `StartInterval = 1800` (30 min), `RunAtLoad = true` |
+| **what launchd runs** | `~/Library/Application Support/TennisArc/run-refresh.sh` (a **snapshot**, NOT the repo file) |
+| source of truth | `scripts/refresh-runner.sh` in this repo |
+| dedicated clone | `~/Library/Application Support/TennisArc/refresh` |
+| log | `~/Library/Logs/tennisarc-refresh.log` |
+
+> **Gotcha — the runner is a snapshot.** launchd executes the copy under `~/Library/Application Support/`,
+> not `scripts/refresh-runner.sh`. After editing the repo script you **must re-copy** it or the change
+> never takes effect:
+> ```bash
+> cp scripts/refresh-runner.sh "$HOME/Library/Application Support/TennisArc/run-refresh.sh"
+> ```
+> (The clone *is* reset to `origin/main` each run, so `publish-data.sh` and the rest of the repo are
+> always fresh — only the outer runner wrapper is a manual snapshot, on purpose: it must survive the
+> clone being reset/cleaned.)
+
+## The failure mode: one hung run wedges the whole schedule
+
+**launchd (and systemd) never overlap two runs of the same job.** If a run is still alive when the
+next interval fires, that tick is silently skipped. So a single stuck run blocks **every** future
+tick until it's killed — nothing publishes, the `data` branch freezes, and there is no error: the
+job just looks "running."
+
+The realistic way this happens: `pnpm ingest` launches headless Chromium, a SofaScore navigation
+hangs, and the 60s `page.goto` timeout doesn't fire (or its teardown also blocks). The run sits
+there indefinitely.
+
+### The guard (added after the 2026-06 incident)
+
+`scripts/refresh-runner.sh` now runs `publish-data.sh` under a hard timeout
+(`TENNISARC_TIMEOUT`, default **1200s / 20 min**). On timeout it **walks the PID tree** and
+SIGTERM-then-SIGKILLs every descendant, so each cycle is self-clearing.
+
+Why a tree-walk and not GNU `timeout`/`gtimeout` (which signal a process group)? The headless
+`chrome-headless-shell` child **opens its own session** (it shows as state `Ss` in `ps`), so a
+process-group kill misses it and leaks orphaned Chromium. The watchdog snapshots the full
+descendant set *before* killing, so reparenting after the first kill can't strand a grandchild.
+(`gtimeout` also isn't installed on the Mac, and this approach needs zero extra deps — it works
+as-is on the Pi too.)
+
+## Runbook — is it healthy, and how to unstick it
+
+```bash
+# 1. Is the agent loaded? Is a run alive right now, and what was the last exit?
+launchctl list com.tennisarc.refresh | grep -E '"PID"|LastExitStatus'
+#   "PID" present  → a run is in progress (or wedged — cross-check the log mtime below)
+#   no "PID" line  → idle, waiting for the next tick
+#   LastExitStatus → 0 = clean; 9/137 = it was SIGKILLed (e.g. by the watchdog or by hand)
+
+# 2. Is it actually making progress, or frozen? A healthy run touches the log every cycle.
+ls -l  ~/Library/Logs/tennisarc-refresh.log     # mtime older than ~30 min while "PID" is set ⇒ wedged
+tail -40 ~/Library/Logs/tennisarc-refresh.log    # last lines tell you which slam/step it reached
+
+# 3. Suspected wedge — see the stuck process tree (publish-data.sh + node + chrome-headless-shell):
+RUN_PID=$(launchctl list com.tennisarc.refresh | sed -n 's/.*"PID" = \([0-9]*\).*/\1/p')
+ps -o pid,ppid,stat,etime,command -p "$RUN_PID"        # ELAPSED in days = definitely stuck
+
+# 4. Clear it. The watchdog should now prevent indefinite hangs, but to kill by hand:
+#    list the tree, then kill with LITERAL pids (see the zsh gotcha below), TERM then KILL.
+pkill -TERM -P "$RUN_PID"; kill -TERM "$RUN_PID"       # children first, then the parent
+#    if anything survives, repeat with -KILL. Leftover git state self-heals: the next run does
+#    `git reset --hard origin/main && git clean` in the clone and `git branch -D data-pub`.
+
+# 5. Run immediately (don't wait up to 30 min) — also the way to recover after clearing a wedge:
+launchctl kickstart -k "gui/$(id -u)/com.tennisarc.refresh"
+```
+
+> **Gotcha — killing under zsh.** The interactive shell here is **zsh**, which does **not** word-split
+> an unquoted `$VAR`. So `kill -TERM $PIDS` (with `PIDS="111 222 333"`) fails with
+> `illegal pid: 111 222 333` — the whole string is treated as one argument. Pass **literal** pids
+> (`kill -TERM 111 222 333`), loop one-at-a-time, or split explicitly (`${=PIDS}` in zsh,
+> `$PIDS` works only in bash). This is why an early kill attempt looked like a permissions/sandbox
+> failure but wasn't.
+
+## Worked example — the 2026-06 wedge
+
+On **2026-06-26 ~15:17** a run launched Chromium, a SofaScore navigation hung, and the process tree
+(bash → pnpm → node → 4× chrome-headless-shell, 12 procs) sat alive. Because launchd doesn't overlap
+runs, **every 30-min tick for the next 3 days was skipped** — the log froze at 15:19 and the `data`
+branch stayed at the 15:18 commit. Nothing errored; the job just showed a live PID with an old log.
+
+Fix: killed the tree, added the watchdog timeout to `refresh-runner.sh`, re-copied the snapshot, and
+kickstarted. The recovery run published live Wimbledon scores (ATP 25 / WTA 14 matches played, up
+from 0) and force-pushed the `data` branch. Total downtime would have been unbounded without the
+guard.
+
+## Does it show on the site?
+
+Publishing to the `data` branch only reaches https://tennisarc.vercel.app if the Vercel env var
+**`VITE_DATA_BASE_URL`** points at the branch
+(`https://raw.githubusercontent.com/tsenoner/TennisArc/data`). If it's unset, the deployed app falls
+back to the committed seed in `public/data/` and live updates won't appear no matter how healthy the
+refresh is. Check with `vercel env ls` (or the Vercel dashboard) if fresh data isn't showing.
