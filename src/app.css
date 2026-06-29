@@ -261,6 +261,18 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    .arc.live also drops the projected dashes — it's live, not a forecast. */
 .arc.live, .arc.out { opacity: .5; }
 .arc.live { stroke: var(--bg); stroke-width: .5px; stroke-dasharray: none; }
+/* Option A — the static in-progress hatch tiled over a live arc (renderSunburst paints a second
+   path with fill:url(#liveHatch) on top). This is the redundant, non-colour, motion-free cue that
+   makes "live" legible without colour or animation and distinct from the dimmed-out tier. */
+.arc-hatch { pointer-events: none; }
+.live-hatch-line { stroke: var(--text); stroke-width: 1.1; opacity: .5; }
+/* Option B — a slow opacity "breathing" pulse draws the eye to a live match. Opacity-only
+   (compositor-cheap), ~3 s (well under the 3 Hz seizure threshold), never scaling/blinking/red.
+   The hatch above is the static floor, so reduced-motion (and hover-dim) just drop the pulse. */
+@keyframes live-breathe { 0%, 100% { opacity: .42; } 50% { opacity: .74; } }
+.arc.live { animation: live-breathe 3.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .arc.live { animation: none; } }
+.sunburst.arc-dim-mode .arc.live { animation: none; }   /* let the hover-dim opacity take over */
 
 /* quarter-owner corner labels — quiet cartographic annotations in the circle-in-square
    dead corners, doubling as tap-to-focus quarter handles. No chip/box chrome on purpose;

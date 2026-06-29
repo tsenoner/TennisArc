@@ -22,6 +22,13 @@ const arcGen = d3arc<LayoutArc>()
   .padAngle(PAD_ANGLE)
   .padRadius(PAD_RADIUS);
 
+// A diagonal "in-progress" hatch tiled over live-match arcs (Option A): a STATIC, non-colour,
+// non-motion redundant cue (WCAG 1.4.1) — distinct from the dimmed-out tier and legible without
+// colour perception or animation. Line colour/opacity is themed in CSS (.live-hatch-line).
+const LIVE_HATCH =
+  `<pattern id="liveHatch" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">` +
+  `<line class="live-hatch-line" x1="0" y1="0" x2="0" y2="5"></line></pattern>`;
+
 export interface SunburstLabels {
   anchors: Set<string>;
   text: (occupant: string) => string;
@@ -140,6 +147,8 @@ export function renderSunburst(
   const c = size / 2;
   const defs: string[] = [];
   const texts: string[] = [];
+  const liveCount = arcs.filter((a) => a.live).length;
+  if (liveCount) defs.push(LIVE_HATCH);
   const pt = (r: number, ang: number) => `${(r * Math.sin(ang)).toFixed(2)},${(-r * Math.cos(ang)).toFixed(2)}`;
 
   // Faint round axis at 12 o'clock so each ring reads as a round (R128 … Final), following focus/zoom.
@@ -155,11 +164,11 @@ export function renderSunburst(
   const paths = arcs
     .map((a) => {
       const d = arcGen(a) ?? "";
-      // Arc emphasis tiers (all presentation): .pending = no court time yet (Time-lens scaffold,
-      // solid seams so an in-progress half reads as structure); .live = match in progress (active,
-      // teal-edged, coloured by its current time); .out = a decided occupant who is eliminated,
-      // dimmed so the players still in stand out. A live arc is projected (no winner) so it carries
-      // no on-arc name; an .out arc is never projected, so the two tiers never collide.
+      // Arc emphasis tiers (all presentation): .pending = no court time yet (grey dashed scaffold);
+      // .live = match in progress (coloured by its current time, transparent + a static hatch overlay
+      // below, optionally breathing); .out = a decided occupant who is eliminated, dimmed so the
+      // players still in stand out. A live arc is projected (no winner) so it carries no on-arc name;
+      // the hatch is what keeps live distinct from the equally-transparent .out tier.
       const cls = (a.projected ? "arc projected" : "arc")
         + (color.pending?.(a) ? " pending" : "")
         + (a.live ? " live" : "")
@@ -260,8 +269,13 @@ export function renderSunburst(
         }
         } // end image/text branch
       }
-      return `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
+      const path = `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
         `data-action="inspect" data-id="${a.id}" data-match="${a.matchId}" data-occupant="${escapeHtml(a.occupant ?? "")}"></path>`;
+      // live arcs get the hatch overlay on top; pointer-events:none so taps fall through to the
+      // heat arc beneath, and it is decorative (aria-hidden) — the live count lives in the SR label.
+      return a.live
+        ? path + `<path class="arc-hatch" d="${d}" fill="url(#liveHatch)" pointer-events="none" aria-hidden="true"></path>`
+        : path;
     })
     .join("");
 
@@ -269,9 +283,12 @@ export function renderSunburst(
   // only because they never overlap the disc (the invariant documented at Q_HIT_W above)
   const corners = quarters ? quarterCorners(quarters, c) : "";
 
+  // Live-ness reaches screen readers as text, not styling: the chart's accessible name carries
+  // the in-progress count (read on focus); per-match "live" also shows in the inspect strip.
+  const liveNote = liveCount ? ` — ${liveCount} ${liveCount === 1 ? "match" : "matches"} in progress` : "";
   return (
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
-    `role="img" aria-label="Tournament bracket sunburst">` +
+    `role="img" aria-label="Tournament bracket sunburst${liveNote}">` +
     `<g transform="translate(${c},${c})">` +
     `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}${corners}</g></svg>`
   );
