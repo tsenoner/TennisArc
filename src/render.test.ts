@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
-import { buildSunburst } from "./state";
+import { buildSunburst, eliminatedSet } from "./state";
 import { layout } from "./layout";
 import type { LayoutArc } from "./layout";
 import { colorScale } from "./color";
@@ -25,6 +25,51 @@ describe("renderSunburst", () => {
     const arcs = layout(buildSunburst(s), 150);
     const svg = renderSunburst(arcs, colorScale("seed", s), 340);
     expect(svg).toContain("arc projected");
+  });
+
+  it("marks no-court-time arcs with the pending class under the time lens", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    const arcs = layout(buildSunburst(s), 150);
+    expect(renderSunburst(arcs, colorScale("time", s), 340)).toContain("pending");
+    // the seed lens keeps projected arcs coloured by seed — no pending scaffold
+    expect(renderSunburst(arcs, colorScale("seed", s), 340)).not.toContain("pending");
+  });
+
+  it("marks a live match arc with the live class (active, coloured, no winner name)", () => {
+    const liveArc: LayoutArc = {
+      id: "r.0", matchId: "1-0", occupant: "p0", projected: true, live: true,
+      depth: 1, x0: 0, x1: Math.PI, y0: 40, y1: 120,
+    };
+    const svg = renderSunburst([liveArc], () => "rgb(200,120,60)", 700);
+    expect(svg).toMatch(/class="arc[^"]*\blive\b[^"]*"/);
+  });
+
+  it("hatches live arcs and announces the live count (Option A: static in-progress marker)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    s.matches["0-1"] = { ...s.matches["0-1"], status: "live", winner: null, durationSec: 1800, durationProvisional: true };
+    const arcs = layout(buildSunburst(s), 150);
+    const svg = renderSunburst(arcs, colorScale("time", s), 340);
+    expect(svg).toContain('id="liveHatch"');             // hatch pattern defined once
+    expect(svg).toContain('fill="url(#liveHatch)"');      // overlay drawn on the live arc
+    expect(svg).toMatch(/aria-label="Tournament bracket sunburst[^"]*in progress"/); // SR live count
+  });
+
+  it("omits the hatch pattern and live count when nothing is live", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 }); // every match finished
+    const arcs = layout(buildSunburst(s), 150);
+    const svg = renderSunburst(arcs, colorScale("time", s), 340);
+    expect(svg).not.toContain("liveHatch");
+    expect(svg).toContain('aria-label="Tournament bracket sunburst"');
+  });
+
+  it("dims eliminated players' arcs with the out class (still-in players stay bright)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 }); // whole draw played → losers exist
+    const arcs = layout(buildSunburst(s), 150);
+    const eliminated = eliminatedSet(s);
+    const svg = renderSunburst(arcs, colorScale("time", s), 340, undefined, undefined, undefined, eliminated);
+    expect(svg).toContain("arc out");
+    // no eliminated set passed → no dimming
+    expect(renderSunburst(arcs, colorScale("time", s), 340)).not.toContain(' out"');
   });
 });
 

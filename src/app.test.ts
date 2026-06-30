@@ -101,6 +101,10 @@ function pickArc(root: HTMLElement): HTMLElement {
 }
 const pinnedRows = (root: HTMLElement) => root.querySelectorAll(".row-pinned");
 const litArcs = (root: HTMLElement) => root.querySelectorAll(".sunburst path.arc-hl");
+/** Switch to a colour lens by its control button. The centre pill shows a DECIDED result on every
+ *  lens; a PROJECTION (live slam) or the all-TBD section-title fallback only on Seed. */
+const setLens = (root: HTMLElement, dim: string) =>
+  click(root.querySelector<HTMLElement>(`[data-action="colordim"][data-dim="${dim}"]`)!);
 
 /** Mount the app and wait for the bracket (async bootstrap: fetch index → snapshot → draw). */
 async function mountApp(): Promise<HTMLElement> {
@@ -424,8 +428,37 @@ describe("createApp lifecycle", () => {
 });
 
 describe("finalist pill + corner readout", () => {
-  it("keeps naming the finalist in the centre while another player is pinned", async () => {
+  it("shows a finished slam's champion (flag + surname) in the centre on all three lenses", async () => {
+    const root = await mountApp();                            // default SNAP is a fully-played slam → decided champion
+    for (const dim of ["time", "seed", "country"]) {
+      setLens(root, dim);
+      const pill = root.querySelector(".center-id");
+      expect(pill, `pill on ${dim}`).not.toBeNull();
+      expect(pill!.classList.contains("projected"), `decided (full-weight) on ${dim}`).toBe(false);
+      expect(pill!.querySelector(".flag, img.flag"), `flag on ${dim}`).not.toBeNull();
+      expect(pill!.textContent!.trim(), `surname on ${dim}`).not.toBe("");
+    }
+  });
+
+  it("keeps a projected champion's pill to the Seed lens only while the slam is in progress", async () => {
+    // final unplayed → the champion is a projection, which must stay quiet on Time/Country
+    const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      const body = u.includes("index.json") ? INDEX
+        : u.includes("roland-garros") || u.includes("wimbledon") ? live : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as typeof fetch;
     const root = await mountApp();
+    expect(root.querySelector(".center-id")).toBeNull();              // Time lens: projected champ hidden
+    setLens(root, "seed");
+    expect(root.querySelector(".center-id.projected")).not.toBeNull(); // Seed lens: quiet projected pill
+    setLens(root, "country");
+    expect(root.querySelector(".center-id")).toBeNull();              // Country lens: hidden again
+  });
+
+  it("keeps naming the finalist in the centre while another player is pinned", async () => {
+    const root = await mountApp();                           // finished slam → decided champion pill shows on every lens
     const champ = root.querySelector<HTMLElement>('path.arc[data-id="r"]')!.dataset.occupant!;
     const arc = [...root.querySelectorAll<HTMLElement>("path.arc[data-occupant]")]
       .find((a) => a.dataset.occupant && a.dataset.occupant !== champ)!;
@@ -814,7 +847,7 @@ describe("quarter-owner corner labels", () => {
 
 describe("centre pill while focused", () => {
   it("restores the pill naming the focused occupant (their on-arc hub label is dropped) and idles the card", async () => {
-    const root = await mountApp();
+    const root = await mountApp();                                    // finished slam → decided focus occupant shows on every lens
     mockBack();
     click(qArc(root)); click(qArc(root));                             // focus the quarter
     const occ = qArc(root).dataset.occupant!;                         // focused hub's occupant
@@ -839,10 +872,49 @@ describe("centre pill while focused", () => {
       return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
     }) as typeof fetch;
     const root = await mountApp();
+    setLens(root, "seed");                                               // the all-TBD section-title fallback is Seed-only
     click(root.querySelector<HTMLElement>('.q-owner[data-id="r.0.0"]')!); // caption-only, still tappable
     const pill = root.querySelector(".center-id.center-sec")!;
     expect(pill).not.toBeNull();
     expect(pill.textContent).toBe("QF section");                      // sectionTitle's round fallback
+    // …but the section-title fallback (no occupant) is Seed-only — Time/Country keep a clean centre
+    for (const dim of ["time", "country"]) {
+      setLens(root, dim);
+      expect(root.querySelector(".center-id"), `section pill hidden on ${dim}`).toBeNull();
+    }
+  });
+
+  it("shows a DECIDED focused occupant's pill on all three lenses (finished slam)", async () => {
+    const root = await mountApp();                                    // default SNAP fully played → focus occupant decided
+    mockBack();
+    click(qArc(root)); click(qArc(root));                             // focus the quarter
+    const name = SNAP.players[qArc(root).dataset.occupant!].name.split(" ").slice(-1)[0];
+    for (const dim of ["time", "seed", "country"]) {
+      setLens(root, dim);
+      const pill = root.querySelector(".center-id");
+      expect(pill, `pill on ${dim}`).not.toBeNull();
+      expect(pill!.classList.contains("projected"), `decided on ${dim}`).toBe(false);
+      expect(pill!.textContent, `name on ${dim}`).toContain(name);
+    }
+  });
+
+  it("keeps a PROJECTED focused occupant's pill to the Seed lens only (slam in progress)", async () => {
+    // nothing played → the focused quarter (r.0.0) has a projected-favourite occupant, not a decided one
+    const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 0 });
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      const body = u.includes("index.json") ? INDEX : u.includes("roland-garros") ? live : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as typeof fetch;
+    const root = await mountApp();
+    mockBack();
+    click(qArc(root)); click(qArc(root));                            // focus the unplayed (projected) quarter
+    setLens(root, "seed");
+    expect(root.querySelector(".center-id.projected")).not.toBeNull(); // quiet projected pill on Seed
+    for (const dim of ["time", "country"]) {
+      setLens(root, dim);
+      expect(root.querySelector(".center-id"), `projected pill hidden on ${dim}`).toBeNull();
+    }
   });
 });
 

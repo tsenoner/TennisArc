@@ -103,6 +103,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .legend-grad { width: 120px; height: 8px; border-radius: 4px; border: 1px solid var(--line);
   background: linear-gradient(90deg, #2f6f8f, #d9a441, #e0683c); }
 .legend-grad.seed { background: linear-gradient(90deg, #352170, #6d3fd4, #a36bff, #e2cdff); }
+/* "not played yet" key — the NEUTRAL pending swatch from color.ts (dark #3a4350 / light #cfcbc1) */
+.legend-key { display: inline-flex; align-items: center; gap: 5px; }
+.legend-pending { width: 11px; height: 8px; border-radius: 2px; border: 1px solid var(--line); background: #3a4350; }
+:root[data-theme="light"] .legend-pending { background: #cfcbc1; }
 
 /* match context strip — slim, frosted, in-flow at the top of the wheel column on EVERY
    viewport (the readout's ≤960px dock pattern, generalised). Two rows: caption + actions,
@@ -248,6 +252,30 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 /* faded + dashed projections (extends existing .arc.projected opacity) */
 .arc.projected { stroke: var(--dim); stroke-width: .8px; stroke-dasharray: 3 2; }
 
+/* A not-yet-played ("pending") arc keeps the faded + dashed .arc.projected look in EVERY lens — the
+   grey NEUTRAL fill (color.ts) is what marks it in the Time lens, NOT a different stroke — so the
+   unplayed bracket reads as the same dashed scaffold here as under Seed/Country. No .arc.pending
+   stroke override on purpose; the class persists only as the legend's hasPending hook. */
+/* A live match is heat-coloured by its current time but carries no winner yet; an eliminated
+   occupant's result is decided but over. Both recede via transparency (a border read as noise).
+   .arc.live also drops the projected dashes — it's live, not a forecast. */
+.arc.live, .arc.out { opacity: .5; }
+.arc.live { stroke: var(--bg); stroke-width: .5px; stroke-dasharray: none; }
+/* Option A — the static in-progress hatch tiled over a live arc (renderSunburst paints a second
+   path with fill:url(#liveHatch) on top). This is the redundant, non-colour, motion-free cue that
+   makes "live" legible without colour or animation and distinct from the dimmed-out tier. */
+.arc-hatch { pointer-events: none; }
+.live-hatch-line { stroke: var(--text); stroke-width: 1.1; opacity: .5; }
+/* Option B — a slow opacity "breathing" pulse draws the eye to a live match. Opacity-only
+   (compositor-cheap), ~3 s (well under the 3 Hz seizure threshold), never scaling/blinking/red.
+   The hatch above is the static floor, so reduced-motion (and hover-dim) just drop the pulse. */
+/* trough stays at the .5 static floor (≥ the .45 plain-projected opacity) so a live arc is never
+   momentarily fainter than the dashed projections it is meant to stand out from; peak draws the eye. */
+@keyframes live-breathe { 0%, 100% { opacity: .5; } 50% { opacity: .85; } }
+.arc.live { animation: live-breathe 3.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .arc.live { animation: none; } }
+.sunburst.arc-dim-mode .arc.live { animation: none; }   /* let the hover-dim opacity take over */
+
 /* quarter-owner corner labels — quiet cartographic annotations in the circle-in-square
    dead corners, doubling as tap-to-focus quarter handles. No chip/box chrome on purpose;
    the name reuses the .ring-label halo recipe so it reads over any theme background. */
@@ -290,6 +318,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    no accent stroke, so the highlight reads the same under every lens colouring) */
 .sunburst.arc-dim-mode path.arc { opacity: .22; transition: opacity .12s; }
 .sunburst path.arc.arc-hl { opacity: 1; }
+/* the live hatch is a sibling overlay (class arc-hatch, NOT .arc), so the dim rule above doesn't
+   reach it — fade it with its arc, but keep it bright on the highlighted (adjacent) arc, else the
+   hatch lines float fully-opaque over a dimmed-to-.22 wheel while another player is highlighted. */
+.sunburst.arc-dim-mode .arc-hatch { opacity: .22; transition: opacity .12s; }
+.sunburst.arc-dim-mode .arc.arc-hl + .arc-hatch { opacity: 1; }
 .readout { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 158px; text-align: center; pointer-events: none; }
 .readout.filled { padding: 9px 12px; border-radius: 14px; border: 1px solid var(--line);
   background: var(--panel);  /* opaque fallback for browsers without color-mix() */
@@ -312,6 +345,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   font-size: 12px; font-weight: 700; pointer-events: none; }
+/* a projected champion is a guess, not a result: quiet it down (smaller, dim, no pill chrome,
+   italic) so the centre anchors the view without claiming a winner. A decided champion keeps the
+   full-weight pill above. */
+.center-id.projected { font-size: 10.5px; font-weight: 600; opacity: .6;
+  border-color: transparent; background: color-mix(in srgb, var(--bg) 50%, transparent); }
 .center-id.projected span { font-style: italic; }
 /* focused-section fallback pill (no occupant known yet): quieter than a player identity */
 .center-id.center-sec span { color: var(--dim); }

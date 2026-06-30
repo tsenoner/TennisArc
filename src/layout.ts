@@ -6,6 +6,7 @@ export interface LayoutArc {
   matchId: string;
   occupant: string | null;
   projected: boolean;
+  live?: boolean;
   depth: number;
   x0: number; x1: number;     // angles in radians [0, 2π]
   y0: number; y1: number;     // radii [0, radius]
@@ -43,7 +44,7 @@ export function layout(root: SunNode, radius: number, focusId?: string): LayoutA
       const y1 = Math.min(radius, Math.max(0, (n.y1 - fy0) * ky));
       return {
         id: n.data.id, matchId: n.data.matchId, occupant: n.data.occupant,
-        projected: n.data.projected, depth: n.depth, x0, x1, y0, y1,
+        projected: n.data.projected, live: n.data.live, depth: n.depth, x0, x1, y0, y1,
       };
     })
     .filter((a) => a.x1 > a.x0 + 1e-9 && a.y1 > a.y0 + 1e-9);
