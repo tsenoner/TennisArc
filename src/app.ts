@@ -314,22 +314,21 @@ export function createApp(root: HTMLElement): () => void {
     const floatIdle = !pinned;
     roCurrent = defaultId; roIdle = floatIdle; // the markup below renders the float readout for defaultId
 
-    // The finalist holds the chart centre as a minimal flag + surname pill — but ONLY on the Seed
-    // lens; the Time and Country lenses keep the centre clean (the float readout still names
-    // players on hover, and the crumbs name a focused section). On Seed the pill names the
-    // champion, or — while a section is focused — the focused occupant (its on-arc hub label is
-    // dropped above), falling back to the section's title when no occupant is known yet.
+    // The centre pill: a DECIDED result is a fact, shown on every lens — a finished slam's champion
+    // (flag + surname) anchors the Time and Country wheels too, not just Seed. A PROJECTION is a
+    // guess, so it stays on the Seed lens only (quiet + italic) and the Time/Country centres stay
+    // clean while a slam is live. The same split governs a focused section: a decided occupant
+    // shows everywhere; a projected one — or the all-TBD section-title fallback — is Seed-only.
+    const onSeed = state.colorDim === "seed";
     let centerId = "";
-    if (state.colorDim === "seed") {
-      if (state.focusId) {
-        const fp = focusOcc ? snap.players[focusOcc] : undefined;
-        centerId = fp
-          ? renderCenterId(fp.country, surname(fp.name), focusArc?.projected ?? false)
-          : renderCenterSection(sectionTitle(snap, tree, state.focusId));
-      } else if (tree.occupant) {
-        const champ = snap.players[tree.occupant];
-        centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
-      }
+    if (state.focusId) {
+      const fp = focusOcc ? snap.players[focusOcc] : undefined;
+      const projected = focusArc?.projected ?? false;
+      if (fp && (!projected || onSeed)) centerId = renderCenterId(fp.country, surname(fp.name), projected);
+      else if (!fp && onSeed) centerId = renderCenterSection(sectionTitle(snap, tree, state.focusId));
+    } else if (tree.occupant && (!tree.projected || onSeed)) {
+      const champ = snap.players[tree.occupant];
+      centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
     }
     const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
 
