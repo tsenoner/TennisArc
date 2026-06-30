@@ -1,10 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
+import { type AvailableSlam, type Player, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
 import { DRAW_SIZE, SLAMS, activeSlam, type SlamConfig } from "./config";
 import { openContext, fetchTournament, resolveSeasonId, fetchTeamCountry } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
-import { enrichMatch, fillMissingCountries } from "./enrich";
+import { enrichMatch, carryForwardCountries, fillMissingCountries } from "./enrich";
 import { fetchElo, applyElo } from "./elo";
 import { fetchPlayers, applyBirthdates } from "./players";
 import { availableSlamOf, mergeIndex, backfillTargets } from "./manifest";
@@ -52,23 +52,26 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
       throw new Error(`${cfg.slam} ${tour}: draw not fully available yet (${matchCount}/${DRAW_SIZE - 1} matches) — keeping last-good`);
     }
     // Not-yet-played entrants get no country from the (finished/live-only) event detail above, so
-    // their flag would be missing — look it up off the team instead. Scope to the real draw entrants
-    // (round-0 participants); SofaScore also seeds placeholder future-slot "teams" with no country
-    // that never render. Gated behind the draw-availability guard above so an incomplete-draw refresh
-    // that gets discarded doesn't pay for these lookups; throttled like fetchTournament (60ms) so a
-    // 429 burst can't stretch the refresh toward the watchdog SIGKILL. No-op once every match is finished.
+    // their flag would be missing — reuse last snapshot's country where we already know it, then look
+    // up the rest off the team. Scope to the real draw entrants (round-0 participants); SofaScore also
+    // seeds placeholder future-slot "teams" with no country that never render. Gated behind the
+    // draw-availability guard above so an incomplete-draw refresh that gets discarded doesn't pay for
+    // these lookups; throttled like fetchTournament (60ms) so a 429 burst can't stretch the refresh
+    // toward the watchdog SIGKILL. No-op once every match is finished.
     const entrantIds = new Set<string>();
     for (const id of snap.rounds[0]?.matchIds ?? []) {
       const m = snap.matches[id];
       if (m.p1) entrantIds.add(m.p1);
       if (m.p2) entrantIds.add(m.p2);
     }
+    const prior = await loadPriorPlayers(tour, cfg.year, cfg.slam);
+    const carried = carryForwardCountries(snap.players, prior, entrantIds);
     const { filled, missing } = await fillMissingCountries(
       snap.players,
       async (teamId) => { const c = await fetchTeamCountry(page, teamId); await page.waitForTimeout(60); return c; },
       entrantIds,
     );
-    if (missing) console.log(`${cfg.slam} ${tour}: countries backfilled ${filled}/${missing} not-yet-played entrants`);
+    if (carried || missing) console.log(`${cfg.slam} ${tour}: countries ${carried} reused, ${filled}/${missing} fetched`);
     snap.generatedAt = isoNow;
     return snap;
   } finally {
@@ -81,6 +84,18 @@ async function loadIndex(): Promise<SlamIndex> {
     return JSON.parse(await readFile(resolve(OUT_DIR, "index.json"), "utf8")) as SlamIndex;
   } catch {
     return { schemaVersion: 2, generatedAt: "", slams: [] };
+  }
+}
+
+/** The previous snapshot's players map for a tour/year/slam, or null if there isn't a readable one
+ *  yet (first run / missing / unreadable). Lets the country backfill reuse already-resolved countries
+ *  instead of re-fetching every not-yet-played entrant's team on every refresh. */
+async function loadPriorPlayers(tour: Tour, year: number, slam: string): Promise<Record<string, Player> | null> {
+  try {
+    const raw = await readFile(resolve(OUT_DIR, snapshotPath(tour, year, slam)), "utf8");
+    return (JSON.parse(raw) as Snapshot).players ?? null;
+  } catch {
+    return null;
   }
 }
 

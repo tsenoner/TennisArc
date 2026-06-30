@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { enrichMatch, fillMissingCountries } from "./enrich";
+import { enrichMatch, carryForwardCountries, fillMissingCountries } from "./enrich";
 import { eventSample, statsSample, liveEventSample } from "./fixtures/event-sample";
 import { flagAssetUrl } from "../src/flags";
 import type { Match, Player } from "../src/model";
@@ -143,5 +143,60 @@ describe("fillMissingCountries", () => {
     expect(seen).toEqual([235576]); // 404404 is not in players → never looked up
     expect(players["235576"].country).toBe("USA");
     expect(res).toEqual({ filled: 1, missing: 1 });
+  });
+});
+
+describe("carryForwardCountries", () => {
+  const player = (id: string, country: string): Player => ({
+    id, name: id, country, seed: null, entry: null, ranking: null,
+    ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+  });
+
+  it("reuses a prior country for a still-blank entrant, leaving enriched ones untouched", () => {
+    const players: Record<string, Player> = {
+      235576: player("235576", ""),    // not-yet-played — prior run knew the country
+      100: player("100", "ITA"),       // enriched from a played match this run — must win
+    };
+    const prior: Record<string, Player> = {
+      235576: player("235576", "USA"),
+      100: player("100", "GBR"),        // stale/different — must NOT overwrite the fresh ITA
+    };
+
+    const carried = carryForwardCountries(players, prior);
+
+    expect(players["235576"].country).toBe("USA"); // carried forward
+    expect(players["100"].country).toBe("ITA");    // fresh enrichment untouched
+    expect(carried).toBe(1);
+  });
+
+  it("carries nothing the prior snapshot also lacked (no spurious country)", () => {
+    const players: Record<string, Player> = { 42: player("42", "") };
+    const prior: Record<string, Player> = { 42: player("42", "") };
+    expect(carryForwardCountries(players, prior)).toBe(0);
+    expect(players["42"].country).toBe("");
+  });
+
+  it("respects entrantIds scope — a placeholder is not carried even if prior had one", () => {
+    const players: Record<string, Player> = {
+      235576: player("235576", ""), // real round-0 entrant
+      900001: player("900001", ""), // placeholder future-slot
+    };
+    const prior: Record<string, Player> = {
+      235576: player("235576", "USA"),
+      900001: player("900001", "ZZZ"), // stray — must be ignored (out of entrant scope)
+    };
+
+    const carried = carryForwardCountries(players, prior, new Set(["235576"]));
+
+    expect(players["235576"].country).toBe("USA");
+    expect(players["900001"].country).toBe(""); // untouched
+    expect(carried).toBe(1);
+  });
+
+  it("carries nothing on the first run (no prior snapshot) or when prior lacks the player", () => {
+    const players: Record<string, Player> = { 42: player("42", "") };
+    expect(carryForwardCountries(players, null)).toBe(0);
+    expect(carryForwardCountries(players, {}, new Set(["42"]))).toBe(0);
+    expect(players["42"].country).toBe("");
   });
 });

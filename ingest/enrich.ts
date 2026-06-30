@@ -104,6 +104,32 @@ export function enrichMatch(
 }
 
 /**
+ * Carry already-resolved countries forward from the previous snapshot, before the network backfill,
+ * so a still-not-yet-played entrant isn't re-fetched from its team on every refresh. A not-yet-played
+ * entrant's country is their (immutable) nationality, so a value resolved on an earlier run is still
+ * valid now — this turns the per-refresh team lookups into a one-time cost per entrant. Only fills
+ * players still blank after per-match enrichment (so fresh live/finished event detail always wins),
+ * scoped exactly like the lookup to `entrantIds`, so the result matches the un-cached run. `prior` is
+ * the previous snapshot's players map (null on the first run / unreadable). Returns how many were
+ * carried forward. Trade-off: a country SofaScore later corrects stays stale until that entrant plays
+ * (when event detail overwrites it) — acceptable for an immutable-in-practice draw attribute.
+ */
+export function carryForwardCountries(
+  players: Record<string, Player>,
+  prior: Record<string, Player> | null,
+  entrantIds?: Set<string>,
+): number {
+  if (!prior) return 0;
+  let carried = 0;
+  for (const p of Object.values(players)) {
+    if (p.country || (entrantIds && !entrantIds.has(p.id))) continue;
+    const priorCountry = prior[p.id]?.country;
+    if (priorCountry) { p.country = priorCountry; carried++; }
+  }
+  return carried;
+}
+
+/**
  * Backfill the country of every player still missing one after per-match enrichment.
  *
  * Country reaches us only via per-event detail (enrichMatch, above), and the ingest fetches
