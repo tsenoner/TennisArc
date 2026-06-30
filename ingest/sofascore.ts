@@ -1,5 +1,6 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { pickSeasonId, type SofaSeason } from "./seasons";
+import { alpha3Of } from "./sofa-country";
 
 export interface RawTournament {
   cuptrees: unknown;
@@ -87,7 +88,7 @@ export async function resolveSeasonId(page: Page, utId: number, year?: number): 
 export async function fetchTeamCountry(page: Page, teamId: number): Promise<string | null> {
   try {
     const j = (await apiGet(page, `/team/${teamId}`)) as { team?: { country?: { alpha3?: string } }; country?: { alpha3?: string } };
-    return (j.team ?? j)?.country?.alpha3 ?? null;
+    return alpha3Of(j.team ?? j);
   } catch {
     return null;
   }

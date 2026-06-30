@@ -1,5 +1,6 @@
 import type { Match, MatchStats, MatchStatus, Player, SetScore } from "../src/model";
 import { MAX_LOCAL_SEC } from "./durations";
+import { alpha3Of } from "./sofa-country";
 
 interface SofaScoreSide { [k: string]: number | undefined }
 interface SofaEvent {
@@ -86,8 +87,10 @@ export function enrichMatch(
     durationSec = periods > 0 && periods <= MAX_LOCAL_SEC ? periods : null;
   }
 
-  if (m.p1 && players[m.p1] && ev.homeTeam?.country?.alpha3) players[m.p1].country = ev.homeTeam.country.alpha3;
-  if (m.p2 && players[m.p2] && ev.awayTeam?.country?.alpha3) players[m.p2].country = ev.awayTeam.country.alpha3;
+  const homeCountry = alpha3Of(ev.homeTeam);
+  if (m.p1 && players[m.p1] && homeCountry) players[m.p1].country = homeCountry;
+  const awayCountry = alpha3Of(ev.awayTeam);
+  if (m.p2 && players[m.p2] && awayCountry) players[m.p2].country = awayCountry;
 
   const winner = ev.winnerCode === 1 ? "p1" : ev.winnerCode === 2 ? "p2" : m.winner;
 
