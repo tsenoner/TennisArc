@@ -13,6 +13,7 @@ import { fetchSnapshot, fetchIndex } from "./api";
 import { pickDefaultSlam, availableYears, slamsForYear } from "./slams";
 import type { Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
+import { parseRoute, buildRoute, type Route } from "./route";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
@@ -55,9 +56,15 @@ export function createApp(root: HTMLElement): () => void {
   const { signal } = ac;
   const theme = loadTheme();
   applyTheme(theme);
+  // Seed the view from the URL so a shared/reloaded link reopens the same view. The path
+  // carries the resource (tour/year/slam — validated against the manifest once it loads, see
+  // resolveRoute); the query carries the lens + seed sort, whitelisted at parse time. year
+  // stays 0 until that validation, keeping the initial loading-state gate intact. Zoom/focus
+  // is NOT read from the URL — it is session-only, and any cold-load hash is scrubbed below.
+  const initial = parseRoute(location.pathname, location.search);
   const state: AppState = {
-    tour: "ATP", year: 0, slam: "", index: undefined, snapshots: {},
-    colorDim: "time", seedSort: "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
+    tour: initial.tour ?? "ATP", year: 0, slam: "", index: undefined, snapshots: {},
+    colorDim: initial.view ?? "time", seedSort: initial.sub ?? "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
     openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined, helpOpen: false,
   };
   let store: Store | undefined;
@@ -391,11 +398,60 @@ export function createApp(root: HTMLElement): () => void {
     state.selectedMatchId = undefined; state.selectedNodeId = undefined; state.detailExpanded = false;
   };
 
-  // ---- focus + history (V1-simple: ONE history entry per focus session) ----
-  // Entering focus pushes exactly one entry (#r.0.0); changing level replaces it; clearing
-  // pops it via history.back() — so browser Back / iOS back-swipe always exits focus in a
-  // single step (never walking intermediate levels) and never exits the app while focused.
-  let ownsEntry = false; // we pushed the entry we're sitting on (cleared on pop/scrub)
+  // ---- URL ⇄ view state ----
+  // The shareable view as a Route: path = resource (tour/year/slam), query = lens + seed sort.
+  // Zoom/focus is appended as the URL hash but is NOT part of a Route — it is session-only.
+  const currentRoute = (): Route => ({
+    tour: state.tour, year: state.year, slam: state.slam, view: state.colorDim, sub: state.seedSort,
+  });
+  const buildUrl = (): string => buildRoute(currentRoute()) + (state.focusId ? `#${state.focusId}` : "");
+  // Write the canonical URL for the current view. `push` adds a Back-able entry (a view switch);
+  // otherwise it replaces in place. A no-op when the URL already matches, so a redundant click
+  // (re-selecting the active tour) never piles up history. State carries the focus id (or null)
+  // so a later Back/popstate lands on an honest entry. Focus enter/level/clear keep their own
+  // bespoke grammar in setFocus; this drives the VIEW axis (tour/year/slam/lens/sort).
+  const syncUrl = (push: boolean): void => {
+    if (!state.year) return; // pre-resolution (loading state): no resolved view to write yet
+    const url = buildUrl();
+    if (url === location.pathname + location.search + location.hash) return;
+    const st = state.focusId ? { f: state.focusId } : null;
+    if (push) history.pushState(st, "", url);
+    else history.replaceState(st, "", url);
+  };
+  // Lens/sort change: push a Back-able entry when unfocused, but REPLACE when zoomed so
+  // recolouring a drilled-in section keeps the single focus entry instead of piling up Back
+  // steps. (A draw switch — tour/year/slam — always pushes; that's syncUrl(true) at its sites.)
+  const syncLensUrl = (): void => syncUrl(!state.focusId);
+
+  // Validate a parsed candidate against the manifest, filling defaults. The resource
+  // (tour/year/slam) must actually exist; an absent/stale/partial one falls back to the
+  // tour's default slam, then to the other tour, so any link still resolves to a real draw.
+  // lens/sort were whitelisted at parse, so they only need their defaults applied.
+  const resolveRoute = (cand: Partial<Route>): Route => {
+    const index = state.index!;
+    const view = cand.view ?? "time";
+    const sub = cand.sub ?? "seed";
+    const pickTour = (t: Tour): { tour: Tour; year: number; slam: string } | null => {
+      if (cand.year != null && cand.slam != null &&
+          slamsForYear(index, cand.year, t).some((s) => s.entry && s.slam === cand.slam)) {
+        return { tour: t, year: cand.year, slam: cand.slam };
+      }
+      const def = pickDefaultSlam(index, t);
+      return def ? { tour: t, year: def.year, slam: def.slam } : null;
+    };
+    const want = cand.tour ?? "ATP";
+    const res = pickTour(want) ?? pickTour(want === "ATP" ? "WTA" : "ATP");
+    // res is null only when the manifest has no slams at all → year 0 keeps the loading gate.
+    return res ? { ...res, view, sub } : { tour: want, year: 0, slam: "", view, sub };
+  };
+
+  // ---- focus + history ----
+  // Zoom is a second history axis layered onto the view URL: entering focus pushes ONE entry
+  // (…#r.0.0); changing level replaces it; clearing pops it via history.back() — so browser
+  // Back / iOS back-swipe always exits focus in a single step. The URL it writes is the FULL
+  // view URL (path + query) + the focus hash, so the shared view rides along untouched.
+  let ownsEntry = false; // we pushed the focus entry we're sitting on (cleared on pop/scrub/reset)
+  let exitingZoom = false; // the next popstate is our own zoom-clear back() — keep the view, drop focus
 
   // A focus id must name a real node in the CURRENT draw — stale ids (a hash popped after
   // a slam switch, hand-edited URLs) normalize to "no focus" rather than rendering crumbs
@@ -412,41 +468,37 @@ export function createApp(root: HTMLElement): () => void {
   };
   const normalizeFocus = (id: string | undefined) => (!id || id === "r" || !inTree(id) ? undefined : id);
 
-  // EVERY focus change routes through here. Normalizes the id — "r", "" and unresolvable
-  // ids all mean "no focus" — and keeps the single owned history entry in sync. `adopt` is
-  // the popstate path: the browser has already moved, so only mirror the entry, never write
-  // (a push there would duplicate it). Callers draw() themselves.
-  const setFocus = (id: string | undefined, adopt = false): void => {
+  // EVERY focus change FROM THE UI routes through here. Normalizes the id — "r", "" and
+  // unresolvable ids all mean "no focus" — and keeps the single owned focus entry in sync,
+  // writing the full view URL + hash. Callers draw() themselves. (popstate sets focus
+  // directly: the browser already moved, so writing history there would duplicate the entry.)
+  const setFocus = (id: string | undefined): void => {
     const next = normalizeFocus(id);
-    if (adopt) ownsEntry = !!next;
     if (next === state.focusId) return;
     state.focusId = next;
-    if (adopt) return;
     if (next) {
-      if (ownsEntry) history.replaceState({ f: next }, "", `#${next}`); // level change — still one entry
-      else { history.pushState({ f: next }, "", `#${next}`); ownsEntry = true; } // entering focus
+      if (ownsEntry) history.replaceState({ f: next }, "", buildUrl()); // level change — still one entry
+      else { history.pushState({ f: next }, "", buildUrl()); ownsEntry = true; } // entering focus
     } else if (ownsEntry) {
       // clearing: the caller draw()s the full draw synchronously, so scrub the hash NOW
-      // (replaceState updates location immediately) — otherwise the URL still reads #<focus>
-      // until the async popstate lands, lying about the view for a frame. Then hand our entry
-      // back; the popstate that history.back() fires finds focusId already cleared → no-op.
+      // (replaceState updates location immediately, keeping path + query) — otherwise the URL
+      // still reads #<focus> for a frame. Then hand our entry back. We exit zoom to STAY on the
+      // current view, but the pre-zoom entry we're about to back() onto encodes whatever lens it
+      // had BEFORE the zoom (a lens/sort change while zoomed only replaced the zoom entry). Flag
+      // it so back()'s popstate keeps the current view instead of restoring that stale lens.
       ownsEntry = false;
+      exitingZoom = true;
       history.replaceState(null, "", location.pathname + location.search);
       history.back();
     }
   };
 
-  // Leaving the current draw (tour/year/slam switch) drops every per-draw selection. The
-  // focus session dies with the draw, so exit it SYMMETRICALLY with the crumb/ESC clear:
-  // scrub the hash in place (replaceState, synchronous) and — when we own the focus entry —
-  // hand it back with history.back(), so a later browser Back / iOS back-swipe is NOT
-  // swallowed by a stranded dead entry. back() lands on our honest base entry; the popstate
-  // it fires is a no-op (focusId already cleared, ownsEntry already false).
+  // Leaving the current draw (tour/year/slam switch) drops every per-draw selection and exits
+  // any focus session — state only here. The caller pushes the new view URL via syncUrl(true),
+  // so a focus entry we were on simply stays behind in the back-stack (Back returns to it).
+  // No history.back() teardown: popping and then pushing a new view would race the async popstate.
   const resetSelection = () => {
-    state.focusId = undefined;
-    if (ownsEntry || location.hash) history.replaceState(null, "", location.pathname + location.search);
-    if (ownsEntry) history.back();
-    ownsEntry = false;
+    state.focusId = undefined; ownsEntry = false;
     closeMatch();
     state.selectedCountry = undefined; state.pinnedId = undefined;
   };
@@ -462,6 +514,7 @@ export function createApp(root: HTMLElement): () => void {
     }
     state.tour = tour;
     resetSelection();
+    syncUrl(true);
     draw(); void load(state.tour, state.year, state.slam);
   };
 
@@ -518,6 +571,7 @@ export function createApp(root: HTMLElement): () => void {
       state.slam = el.dataset.slam;
       state.openMenu = undefined;
       resetSelection();
+      syncUrl(true);
       draw(); void load(state.tour, state.year, state.slam);
     } else if (a === "year" && el.dataset.year) {
       const y = Number(el.dataset.year);
@@ -528,6 +582,7 @@ export function createApp(root: HTMLElement): () => void {
         state.slam = (keep ?? slots.find((s) => s.entry))?.slam ?? state.slam;
         state.openMenu = undefined;
         resetSelection();
+        syncUrl(true);
         draw(); void load(state.tour, state.year, state.slam);
       }
     } else if (a === "colordim" && el.dataset.dim) {
@@ -535,10 +590,12 @@ export function createApp(root: HTMLElement): () => void {
       state.openMenu = undefined;
       if (state.colorDim !== "country") state.selectedCountry = undefined;
       closeMatch();
+      syncLensUrl();
       draw();
     } else if (a === "seed-sort" && el.dataset.sort) {
       // toggles the seed lens between seed order and ELO order — reorders the panel AND recolours the wheel
       state.seedSort = el.dataset.sort as SeedSort;
+      syncLensUrl();
       draw();
     } else if (a === "country" && el.dataset.country) {
       state.selectedCountry = state.selectedCountry === el.dataset.country ? undefined : el.dataset.country;
@@ -644,16 +701,38 @@ export function createApp(root: HTMLElement): () => void {
   root.addEventListener("focusin", (e) => mirrorQFocus(e, true), { signal });
   root.addEventListener("focusout", (e) => mirrorQFocus(e, false), { signal });
 
-  // Browser Back/Forward (and the history.back() setFocus issues on clear): the browser
-  // has already moved, so ADOPT the entry's focus instead of writing history; a hash that
-  // no longer resolves (slam switched underneath it) normalizes away and is scrubbed so
-  // the URL stays honest. iOS back-swipe lands here too — it exits focus, not the app.
+  // Browser Back/Forward (and the history.back() setFocus issues on clearing zoom): the
+  // browser has already moved, so RESTORE the whole view from the URL — never write history
+  // here (that would duplicate the entry). Both axes are honoured: the path + query give the
+  // resource + lens/sort, the hash (or {f} state) gives the focus. A view switch reloads the
+  // snapshot if it isn't already cached; a focus id that no longer resolves normalizes away
+  // and the stale hash is scrubbed so the URL stays honest. iOS back-swipe lands here too.
   window.addEventListener("popstate", (e) => {
-    const before = state.focusId;
+    if (!state.index) return; // pre-bootstrap: nothing to resolve against yet
+    state.openMenu = undefined; // a Back/Forward navigation dismisses any open top-bar dropdown, same as the click handlers
+    if (exitingZoom) {
+      // This popstate is our own zoom-clear history.back(). We stepped out to STAY on the current
+      // view, so keep colorDim/seedSort/slam — only drop focus — and rewrite the landed entry's
+      // URL to the current view (it held the pre-zoom lens) so the URL stays honest.
+      exitingZoom = false;
+      state.focusId = undefined; ownsEntry = false;
+      history.replaceState(null, "", buildUrl());
+      draw();
+      return;
+    }
+    const r = resolveRoute(parseRoute(location.pathname, location.search));
+    const drawChanged = r.tour !== state.tour || r.year !== state.year || r.slam !== state.slam;
+    state.tour = r.tour; state.year = r.year; state.slam = r.slam;
+    state.colorDim = r.view; state.seedSort = r.sub;
+    if (drawChanged) { closeMatch(); state.selectedCountry = undefined; state.pinnedId = undefined; }
     const f = (e.state as { f?: string } | null)?.f ?? (location.hash ? location.hash.slice(1) : undefined);
-    setFocus(f, true);
+    state.focusId = normalizeFocus(f);
+    ownsEntry = !!state.focusId;
     if (!state.focusId && location.hash) history.replaceState(null, "", location.pathname + location.search);
-    if (state.focusId !== before) draw();
+    draw();
+    if (drawChanged && !state.snapshots[snapKey(state.tour, state.year, state.slam)]) {
+      void load(state.tour, state.year, state.slam);
+    }
   }, { signal });
 
   // Outside-tap closes an open top-bar dropdown (no-op when nothing is open).
@@ -703,11 +782,11 @@ export function createApp(root: HTMLElement): () => void {
     else if (state.focusId) { setFocus(undefined); draw(); }
   }, { signal });
 
-  // Deep-link restore is deliberately NOT implemented, so a pre-existing #focus hash (a
-  // reloaded or shared URL) would lie about the unfocused first render — and worse, leave
-  // a stale entry whose hash/{f} state a later clear()'s history.back() would land on,
-  // silently re-entering focus (and putting a second back-press outside the app). Scrub
-  // it IN PLACE before the first draw so every session starts on one honest entry.
+  // ZOOM deep-link restore is deliberately NOT implemented (zoom is session-only): a
+  // pre-existing #focus hash (a reloaded or shared URL) would lie about the unfocused first
+  // render — and worse, leave a stale entry whose hash/{f} a later clear()'s history.back()
+  // would land on, silently re-entering focus. Scrub the hash IN PLACE before the first draw.
+  // The PATH + QUERY (the shared view) are preserved here and honoured by resolveRoute below.
   if (location.hash || history.state) history.replaceState(null, "", location.pathname + location.search);
 
   draw(); // initial loading state
@@ -716,8 +795,14 @@ export function createApp(root: HTMLElement): () => void {
     state.index = (await fetchIndex()) ?? (await store.getIndex()) ?? undefined;
     if (state.index) void store.setIndex(state.index);
     if (state.index) {
-      const def = pickDefaultSlam(state.index, state.tour);
-      if (def) { state.year = def.year; state.slam = def.slam; }
+      // Resolve the URL's candidate view against the manifest (stale/partial/"/" → default),
+      // then canonicalize the URL in place so it honestly names the resolved view and a
+      // copy-paste shares exactly that. No new history entry.
+      const r = resolveRoute(initial);
+      state.tour = r.tour; state.year = r.year; state.slam = r.slam;
+      // colorDim/seedSort were seeded from the URL at construction and may have just been changed
+      // by a lens click during the loading window — don't clobber them with the mount-time candidate.
+      if (state.year) history.replaceState(null, "", buildUrl());
     }
     if (!state.year) return; // no manifest yet → stay on loading state
     await load(state.tour, state.year, state.slam);

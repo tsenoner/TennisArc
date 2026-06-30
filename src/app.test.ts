@@ -79,13 +79,17 @@ beforeEach(() => {
 // Dispose every app mounted during a test (createApp returns a disposer that detaches its
 // window/document/root listeners), so no handler leaks across mounts; then reset shared globals.
 const mounted: Array<() => void> = [];
-afterEach(() => {
+afterEach(async () => {
   for (const dispose of mounted) dispose();
   mounted.length = 0;
+  // A prior test's REAL history.back() fires popstate on a later macrotask; dispose has already
+  // detached every app's listener, so draining a few ticks here lets that stray traversal land in
+  // the void instead of in the NEXT test (where the view-aware popstate would clobber its draw).
+  for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
   document.body.innerHTML = "";
   delete document.documentElement.dataset.theme;
   vi.restoreAllMocks();                     // history spies must never leak across tests
-  history.replaceState(null, "", "/");      // …nor a focus hash a test pushed
+  history.replaceState(null, "", "/");      // …nor a hash/path a test pushed
 });
 
 function click(el: Element): void {
@@ -693,11 +697,12 @@ describe("focus history discipline (V1-simple: one entry per focus session)", ()
     expect(push).not.toHaveBeenCalled();                     // selection is not focus
     click(qArc(root));                                       // re-tap → enter focus
     expect(push).toHaveBeenCalledTimes(1);
-    expect(push).toHaveBeenLastCalledWith({ f: "r.0.0" }, "", "#r.0.0");
+    // the focus hash rides on the FULL view URL (path + query), not a bare "#…"
+    expect(push).toHaveBeenLastCalledWith({ f: "r.0.0" }, "", "/atp/2026/roland-garros#r.0.0");
 
     click(qArc(root));                                       // hub → out one level (still focused)
     expect(push).toHaveBeenCalledTimes(1);                   // a level CHANGE never adds an entry
-    expect(replace).toHaveBeenLastCalledWith({ f: "r.0" }, "", "#r.0");
+    expect(replace).toHaveBeenLastCalledWith({ f: "r.0" }, "", "/atp/2026/roland-garros#r.0");
 
     click(root.querySelector<HTMLElement>('.crumb[data-id=""]')!); // ‹ Full draw
     expect(back).toHaveBeenCalledTimes(1);                   // gave our entry back…
@@ -718,16 +723,17 @@ describe("focus history discipline (V1-simple: one entry per focus session)", ()
     expect(push).toHaveBeenCalledTimes(2);                   // a FRESH push, not a replace — ownsEntry was reset
   });
 
-  it("a tour switch while focused hands the focus entry back (no stranded Back-swallowing entry)", async () => {
+  it("a tour switch while focused pushes the un-zoomed view, leaving the zoomed entry behind", async () => {
     const root = await mountApp();
     const back = mockBack();
     click(qArc(root)); click(qArc(root));                    // focused
     expect(location.hash).toBe("#r.0.0");
     const push = vi.spyOn(history, "pushState");
     click(root.querySelector<HTMLElement>('[data-action="tour"][data-tour="ATP"]')!);
-    expect(location.hash).toBe("");                          // scrubbed synchronously via replaceState
-    expect(push).not.toHaveBeenCalled();                     // …no NEW entry…
-    expect(back).toHaveBeenCalledTimes(1);                   // …and the owned focus entry is popped, not stranded
+    expect(location.hash).toBe("");                          // exited zoom — the hash is gone…
+    expect(push).toHaveBeenCalledTimes(1);                   // …via a NEW view entry (Back returns to the zoom)…
+    expect(push).toHaveBeenLastCalledWith(null, "", "/atp/2026/roland-garros");
+    expect(back).not.toHaveBeenCalled();                     // …never popped (no async back()/pushState race)
     expect(root.querySelector(".crumbs")).toBeNull();        // focus cleared with the old draw
   });
 
@@ -771,6 +777,135 @@ describe("startup history scrub (no deep-link restore — the URL must not lie)"
     click(root.querySelector<HTMLElement>('.crumb[data-id=""]')!);
     await vi.waitFor(() => { if (location.hash) throw new Error("entry not popped yet"); });
     expect(root.querySelector(".crumbs")).toBeNull();     // the clear stayed a clear
+  });
+});
+
+describe("URL routing (shareable deep links)", () => {
+  const url = () => location.pathname + location.search;
+  const slamActive = (root: HTMLElement) =>
+    root.querySelector<HTMLElement>('[data-action="slam"].slam.active')?.dataset.slam;
+
+  it("cold-loads the full view from a deep URL (tour/slam + lens + sub) and canonicalizes it", async () => {
+    history.replaceState(null, "", "/atp/2026/wimbledon?view=seed&sub=elo");
+    const root = await mountApp();
+    expect(slamActive(root)).toBe("wimbledon");                                   // path → slam
+    expect(root.querySelector(".seed-panel")).not.toBeNull();                     // ?view=seed → seed lens
+    expect(root.querySelector('[data-action="seed-sort"][data-sort="elo"].active')).not.toBeNull(); // &sub=elo
+    expect(url()).toBe("/atp/2026/wimbledon?view=seed&sub=elo");                  // already canonical → unchanged
+  });
+
+  it("cold-loads '/' to the current tournament and canonicalizes the URL", async () => {
+    history.replaceState(null, "", "/");
+    const root = await mountApp();
+    expect(slamActive(root)).toBe("roland-garros");                              // pickDefaultSlam (most-recent complete)
+    expect(root.querySelector(".leaderboard")).not.toBeNull();                   // default lens (time)
+    expect(url()).toBe("/atp/2026/roland-garros");                               // "/" rewritten to the concrete view
+  });
+
+  it("falls back to the default for a stale/invalid path and canonicalizes", async () => {
+    history.replaceState(null, "", "/atp/1999/wimbledon?view=bogus"); // 1999 not in the manifest; bogus lens
+    const root = await mountApp();
+    expect(slamActive(root)).toBe("roland-garros");                              // unavailable year → default
+    expect(url()).toBe("/atp/2026/roland-garros");                               // junk dropped on canonicalize
+  });
+
+  it("falls back to the other tour when the requested tour is absent from the manifest", async () => {
+    history.replaceState(null, "", "/wta/2026/wimbledon"); // manifest is ATP-only → no WTA draw exists
+    const root = await mountApp();
+    expect(slamActive(root)).toBe("wimbledon");                                   // resolveRoute: WTA missing → same draw on ATP
+    expect(url()).toBe("/atp/2026/wimbledon");                                    // canonicalized onto the real (ATP) draw
+  });
+
+  it("scrubs a cold-load focus hash but keeps the path + query view", async () => {
+    history.replaceState({ f: "r.0.0" }, "", "/atp/2026/wimbledon?view=country#r.0.0");
+    const root = await mountApp();
+    expect(location.hash).toBe("");                                              // zoom is session-only → scrubbed
+    expect(root.querySelector(".crumbs")).toBeNull();                            // …not restored into focus
+    expect(slamActive(root)).toBe("wimbledon");                                  // …but the shared VIEW survives
+    expect(root.querySelector(".country-panel")).not.toBeNull();
+    expect(url()).toBe("/atp/2026/wimbledon?view=country");
+  });
+
+  it("a slam switch pushes a new canonical entry (Back undoes it)", async () => {
+    const root = await mountApp();
+    const push = vi.spyOn(history, "pushState");
+    click(root.querySelector<HTMLElement>('[data-action="slam"][data-slam="wimbledon"]')!);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenLastCalledWith(null, "", "/atp/2026/wimbledon");
+    expect(slamActive(root)).toBe("wimbledon");
+  });
+
+  it("a lens switch pushes ?view=… (Back undoes it)", async () => {
+    const root = await mountApp();
+    const push = vi.spyOn(history, "pushState");
+    setLens(root, "seed");
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenLastCalledWith(null, "", "/atp/2026/roland-garros?view=seed");
+  });
+
+  it("re-selecting the active tour (no view change) adds no history entry", async () => {
+    const root = await mountApp();
+    const push = vi.spyOn(history, "pushState");
+    click(root.querySelector<HTMLElement>('[data-action="tour"][data-tour="ATP"]')!);
+    expect(push).not.toHaveBeenCalled();                                         // URL unchanged → no redundant entry
+  });
+
+  it("popstate restores the whole view from the URL (Back to a prior lens)", async () => {
+    const root = await mountApp();
+    setLens(root, "seed");                                                       // push ?view=seed
+    expect(root.querySelector(".seed-panel")).not.toBeNull();
+    // simulate the browser Back to the base entry: it moves location, then fires popstate
+    history.replaceState(null, "", "/atp/2026/roland-garros");
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    expect(root.querySelector(".seed-panel")).toBeNull();                        // lens restored to the default…
+    expect(root.querySelector(".leaderboard")).not.toBeNull();                   // …the time lens
+  });
+
+  it("popstate to a different slam swaps the draw (cached snapshot)", async () => {
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>('[data-action="slam"][data-slam="wimbledon"]')!); // now on wimbledon
+    expect(slamActive(root)).toBe("wimbledon");
+    history.replaceState(null, "", "/atp/2026/roland-garros");                   // Back to the original draw
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    expect(slamActive(root)).toBe("roland-garros");
+  });
+
+  it("a lens switch made WHILE zoomed survives exiting the zoom (no silent revert)", async () => {
+    const root = await mountApp();                          // roland-garros, time lens
+    mockBack();
+    click(qArc(root)); click(qArc(root));                   // zoom into the quarter r.0.0
+    setLens(root, "seed");                                  // recolour the zoomed view → seed (replace, keeps zoom)
+    expect(root.querySelector(".seed-panel")).not.toBeNull();
+    expect(root.querySelector(".crumbs")).not.toBeNull();   // still zoomed
+    // exit the zoom via the "Full draw" crumb → setFocus(undefined) (replaceState scrub + back())
+    click(root.querySelector<HTMLElement>('.crumb[data-id=""]')!);
+    // the real browser now lands on the pre-zoom entry, whose URL still encodes the OLD time lens
+    history.replaceState(null, "", "/atp/2026/roland-garros");
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    expect(root.querySelector(".crumbs")).toBeNull();        // zoom exited…
+    expect(root.querySelector(".seed-panel")).not.toBeNull(); // …and the seed lens the user chose stuck
+  });
+
+  it("a lens click during the loading window is kept and writes no malformed /atp/0 URL", async () => {
+    let release: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    globalThis.fetch = vi.fn(async (u: string | URL | Request) => {
+      const s = String(u);
+      if (s.includes("index.json")) { await gate; return { ok: true, status: 200, json: async () => INDEX } as Response; }
+      const body = s.includes("roland-garros") || s.includes("wimbledon") ? SNAP : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as typeof fetch;
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.getElementById("app")!;
+    mounted.push(createApp(root));
+    // loading state: the lens buttons render before the manifest resolves (year still 0)
+    await vi.waitFor(() => { if (!root.querySelector('[data-action="colordim"][data-dim="seed"]')) throw new Error("controls not up"); });
+    expect(root.querySelector(".sunburst path.arc")).toBeNull();   // still loading
+    setLens(root, "seed");                                          // click a lens mid-load
+    expect(location.pathname.startsWith("/atp/0")).toBe(false);     // no malformed /atp/0/ pushed
+    release!();                                                     // let the manifest (then snapshot) resolve
+    await vi.waitFor(() => { if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not up"); });
+    expect(root.querySelector(".seed-panel")).not.toBeNull();      // the mid-load lens choice survived
   });
 });
 
