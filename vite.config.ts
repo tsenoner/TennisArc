@@ -30,6 +30,11 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest}"],
+        // Deep-link routes (/atp/2024/wimbledon …) are virtual — no file at that path. Serve the
+        // precached app shell for any navigation so shared links work in the installed/offline PWA
+        // too (online, the Vercel rewrite covers it). Data is runtime-cached, never the shell.
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/data\//],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith("/data/"),

@@ -1,7 +1,7 @@
 # Shareable deep-link routes — design
 
 **Date:** 2026-06-30
-**Status:** approved (design), pending implementation plan
+**Status:** implemented (see "Implementation refinements" at the end)
 
 ## Goal
 
@@ -45,18 +45,18 @@ are explicitly deferred for now.)
 
 Path segments (the resource):
 
-| Segment | Values                                                          | Maps to                  |
-| ------- | -------------------------------------------------------------- | ------------------------ |
-| `tour`  | `atp` \| `wta`                                                 | state `Tour` (`ATP`/`WTA`) |
-| `year`  | 4 digits                                                       | `year: number`           |
-| `slam`  | `australian-open` \| `roland-garros` \| `wimbledon` \| `us-open` | `slam: string` (existing IDs) |
+| Segment  | Values                                                                   | Maps to                         |
+| -------- | ------------------------------------------------------------------------ | ------------------------------- |
+| `tour` | `atp` \| `wta`                                                       | state`Tour` (`ATP`/`WTA`) |
+| `year` | 4 digits                                                                 | `year: number`                |
+| `slam` | `australian-open` \| `roland-garros` \| `wimbledon` \| `us-open` | `slam: string` (existing IDs) |
 
 Query params (the view, omitted when default):
 
-| Param          | Values                       | Maps to               | Default (omitted) |
-| -------------- | ---------------------------- | --------------------- | ----------------- |
-| `view` ("tab") | `time` \| `seed` \| `country` | `colorDim: ColorDim`  | `time`            |
-| `sub` ("subtab") | `seed` \| `elo`            | `seedSort: SeedSort`  | `seed`; only meaningful when `view=seed` |
+| Param              | Values                              | Maps to                | Default (omitted)                            |
+| ------------------ | ----------------------------------- | ---------------------- | -------------------------------------------- |
+| `view` ("tab")   | `time` \| `seed` \| `country` | `colorDim: ColorDim` | `time`                                     |
+| `sub` ("subtab") | `seed` \| `elo`                 | `seedSort: SeedSort` | `seed`; only meaningful when `view=seed` |
 
 **Canonical examples**
 
@@ -166,15 +166,15 @@ const commit = (push: boolean) =>
 
 Behavior table:
 
-| Action                                               | History op                              |
-| ---------------------------------------------------- | --------------------------------------- |
-| View change (tour/year/slam/view/sub), not zoomed    | **push** (Back undoes each switch)      |
-| Enter zoom (focus a section)                          | push (one entry per zoom session)       |
-| Zoom level change (drill deeper / ancestor chip)     | replace (still one entry)               |
-| Esc / crumb "Full draw" / hub clears zoom            | `history.back()` (Back/Esc exit zoom)   |
-| tour/year/slam change **while zoomed**               | clear focus in state, then push new view |
-| view/sub change **while zoomed**                     | replace, **keep** zoom (no Back pile-up) |
-| Cold load carrying a `#focus`                         | scrubbed (zoom not shared)              |
+| Action                                            | History op                                    |
+| ------------------------------------------------- | --------------------------------------------- |
+| View change (tour/year/slam/view/sub), not zoomed | **push** (Back undoes each switch)      |
+| Enter zoom (focus a section)                      | push (one entry per zoom session)             |
+| Zoom level change (drill deeper / ancestor chip)  | replace (still one entry)                     |
+| Esc / crumb "Full draw" / hub clears zoom         | `history.back()` (Back/Esc exit zoom)       |
+| tour/year/slam change**while zoomed**       | clear focus in state, then push new view      |
+| view/sub change**while zoomed**             | replace,**keep** zoom (no Back pile-up) |
+| Cold load carrying a`#focus`                    | scrubbed (zoom not shared)                    |
 
 Rationale for the two "while zoomed" rows:
 
@@ -285,3 +285,24 @@ rewrite already covers this; this is the offline/installed path.)
 - **`sub` without a seed `view`** (`?view=time&sub=elo`) → accepted, inert, dropped
   on the next canonicalization.
 - **Unknown query keys** (`?utm_source=x`) → ignored on parse, dropped on canonicalize.
+
+## Implementation refinements (post-review)
+
+An adversarial review of the implementation surfaced two interactions the design
+above did not fully specify; both are handled:
+
+1. **A view change made *while zoomed* must survive exiting the zoom.** Because a
+   `view`/`sub` change while zoomed only `replaceState`s the zoom entry, the
+   pre-zoom entry still encodes the old lens; exiting zoom does `history.back()`
+   onto it, and the view-aware `popstate` would otherwise restore the stale lens.
+   Fix: an `exitingZoom` flag set in `setFocus`'s clear branch tells that one
+   `popstate` to keep the current `colorDim`/`seedSort`/`slam` (only drop focus)
+   and rewrite the landed entry's URL to the current view. A real browser **Back**
+   pressed while zoomed (not the Esc/crumb/hub clear) still restores the pre-zoom
+   view, as expected.
+2. **A view change during the cold-load loading window** (`year === 0`, before the
+   manifest resolves) must not write a malformed `/atp/0/…` URL or be discarded.
+   Fix: `syncUrl` no-ops while `year === 0`, and the bootstrap no longer
+   re-applies the mount-time `view`/`sub` candidate over live state — so a lens
+   clicked mid-load is kept and canonicalized once the manifest resolves.
+

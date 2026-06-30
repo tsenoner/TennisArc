@@ -6,7 +6,8 @@
     {
       "source": "/data/:tour(atp|wta)-:year(\\d{4})-:slam([a-z0-9-]+).json",
       "destination": "/data/slams/:year/:tour-:slam.json"
-    }
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     { "source": "/data/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] }
