@@ -709,6 +709,7 @@ export function createApp(root: HTMLElement): () => void {
   // and the stale hash is scrubbed so the URL stays honest. iOS back-swipe lands here too.
   window.addEventListener("popstate", (e) => {
     if (!state.index) return; // pre-bootstrap: nothing to resolve against yet
+    state.openMenu = undefined; // a Back/Forward navigation dismisses any open top-bar dropdown, same as the click handlers
     if (exitingZoom) {
       // This popstate is our own zoom-clear history.back(). We stepped out to STAY on the current
       // view, so keep colorDim/seedSort/slam — only drop focus — and rewrite the landed entry's

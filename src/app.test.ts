@@ -809,6 +809,13 @@ describe("URL routing (shareable deep links)", () => {
     expect(url()).toBe("/atp/2026/roland-garros");                               // junk dropped on canonicalize
   });
 
+  it("falls back to the other tour when the requested tour is absent from the manifest", async () => {
+    history.replaceState(null, "", "/wta/2026/wimbledon"); // manifest is ATP-only → no WTA draw exists
+    const root = await mountApp();
+    expect(slamActive(root)).toBe("wimbledon");                                   // resolveRoute: WTA missing → same draw on ATP
+    expect(url()).toBe("/atp/2026/wimbledon");                                    // canonicalized onto the real (ATP) draw
+  });
+
   it("scrubs a cold-load focus hash but keeps the path + query view", async () => {
     history.replaceState({ f: "r.0.0" }, "", "/atp/2026/wimbledon?view=country#r.0.0");
     const root = await mountApp();
