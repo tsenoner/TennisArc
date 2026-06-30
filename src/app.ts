@@ -405,7 +405,6 @@ export function createApp(root: HTMLElement): () => void {
     tour: state.tour, year: state.year, slam: state.slam, view: state.colorDim, sub: state.seedSort,
   });
   const buildUrl = (): string => buildRoute(currentRoute()) + (state.focusId ? `#${state.focusId}` : "");
-  const locUrl = (): string => location.pathname + location.search + location.hash;
   // Write the canonical URL for the current view. `push` adds a Back-able entry (a view switch);
   // otherwise it replaces in place. A no-op when the URL already matches, so a redundant click
   // (re-selecting the active tour) never piles up history. State carries the focus id (or null)
@@ -414,11 +413,15 @@ export function createApp(root: HTMLElement): () => void {
   const syncUrl = (push: boolean): void => {
     if (!state.year) return; // pre-resolution (loading state): no resolved view to write yet
     const url = buildUrl();
-    if (url === locUrl()) return;
+    if (url === location.pathname + location.search + location.hash) return;
     const st = state.focusId ? { f: state.focusId } : null;
     if (push) history.pushState(st, "", url);
     else history.replaceState(st, "", url);
   };
+  // Lens/sort change: push a Back-able entry when unfocused, but REPLACE when zoomed so
+  // recolouring a drilled-in section keeps the single focus entry instead of piling up Back
+  // steps. (A draw switch — tour/year/slam — always pushes; that's syncUrl(true) at its sites.)
+  const syncLensUrl = (): void => syncUrl(!state.focusId);
 
   // Validate a parsed candidate against the manifest, filling defaults. The resource
   // (tour/year/slam) must actually exist; an absent/stale/partial one falls back to the
@@ -587,14 +590,12 @@ export function createApp(root: HTMLElement): () => void {
       state.openMenu = undefined;
       if (state.colorDim !== "country") state.selectedCountry = undefined;
       closeMatch();
-      // Not zoomed → push (Back undoes the lens switch). Zoomed → replace, keeping the focus
-      // entry so recolouring a drilled-in section doesn't pile up Back steps.
-      syncUrl(!state.focusId);
+      syncLensUrl();
       draw();
     } else if (a === "seed-sort" && el.dataset.sort) {
       // toggles the seed lens between seed order and ELO order — reorders the panel AND recolours the wheel
       state.seedSort = el.dataset.sort as SeedSort;
-      syncUrl(!state.focusId); // same push/replace rule as the lens switch above
+      syncLensUrl();
       draw();
     } else if (a === "country" && el.dataset.country) {
       state.selectedCountry = state.selectedCountry === el.dataset.country ? undefined : el.dataset.country;
