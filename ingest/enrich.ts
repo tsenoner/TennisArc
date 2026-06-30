@@ -108,11 +108,12 @@ export function enrichMatch(
  * so a still-not-yet-played entrant isn't re-fetched from its team on every refresh. A not-yet-played
  * entrant's country is their (immutable) nationality, so a value resolved on an earlier run is still
  * valid now — this turns the per-refresh team lookups into a one-time cost per entrant. Only fills
- * players still blank after per-match enrichment (so fresh live/finished event detail always wins),
- * scoped exactly like the lookup to `entrantIds`, so the result matches the un-cached run. `prior` is
- * the previous snapshot's players map (null on the first run / unreadable). Returns how many were
- * carried forward. Trade-off: a country SofaScore later corrects stays stale until that entrant plays
- * (when event detail overwrites it) — acceptable for an immutable-in-practice draw attribute.
+ * players still blank after per-match enrichment (so fresh live/finished event detail always wins).
+ * Pass `entrantIds` = the NOT-YET-PLAYED entrants: once an entrant plays it drops out of carry-forward
+ * and its country is re-resolved fresh (event detail, then a team lookup) instead of being pinned to a
+ * possibly-stale cached value, so a country SofaScore later corrects can't persist past that entrant's
+ * first match. `prior` is the previous snapshot's players map (null on the first run / unreadable).
+ * Returns how many were carried forward.
  */
 export function carryForwardCountries(
   players: Record<string, Player>,
