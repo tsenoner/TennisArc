@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { enrichMatch } from "./enrich";
+import { enrichMatch, carryForwardCountries, fillMissingCountries } from "./enrich";
 import { eventSample, statsSample, liveEventSample } from "./fixtures/event-sample";
+import { flagAssetUrl } from "../src/flags";
 import type { Match, Player } from "../src/model";
 
 const baseMatch = (over: Partial<Match> = {}): Match => ({
@@ -57,5 +58,145 @@ describe("enrichMatch", () => {
     const m = enrichMatch(baseMatch(), retEvent, statsSample, players(), 0);
     expect(m.status).toBe("retired");
     expect(m.durationSec).toBe(1822 + 600); // partial time still counts
+  });
+});
+
+describe("fillMissingCountries", () => {
+  const player = (id: string, country: string): Player => ({
+    id, name: id, country, seed: null, entry: null, ranking: null,
+    ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+  });
+
+  it("looks up only blank-country players (not-yet-played entrants) and fills them", async () => {
+    const players: Record<string, Player> = {
+      100: player("100", "ITA"),   // already enriched from a played match — must be skipped
+      235576: player("235576", ""), // not-yet-played — needs a country
+      999: player("999", ""),
+    };
+    const seen: number[] = [];
+    const lookup = async (teamId: number): Promise<string | null> => {
+      seen.push(teamId);
+      return teamId === 235576 ? "USA" : "GBR";
+    };
+
+    const res = await fillMissingCountries(players, lookup);
+
+    expect(seen.sort((a, b) => a - b)).toEqual([999, 235576]); // the enriched player is never looked up
+    expect(players["100"].country).toBe("ITA");   // existing country untouched
+    expect(players["235576"].country).toBe("USA");
+    expect(players["999"].country).toBe("GBR");
+    expect(res).toEqual({ filled: 2, missing: 2 });
+  });
+
+  it("skips non-entrant placeholders (SofaScore future-slot 'teams') when entrantIds is given", async () => {
+    const players: Record<string, Player> = {
+      235576: player("235576", ""), // real round-0 entrant
+      900001: player("900001", ""), // placeholder like "Qf1" — never an arc occupant
+    };
+    const seen: number[] = [];
+    const lookup = async (id: number) => { seen.push(id); return "USA"; };
+
+    const res = await fillMissingCountries(players, lookup, new Set(["235576"]));
+
+    expect(seen).toEqual([235576]);              // the placeholder is never looked up
+    expect(players["235576"].country).toBe("USA");
+    expect(players["900001"].country).toBe("");  // left untouched
+    expect(res).toEqual({ filled: 1, missing: 1 });
+  });
+
+  it("leaves a player blank when the lookup yields nothing (no spurious country)", async () => {
+    const players: Record<string, Player> = { 42: player("42", "") };
+    const res = await fillMissingCountries(players, async () => null);
+    expect(players["42"].country).toBe("");
+    expect(res).toEqual({ filled: 0, missing: 1 });
+  });
+
+  it("turns a flagless entrant into one that renders a flag (the reported symptom)", async () => {
+    const players: Record<string, Player> = { 235576: player("235576", "") };
+    expect(flagAssetUrl(players["235576"].country)).toBeNull(); // before: "" → no flag
+    await fillMissingCountries(players, async () => "USA");
+    expect(flagAssetUrl(players["235576"].country)).not.toBeNull(); // after: USA → flag
+  });
+
+  it("counts only the successful fills when some lookups come back empty", async () => {
+    const players: Record<string, Player> = {
+      111: player("111", ""),
+      222: player("222", ""),
+    };
+    const lookup = async (id: number) => (id === 111 ? "FRA" : null); // 222 has no country on file
+
+    const res = await fillMissingCountries(players, lookup);
+
+    expect(players["111"].country).toBe("FRA");
+    expect(players["222"].country).toBe(""); // still blank — no spurious country
+    expect(res).toEqual({ filled: 1, missing: 2 }); // filled counts hits; missing counts blanks
+  });
+
+  it("ignores an entrant id that isn't in the players map (no stray lookup, no throw)", async () => {
+    const players: Record<string, Player> = { 235576: player("235576", "") };
+    const seen: number[] = [];
+    const lookup = async (id: number) => { seen.push(id); return "USA"; };
+
+    // entrantIds and the players map can diverge; the players map drives the work.
+    const res = await fillMissingCountries(players, lookup, new Set(["235576", "404404"]));
+
+    expect(seen).toEqual([235576]); // 404404 is not in players → never looked up
+    expect(players["235576"].country).toBe("USA");
+    expect(res).toEqual({ filled: 1, missing: 1 });
+  });
+});
+
+describe("carryForwardCountries", () => {
+  const player = (id: string, country: string): Player => ({
+    id, name: id, country, seed: null, entry: null, ranking: null,
+    ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+  });
+
+  it("reuses a prior country for a still-blank entrant, leaving enriched ones untouched", () => {
+    const players: Record<string, Player> = {
+      235576: player("235576", ""),    // not-yet-played — prior run knew the country
+      100: player("100", "ITA"),       // enriched from a played match this run — must win
+    };
+    const prior: Record<string, Player> = {
+      235576: player("235576", "USA"),
+      100: player("100", "GBR"),        // stale/different — must NOT overwrite the fresh ITA
+    };
+
+    const carried = carryForwardCountries(players, prior);
+
+    expect(players["235576"].country).toBe("USA"); // carried forward
+    expect(players["100"].country).toBe("ITA");    // fresh enrichment untouched
+    expect(carried).toBe(1);
+  });
+
+  it("carries nothing the prior snapshot also lacked (no spurious country)", () => {
+    const players: Record<string, Player> = { 42: player("42", "") };
+    const prior: Record<string, Player> = { 42: player("42", "") };
+    expect(carryForwardCountries(players, prior)).toBe(0);
+    expect(players["42"].country).toBe("");
+  });
+
+  it("respects entrantIds scope — a placeholder is not carried even if prior had one", () => {
+    const players: Record<string, Player> = {
+      235576: player("235576", ""), // real round-0 entrant
+      900001: player("900001", ""), // placeholder future-slot
+    };
+    const prior: Record<string, Player> = {
+      235576: player("235576", "USA"),
+      900001: player("900001", "ZZZ"), // stray — must be ignored (out of entrant scope)
+    };
+
+    const carried = carryForwardCountries(players, prior, new Set(["235576"]));
+
+    expect(players["235576"].country).toBe("USA");
+    expect(players["900001"].country).toBe(""); // untouched
+    expect(carried).toBe(1);
+  });
+
+  it("carries nothing on the first run (no prior snapshot) or when prior lacks the player", () => {
+    const players: Record<string, Player> = { 42: player("42", "") };
+    expect(carryForwardCountries(players, null)).toBe(0);
+    expect(carryForwardCountries(players, {}, new Set(["42"]))).toBe(0);
+    expect(players["42"].country).toBe("");
   });
 });

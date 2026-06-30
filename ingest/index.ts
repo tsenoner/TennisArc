@@ -1,10 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
+import { type AvailableSlam, type Player, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
 import { DRAW_SIZE, SLAMS, activeSlam, type SlamConfig } from "./config";
-import { openContext, fetchTournament, resolveSeasonId } from "./sofascore";
+import { openContext, fetchTournament, resolveSeasonId, fetchTeamCountry } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
-import { enrichMatch } from "./enrich";
+import { enrichMatch, carryForwardCountries, fillMissingCountries } from "./enrich";
 import { fetchElo, applyElo } from "./elo";
 import { fetchPlayers, applyBirthdates } from "./players";
 import { availableSlamOf, mergeIndex, backfillTargets } from "./manifest";
@@ -51,6 +51,35 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
     if (matchCount < DRAW_SIZE - 1) {
       throw new Error(`${cfg.slam} ${tour}: draw not fully available yet (${matchCount}/${DRAW_SIZE - 1} matches) — keeping last-good`);
     }
+    // Not-yet-played entrants get no country from the (finished/live-only) event detail above, so
+    // their flag would be missing — reuse last snapshot's country where we already know it, then look
+    // up the rest off the team. Scope to the real draw entrants (round-0 participants); SofaScore also
+    // seeds placeholder future-slot "teams" with no country that never render. Carry-forward is limited
+    // to the still-not-yet-played entrants (whose nationality is immutable); once an entrant plays it
+    // drops out of carry-forward, so its country is re-resolved from event detail / a fresh team lookup
+    // rather than pinned to a possibly-stale cached value. Gated behind the draw-availability guard
+    // above so an incomplete-draw refresh that gets discarded doesn't pay for these lookups. Team
+    // lookups are paced 60ms apart like fetchTournament to avoid provoking 429s; a sustained Cloudflare
+    // block still relies on the refresh watchdog as the hard backstop. No-op once every match is finished.
+    const entrantIds = new Set<string>();
+    const unplayedEntrantIds = new Set<string>();
+    for (const id of snap.rounds[0]?.matchIds ?? []) {
+      const m = snap.matches[id];
+      const notYetPlayed = m.status === "scheduled" || m.status === "notstarted";
+      for (const pid of [m.p1, m.p2]) {
+        if (!pid) continue;
+        entrantIds.add(pid);
+        if (notYetPlayed) unplayedEntrantIds.add(pid);
+      }
+    }
+    const prior = await loadPriorPlayers(tour, cfg.year, cfg.slam);
+    const carried = carryForwardCountries(snap.players, prior, unplayedEntrantIds);
+    const { filled, missing } = await fillMissingCountries(
+      snap.players,
+      async (teamId) => { const c = await fetchTeamCountry(page, teamId); await page.waitForTimeout(60); return c; },
+      entrantIds,
+    );
+    if (carried || missing) console.log(`${cfg.slam} ${tour}: countries ${carried} reused, ${filled}/${missing} fetched`);
     snap.generatedAt = isoNow;
     return snap;
   } finally {
@@ -63,6 +92,18 @@ async function loadIndex(): Promise<SlamIndex> {
     return JSON.parse(await readFile(resolve(OUT_DIR, "index.json"), "utf8")) as SlamIndex;
   } catch {
     return { schemaVersion: 2, generatedAt: "", slams: [] };
+  }
+}
+
+/** The previous snapshot's players map for a tour/year/slam, or null if there isn't a readable one
+ *  yet (first run / missing / unreadable). Lets the country backfill reuse already-resolved countries
+ *  instead of re-fetching every not-yet-played entrant's team on every refresh. */
+async function loadPriorPlayers(tour: Tour, year: number, slam: string): Promise<Record<string, Player> | null> {
+  try {
+    const raw = await readFile(resolve(OUT_DIR, snapshotPath(tour, year, slam)), "utf8");
+    return (JSON.parse(raw) as Snapshot).players ?? null;
+  } catch {
+    return null;
   }
 }
 

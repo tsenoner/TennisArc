@@ -1,5 +1,6 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { pickSeasonId, type SofaSeason } from "./seasons";
+import { alpha3Of } from "./sofa-country";
 
 export interface RawTournament {
   cuptrees: unknown;
@@ -79,6 +80,18 @@ export async function apiGet(page: Page, path: string): Promise<unknown> {
 export async function resolveSeasonId(page: Page, utId: number, year?: number): Promise<number> {
   const j = (await apiGet(page, `/unique-tournament/${utId}/seasons`)) as { seasons?: SofaSeason[] };
   return pickSeasonId(j.seasons ?? [], year);
+}
+
+/** A team's country alpha-3 (e.g. "USA"), or null. The per-event detail only reaches us for
+ *  finished/live matches, so this is how a not-yet-played entrant gets a country (→ a flag).
+ *  A failed/missing lookup returns null rather than throwing — one absent flag, not a dead run. */
+export async function fetchTeamCountry(page: Page, teamId: number): Promise<string | null> {
+  try {
+    const j = (await apiGet(page, `/team/${teamId}`)) as { team?: { country?: { alpha3?: string } }; country?: { alpha3?: string } };
+    return alpha3Of(j.team ?? j);
+  } catch {
+    return null;
+  }
 }
 
 /** Fetch the full cuptrees + per-event detail/stats for a tournament season (caller owns the page/browser). */
