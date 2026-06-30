@@ -58,8 +58,8 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
     // that gets discarded doesn't pay for these lookups; throttled like fetchTournament (60ms) so a
     // 429 burst can't stretch the refresh toward the watchdog SIGKILL. No-op once every match is finished.
     const entrantIds = new Set<string>();
-    for (const m of Object.values(snap.matches)) {
-      if (m.roundIndex !== 0) continue;
+    for (const id of snap.rounds[0]?.matchIds ?? []) {
+      const m = snap.matches[id];
       if (m.p1) entrantIds.add(m.p1);
       if (m.p2) entrantIds.add(m.p2);
     }
