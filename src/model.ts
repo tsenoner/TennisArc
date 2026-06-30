@@ -33,6 +33,21 @@ export interface Player {
   birthdate: string | null;   // ISO "YYYY-MM-DD" (from Jeff Sackmann player files)
 }
 
+/** SofaScore seeds the draw with synthetic "teams" for not-yet-decided future slots — their
+ *  `name` is a bracket-slot code (R64P3, R16P1, Qf1, …) rather than a real person. Used by the
+ *  ingest (to keep them out of snapshots) and by read-time consumers (to ignore any that slipped
+ *  into already-committed snapshots). Matching by the slot-code shape alone is enough at ingest;
+ *  `isPlaceholderPlayer` additionally requires empty identity so a real player can never be dropped. */
+export const PLACEHOLDER_TEAM_NAME = /^(?:R\d+P\d+|(?:Q|S)F\d+|F\d+)$/i;
+
+/** True when a Player is one of those synthetic future-slot placeholders, not a real draw entrant.
+ *  Requires BOTH a slot-code name AND no identity (no country/seed/ranking/elo), so it never
+ *  misclassifies a real player. */
+export function isPlaceholderPlayer(p: Player): boolean {
+  return PLACEHOLDER_TEAM_NAME.test(p.name)
+    && p.country === "" && p.seed == null && p.ranking == null && p.elo == null;
+}
+
 export interface Match {
   id: string;                 // `${roundIndex}-${slot}`
   roundIndex: number;         // 0 = first round (outer) … last = Final (inner)

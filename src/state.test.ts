@@ -341,6 +341,41 @@ describe("countryBreakdown", () => {
     expect(rows.find((r) => r.country === "—")).toBeUndefined();      // placeholder not counted
     expect(rows.find((r) => r.country === "ESP")!.entrants).toBe(8);  // only the 8 real entrants
   });
+
+  it("counts a real entrant whose first-round block is absent from the source data", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    Object.keys(s.players).forEach((id) => { s.players[id] = { ...s.players[id], country: "ESP" }; });
+    // SofaScore sometimes drops a real player's first-round block, so they surface only from a later
+    // round (e.g. Federer at 2014 Roland Garros). Unlike a placeholder they carry a country / seed /
+    // ranking, so they must still be counted — never silently dropped from the Nations panel.
+    s.players["fed"] = {
+      id: "fed", name: "Roger Federer", country: "CHE", seed: 4, entry: null,
+      ranking: 4, ageYears: null, sofaSlug: "federer-roger", elo: null, birthdate: null,
+    };
+
+    const rows = countryBreakdown(s);
+
+    expect(rows.find((r) => r.country === "CHE")!.entrants).toBe(1); // missing-from-round-0 real entrant kept
+    expect(rows.find((r) => r.country === "ESP")!.entrants).toBe(8);
+  });
+
+  it("ignores a placeholder embedded in a round-0 slot (2023 Australian Open shape)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    Object.keys(s.players).forEach((id) => { s.players[id] = { ...s.players[id], country: "ESP" }; });
+    // A malformed payload dropped a synthetic "R64Pn" team into a real first-round slot. Unlike the
+    // earlier test (placeholder never in a match), this one occupies a round-0 slot, so the
+    // first-round fingerprint alone would let it through — only the placeholder check excludes it.
+    s.players["ph-r64p1"] = {
+      id: "ph-r64p1", name: "R64P1", country: "", seed: null, entry: null,
+      ranking: null, ageYears: null, sofaSlug: "r64p1", elo: null, birthdate: null,
+    };
+    s.matches["0-0"] = { ...s.matches["0-0"], p2: "ph-r64p1" };
+
+    const rows = countryBreakdown(s);
+
+    expect(rows.find((r) => r.country === "—")).toBeUndefined();      // no phantom nation
+    expect(rows.find((r) => r.country === "ESP")!.entrants).toBe(8);  // 8 real players, placeholder dropped
+  });
 });
 
 import { ageOn, birthdayInWindow, formatBirthday } from "./state";

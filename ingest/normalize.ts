@@ -1,4 +1,5 @@
 import type { EntryType, Match, MatchStatus, Player, Round, Snapshot, Tour } from "../src/model";
+import { PLACEHOLDER_TEAM_NAME } from "../src/model";
 
 export interface TournamentMeta {
   tour: Tour; slam: string; name: string; year: number; surface: string;
@@ -29,6 +30,13 @@ function blockStatus(b: SofaBlock, anyPresent: boolean): MatchStatus {
   return anyPresent ? "scheduled" : "notstarted";
 }
 
+/** A participant is real unless its team is a SofaScore future-slot placeholder (name like
+ *  "R64P3"/"Qf1"). Placeholders are treated as absent so they never become Players or occupy a
+ *  match side — leaving the slot as a TBD null exactly like an unprovided participant. */
+function realParticipant(p: SofaParticipant | undefined): SofaParticipant | undefined {
+  return p && !PLACEHOLDER_TEAM_NAME.test(p.team.name) ? p : undefined;
+}
+
 /** Convert a SofaScore cuptrees payload into our base Snapshot (no per-event detail yet). */
 export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snapshot {
   const rounds = cup.cupTrees[0]?.rounds ?? [];
@@ -37,13 +45,15 @@ export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snap
   const matches: Record<string, Match> = {};
   const roundList: Round[] = [];
 
+  const realSides = (m: Match): number => (m.p1 ? 1 : 0) + (m.p2 ? 1 : 0);
+
   rounds.forEach((round, roundIndex) => {
     const matchIds: string[] = [];
     for (const b of round.blocks) {
       const slot = b.order - 1;
       const id = `${roundIndex}-${slot}`;
-      const home = b.participants.find((p) => p.order === 1);
-      const away = b.participants.find((p) => p.order === 2);
+      const home = realParticipant(b.participants.find((p) => p.order === 1));
+      const away = realParticipant(b.participants.find((p) => p.order === 2));
 
       for (const p of [home, away]) {
         if (!p) continue;
@@ -59,7 +69,7 @@ export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snap
       }
 
       const winner = home?.winner ? "p1" : away?.winner ? "p2" : null;
-      matches[id] = {
+      const match: Match = {
         id, roundIndex, slot,
         nextMatchId: roundIndex < lastRound ? `${roundIndex + 1}-${Math.floor(slot / 2)}` : null,
         p1: home ? String(home.team.id) : null,
@@ -69,10 +79,15 @@ export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snap
         score: null, live: null, durationSec: null, durationProvisional: false,
         sofaEventId: b.events?.[0] ?? null, sofaCustomId: null, stats: null,
       };
-      matchIds.push(id);
+      // A malformed payload can emit several blocks for one slot (the 2023 Australian Open snapshot
+      // tripled 10 first-round slots, the extras carrying placeholder teams). Keep one entry per
+      // slot, preferring the richest block so a real match is never clobbered by a placeholder one.
+      const existing = matches[id];
+      if (!existing) matchIds.push(id);
+      if (!existing || realSides(match) > realSides(existing)) matches[id] = match;
     }
     matchIds.sort((a, b) => Number(a.split("-")[1]) - Number(b.split("-")[1]));
-    roundList.push({ index: roundIndex, name: round.description, size: round.blocks.length * 2, matchIds });
+    roundList.push({ index: roundIndex, name: round.description, size: matchIds.length * 2, matchIds });
   });
 
   return {
