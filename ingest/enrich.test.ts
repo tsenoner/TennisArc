@@ -117,4 +117,31 @@ describe("fillMissingCountries", () => {
     await fillMissingCountries(players, async () => "USA");
     expect(flagAssetUrl(players["235576"].country)).not.toBeNull(); // after: USA → flag
   });
+
+  it("counts only the successful fills when some lookups come back empty", async () => {
+    const players: Record<string, Player> = {
+      111: player("111", ""),
+      222: player("222", ""),
+    };
+    const lookup = async (id: number) => (id === 111 ? "FRA" : null); // 222 has no country on file
+
+    const res = await fillMissingCountries(players, lookup);
+
+    expect(players["111"].country).toBe("FRA");
+    expect(players["222"].country).toBe(""); // still blank — no spurious country
+    expect(res).toEqual({ filled: 1, missing: 2 }); // filled counts hits; missing counts blanks
+  });
+
+  it("ignores an entrant id that isn't in the players map (no stray lookup, no throw)", async () => {
+    const players: Record<string, Player> = { 235576: player("235576", "") };
+    const seen: number[] = [];
+    const lookup = async (id: number) => { seen.push(id); return "USA"; };
+
+    // entrantIds and the players map can diverge; the players map drives the work.
+    const res = await fillMissingCountries(players, lookup, new Set(["235576", "404404"]));
+
+    expect(seen).toEqual([235576]); // 404404 is not in players → never looked up
+    expect(players["235576"].country).toBe("USA");
+    expect(res).toEqual({ filled: 1, missing: 1 });
+  });
 });
