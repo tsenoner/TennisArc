@@ -430,7 +430,13 @@ export interface NationRow { country: string; entrants: number; stillIn: number;
 export function countryBreakdown(s: Snapshot): NationRow[] {
   const out = eliminatedSet(s);
   const reached = new Map<string, number>();
+  // SofaScore seeds the players map with placeholder future-slot "teams" (R16P1, Qf1, …) for the
+  // still-undecided later-round slots; they have no nationality and aren't real people. Count only
+  // the actual draw entrants — the players who occupy a round-0 (first-round) slot — so the panel
+  // doesn't show a phantom "—" nation for the unresolved bracket.
+  const entrants = new Set<string>();
   for (const m of Object.values(s.matches)) {
+    if (m.roundIndex === 0) { if (m.p1) entrants.add(m.p1); if (m.p2) entrants.add(m.p2); }
     for (const side of ["p1", "p2"] as const) {
       const pid = m[side];
       if (!pid) continue;
@@ -440,6 +446,7 @@ export function countryBreakdown(s: Snapshot): NationRow[] {
   }
   const byCountry = new Map<string, NationRow>();
   for (const p of Object.values(s.players)) {
+    if (!entrants.has(p.id)) continue; // skip placeholder future-slot teams (not draw entrants)
     const c = p.country || "—";
     let row = byCountry.get(c);
     if (!row) { row = { country: c, entrants: 0, stillIn: 0, players: [] }; byCountry.set(c, row); }

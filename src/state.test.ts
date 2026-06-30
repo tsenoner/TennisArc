@@ -325,6 +325,22 @@ describe("countryBreakdown", () => {
       expect(a.stillIn > b.stillIn || (a.stillIn === b.stillIn && a.entrants >= b.entrants)).toBe(true);
     }
   });
+
+  it("ignores SofaScore placeholder future-slot teams (no phantom '—' nation)", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    Object.keys(s.players).forEach((id) => { s.players[id] = { ...s.players[id], country: "ESP" }; });
+    // A placeholder occupies only later-round slots (never a round-0 match) and has no country —
+    // exactly the "R16P1"/"Qf1" teams SofaScore seeds for the unresolved bracket.
+    s.players["ph-r16p1"] = {
+      id: "ph-r16p1", name: "R16P1", country: "", seed: null, entry: null,
+      ranking: null, ageYears: null, sofaSlug: "r16p1", elo: null, birthdate: null,
+    };
+
+    const rows = countryBreakdown(s);
+
+    expect(rows.find((r) => r.country === "—")).toBeUndefined();      // placeholder not counted
+    expect(rows.find((r) => r.country === "ESP")!.entrants).toBe(8);  // only the 8 real entrants
+  });
 });
 
 import { ageOn, birthdayInWindow, formatBirthday } from "./state";
