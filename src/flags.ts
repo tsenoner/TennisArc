@@ -17,7 +17,9 @@ export const ISO3_TO_2: Record<string, string> = {
   HKG: "HK", ISR: "IL", TUR: "TR", EGY: "EG", TUN: "TN", MAR: "MA", ZAF: "ZA",
   RSA: "ZA", NZL: "NZ", MDA: "MD", BIH: "BA", SVN: "SI", SLO: "SI", EST: "EE",
   LVA: "LV", LTU: "LT", CYP: "CY", LUX: "LU", MCO: "MC", SMR: "SM", SAU: "SA",
-  UZB: "UZ", LBN: "LB", JOR: "JO",
+  UZB: "UZ", LBN: "LB", JOR: "JO", AND: "AD", ARM: "AM", BRB: "BB", DOM: "DO",
+  IDN: "ID", IRL: "IE", JAM: "JM", LIE: "LI", MKD: "MK", MNE: "ME", PHL: "PH",
+  PRI: "PR",
 };
 
 /** ISO-3 (or common IOC) → ISO-2, or null if unknown. */
