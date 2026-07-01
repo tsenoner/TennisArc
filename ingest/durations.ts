@@ -49,6 +49,54 @@ export const MAX_SANE_SEC = 43_200;
 // differ in trust, so they get different ceilings — never widen this one to MAX_SANE_SEC.
 export const MAX_LOCAL_SEC = 21_600;
 
+// Plausibility ceiling for a SINGLE set's on-court seconds. In the tiebreak era (all four slams use a
+// final-set tiebreak since 2022) no set runs close to 3h — the longest realistic set is a marathon
+// 7-6 tiebreak set around ~90min. A rain/curfew suspension instead bloats the ONE set that spanned the
+// stoppage to many hours (observed 59 818s and 65 336s ≈ 16–18h overnight at Wimbledon 2026) while the
+// other sets stay normal. 3h is far above any genuine set yet far below that suspension wall-clock, so
+// it cleanly isolates the corrupted period without ever clipping a real one (see recoverLocalDurationSec).
+export const MAX_SET_SEC = 10_800;
+
+/**
+ * Best-estimate on-court seconds for a FINISHED/RETIRED match from SofaScore's per-set `time.periodN`,
+ * healing the rain/curfew-suspension corruption. When play is suspended (e.g. the 11pm Wimbledon
+ * curfew) and resumes the next day, the single set that spanned the stoppage absorbs the entire
+ * overnight wall-clock gap (~16–18h) while every other set stays a normal ~40–60min. The previous
+ * logic summed all periods and, finding the total over the 6h bound, nulled the whole match — so a
+ * completed first-rounder rendered as an unplayed grey scaffold for days until Sackmann's official
+ * minutes arrived. Instead: sum the plausible sets (≤ MAX_SET_SEC) and estimate each inflated set as
+ * the mean of the plausible ones, giving a realistic duration immediately that Sackmann later refines.
+ *
+ * Returns null when there's no usable signal — no period entries; EVERY set implausibly long (can't
+ * distinguish a genuine >6h epic from uniform garbage); FEWER THAN TWO clean sets to anchor an estimate
+ * when a set is inflated (a lone short retirement set is no template for a suspended full set, so
+ * extrapolating from it would mint an absurd duration); or a recovered total past the 6h local bound.
+ * A null finished duration is later restored from Sackmann's CSV.
+ */
+/** True when any per-set time.periodN exceeds the plausible single-set ceiling — the signature of a
+ *  rain/curfew suspension folded into one set (see recoverLocalDurationSec). Used to mark a finished
+ *  match as having been suspended even after SofaScore drops back to a plain "finished" status. */
+export function hasSuspendedPeriod(time: Record<string, number | undefined>): boolean {
+  return Object.entries(time).some(([k, v]) => /^period\d+$/.test(k) && (v ?? 0) > MAX_SET_SEC);
+}
+
+export function recoverLocalDurationSec(time: Record<string, number | undefined>): number | null {
+  const periods = Object.entries(time)
+    .filter(([k, v]) => /^period\d+$/.test(k) && (v ?? 0) > 0)
+    .map(([, v]) => v as number);
+  const clean = periods.filter((s) => s <= MAX_SET_SEC);
+  const inflatedCount = periods.length - clean.length;
+  // Healing an inflated set means estimating its on-court time as the mean of the un-suspended sets —
+  // only trustworthy with ≥2 representative anchors. With fewer (e.g. a lone short/retirement set beside
+  // a suspended full set) the mean badly under/over-shoots, so defer to Sackmann rather than ship a
+  // wrong, authoritative-looking value. (No inflated sets → no estimation → a single clean set is fine.)
+  if (inflatedCount > 0 && clean.length < 2) return null;
+  if (!clean.length) return null; // no period entries at all
+  const cleanSum = clean.reduce((a, b) => a + b, 0);
+  const total = inflatedCount === 0 ? cleanSum : cleanSum + inflatedCount * (cleanSum / clean.length);
+  return total > 0 && total <= MAX_LOCAL_SEC ? Math.round(total) : null;
+}
+
 export interface SlamDurationRow {
   roundIndex: number;
   winnerName: string;

@@ -1,12 +1,21 @@
 import type { Match, MatchStats, MatchStatus, Player, SetScore } from "../src/model";
-import { MAX_LOCAL_SEC } from "./durations";
+import { MAX_LOCAL_SEC, MAX_SET_SEC, recoverLocalDurationSec, hasSuspendedPeriod } from "./durations";
+
+// A live match stops receiving point updates the moment play is paused: SofaScore stamps
+// changes.changeTimestamp on every point (its `changes` array literally reads ["homeScore.point"]),
+// and actively-played matches refresh within ~10min at the very most. A gap far beyond that means play
+// has stopped (rain/bad light/the 11pm curfew). This is the primary live-suspension signal — it works
+// for every event (unlike currentPeriodStartTimestamp, absent on ~1/3 of live events) and self-clears
+// on resumption (points resume → fresh timestamp → live again), with no set-duration false positive.
+const SUSPEND_STALE_SEC = 1_200; // 20 min with no point update ⇒ paused
 import { alpha3Of } from "./sofa-country";
 
 interface SofaScoreSide { [k: string]: number | undefined }
 interface SofaEvent {
   customId?: string; startTimestamp?: number; winnerCode?: number;
   status?: { type?: string; description?: string };
-  time?: Record<string, number>;
+  time?: Record<string, number>;            // per-set periodN + currentPeriodStartTimestamp
+  changes?: { changeTimestamp?: number };   // last time SofaScore mutated the event (fresh ⇒ live play)
   homeTeam?: { country?: { alpha3?: string } };
   awayTeam?: { country?: { alpha3?: string } };
   homeScore?: SofaScoreSide; awayScore?: SofaScoreSide;
@@ -68,24 +77,48 @@ function buildStats(stats: SofaStats | null): MatchStats | null {
 export function enrichMatch(
   m: Match, ev: SofaEvent, stats: SofaStats | null, players: Record<string, Player>, nowSec: number,
 ): Match {
-  const status = mapStatus(ev.status?.type, ev.status?.description) ?? m.status;
+  const time = ev.time ?? {};
+  let status = mapStatus(ev.status?.type, ev.status?.description) ?? m.status;
+
+  // Detect a CURRENT stoppage deterministically from the feed, not by guessing from play-time magnitude.
+  const noUpdateSec = ev.changes?.changeTimestamp != null ? nowSec - ev.changes.changeTimestamp : null;
+  const curStart = time.currentPeriodStartTimestamp;
+  const currentlySuspended = status === "live" && (
+    // Primary: no point update in SUSPEND_STALE_SEC ⇒ play has stopped (see the constant above).
+    noUpdateSec != null ? noUpdateSec > SUSPEND_STALE_SEC
+    // Fallback only when the event carries no update timestamp: an implausibly-long-open current set —
+    // no single set runs MAX_SET_SEC (3h), so a live set "open" that long is paused.
+    : curStart != null ? nowSec - curStart > MAX_SET_SEC
+    : false
+  );
+  if (currentlySuspended) status = "suspended";
+
   const live = status === "live";
 
   let durationSec: number | null = null;
   let provisional = false;
   if (live) {
-    durationSec = ev.startTimestamp ? Math.max(0, nowSec - ev.startTimestamp) : null;
+    // now − startTimestamp is on-court time for a same-day match, but a match resumed after an overnight
+    // curfew/rain suspension reports its ORIGINAL (yesterday's) start, so elapsed balloons to many hours
+    // of wall-clock that isn't play. Treat anything past the 6h local bound as unknown rather than let
+    // suspension wall-clock dominate the live "time on court" leaderboard; the finished pass recovers it.
+    const elapsed = ev.startTimestamp ? Math.max(0, nowSec - ev.startTimestamp) : null;
+    durationSec = elapsed != null && elapsed <= MAX_LOCAL_SEC ? elapsed : null;
     provisional = durationSec != null;
   } else if (status === "finished" || status === "retired") {
-    const periods = Object.entries(ev.time ?? {})
-      .filter(([k]) => /^period\d+$/.test(k))
-      .reduce((sum, [, v]) => sum + (v ?? 0), 0);
-    // SofaScore periodN counts rain/curfew suspensions as play time — a suspended match "lasts" 6h+
-    // of wall-clock (observed floor ~21675s; one corrupt event reported 94.8h), indistinguishable by
-    // magnitude from a genuine epic. Cap live scrapes at MAX_LOCAL_SEC (6h): conservative against
-    // suspension garbage; a genuine >6h match is backfilled from Sackmann's minutes (see durations.ts).
-    durationSec = periods > 0 && periods <= MAX_LOCAL_SEC ? periods : null;
+    // SofaScore periodN counts rain/curfew suspensions as play time — the ONE set that spanned the
+    // stoppage absorbs the whole overnight gap (~16–18h) while the rest stay normal. recoverLocalDurationSec
+    // heals that per set (estimating the inflated set from the clean ones) instead of nulling the whole
+    // finished match; a genuine >6h epic with no clean anchor still defers to Sackmann's minutes.
+    durationSec = recoverLocalDurationSec(time);
   }
+  // status === "suspended" → durationSec stays null: on-court time is unknown while play is paused.
+
+  // Sticky suspension record: currently paused, OR a finished match whose per-set time still carries the
+  // suspension-inflated set. carryForwardSuspended (below) ORs in any prior-refresh flag so it persists
+  // once SofaScore drops the finished event back to a plain code-100 with no stoppage marker.
+  const wasSuspended =
+    currentlySuspended || ((status === "finished" || status === "retired") && hasSuspendedPeriod(time)) || !!m.wasSuspended;
 
   const homeCountry = alpha3Of(ev.homeTeam);
   if (m.p1 && players[m.p1] && homeCountry) players[m.p1].country = homeCountry;
@@ -97,10 +130,31 @@ export function enrichMatch(
   return {
     ...m, status, winner,
     score: buildScore(ev.homeScore, ev.awayScore),
-    durationSec, durationProvisional: provisional,
+    durationSec, durationProvisional: provisional, wasSuspended,
     sofaCustomId: ev.customId ?? m.sofaCustomId,
     stats: live ? null : buildStats(stats),
   };
+}
+
+/**
+ * Persist the sticky `wasSuspended` flag across refreshes by ORing each prior-snapshot match's flag
+ * onto the freshly-ingested one (matches are re-derived from cuptrees every refresh, so the flag would
+ * otherwise reset). This is what makes suspension detection deterministic rather than a per-refresh
+ * guess: once we saw a match paused (or finished with an inflated set), it STAYS flagged even after
+ * SofaScore reverts the finished event to a plain code-100 with no stoppage marker. Mirrors
+ * carryForwardCountries. `prior` is the previous snapshot's matches map (null on first run). Returns
+ * how many matches gained the flag from the prior snapshot.
+ */
+export function carryForwardSuspended(
+  matches: Record<string, Match>,
+  prior: Record<string, Match> | null,
+): number {
+  if (!prior) return 0;
+  let carried = 0;
+  for (const [id, m] of Object.entries(matches)) {
+    if (!m.wasSuspended && prior[id]?.wasSuspended) { m.wasSuspended = true; carried++; }
+  }
+  return carried;
 }
 
 /**

@@ -174,6 +174,7 @@ export function renderSunburst(
       const cls = (a.projected ? "arc projected" : "arc")
         + (color.pending?.(a) ? " pending" : "")
         + (a.live ? " live" : "")
+        + (a.suspended ? " suspended" : "")
         + (!a.projected && a.occupant && eliminated?.has(a.occupant) ? " out" : "");
       if (labels && !a.projected && a.occupant && labels.anchors.has(a.id)) {
         // Country lens: a flag image at the arc centroid, rotated tangentially like the
@@ -550,7 +551,8 @@ export function renderCenterSection(title: string): string {
 }
 
 function insightScore(ins: MatchInsight): string {
-  if (!ins.score || !ins.score.length) return ins.status === "live" ? "Live" : "—";
+  if (!ins.score || !ins.score.length)
+    return ins.status === "live" ? "Live" : ins.status === "suspended" ? "Suspended" : "—";
   return ins.score
     .map((set) => {
       const sup = set.tb != null ? `<sup>${set.tb}</sup>` : "";
@@ -600,8 +602,10 @@ function stripSide(side: InsightSide, win: boolean, rev: boolean): string {
  *  viewport (the same dock pattern the readout already uses ≤960px). The wheel is never
  *  covered; the heavy tail lives one tap away behind "Details ▾" (renderMatchDetail). */
 export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean; noZoom?: boolean }): string {
-  const live = ins.status === "live"
-    ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>` : "";
+  const statusTag = ins.status === "live"
+    ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>`
+    : ins.status === "suspended"
+    ? ` · <span class="ms-susp"><span class="ms-pause" aria-hidden="true"></span>suspended</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
   // Only when the view already sits AT this match's own section does it flip to "Reset
   // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
@@ -615,7 +619,7 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
     : `<button class="ms-zoom" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Zoom</button>`;
   return (
     `<div class="match-strip" role="region" aria-label="Match insight">` +
-    `<div class="ms-hd"><span class="ms-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}${live}</span>` +
+    `<div class="ms-hd"><span class="ms-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}${statusTag}</span>` +
     // aria-controls only while expanded — the #match-detail region is removed from the DOM
     // when collapsed, and a dangling IDREF reads inconsistently on some AT; aria-expanded
     // still conveys the collapsed state on its own.

@@ -8,7 +8,7 @@ const rounds = [
   { index: 6, name: "Final", size: 2, matchIds: [] },
 ];
 const base: MatchInsight = {
-  matchId: "6-0", roundName: "Final", surface: "Clay", status: "finished", winner: "p1",
+  matchId: "6-0", roundName: "Final", surface: "Clay", status: "finished", winner: "p1", wasSuspended: false,
   score: [{ p1: 4, p2: 6 }, { p1: 7, p2: 6, tb: 5 }, { p1: 6, p2: 3 }],
   durationSec: 11760, durationProvisional: false,
   p1: { id: "a", name: "Carlos Alcaraz", country: "ESP", seed: 2, ranking: 2, elo: 2106, roundReached: 7, sec: 22320, age: 22, birthday: "5 May", birthdayNear: true },
@@ -31,6 +31,14 @@ describe("renderMatchStrip", () => {
     expect(html).toContain('<span class="nm-short">Sinner</span>');
     expect(html).toContain('<span class="mi-chk">✓</span>');   // winner tick
     expect(html).toContain("7<sup>5</sup>-6");                 // set-2 tiebreak on winner side
+  });
+
+  it("renders an amber 'suspended' tag and score fallback for a paused match", () => {
+    const ins: MatchInsight = { ...base, status: "suspended", winner: null, score: null };
+    const html = renderMatchStrip(ins, "r.0", opts);
+    expect(html).toContain('class="ms-susp"');
+    expect(html).toContain("suspended");   // the status tag
+    expect(html).toContain("Suspended");   // insightScore fallback in the score slot
   });
 
   it("wires the strip actions: accented Zoom (focus), Details toggle, close", () => {

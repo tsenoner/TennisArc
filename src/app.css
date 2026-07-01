@@ -1,6 +1,6 @@
 :root {
   --bg: #0d1014; --panel: #161b23; --text: #d7dee6; --dim: #8b95a3;
-  --line: #2a323d; --accent: #e0683c; --teal: #36b3a8; --seed: #a98bf0;
+  --line: #2a323d; --accent: #e0683c; --teal: #36b3a8; --seed: #a98bf0; --amber: #d9a441;
   --teal-text: #36b3a8;  /* teal that meets AA (4.5:1) as small text on --bg; dark theme = --teal (~7.4:1) */
   /* sunken surfaces + in-panel chrome (hairlines/hover sit a step off --panel, not --line) */
   --inset: #0e151d; --inset-2: #1d2a36; --hairline: #1b2430; --hover: #1b2733;
@@ -10,7 +10,7 @@
 }
 :root[data-theme="light"] {
   --bg: #f6f4ef; --panel: #ffffff; --text: #21262d; --dim: #5b6470;
-  --line: #d8dce2; --accent: #c9542b; --teal: #2a8f86; --seed: #6d4bbd;
+  --line: #d8dce2; --accent: #c9542b; --teal: #2a8f86; --seed: #6d4bbd; --amber: #b8791f;
   --teal-text: #167a70;  /* darker than --teal: small teal text (.ms-rnd/.ms-zoom) hits 4.5:1 on #f6f4ef */
   --inset: #f1efe9; --inset-2: #e3dfd5; --hairline: #e9ebee; --hover: #f2f4f6;
   --upset: #a8431d; --champ: #85610a; --country: #1b63b4; --bar-muted: #6f7b89;
@@ -122,6 +122,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .ms-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--teal);
   margin: 0 4px 0 1px; animation: ms-pulse 1.6s ease-in-out infinite; }
 @keyframes ms-pulse { 50% { opacity: .25; } }
+/* suspended: amber "paused" tag — two static bars (no pulse; play is stopped) */
+.ms-susp { color: var(--amber); font-weight: 600; }
+.ms-pause { display: inline-block; width: 6px; height: 8px; vertical-align: -1px; margin: 0 4px 0 1px;
+  border-left: 2px solid var(--amber); border-right: 2px solid var(--amber); }
 .ms-more, .ms-close { background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px;
   cursor: pointer; padding: 4px 8px; border-radius: 8px; white-space: nowrap; }
 /* the zoom action is deliberately accented — it replaces the old buried ghost Focus button */
@@ -275,6 +279,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .arc.live { animation: live-breathe 3.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .arc.live { animation: none; } }
 .sunburst.arc-dim-mode .arc.live { animation: none; }   /* let the hover-dim opacity take over */
+/* A suspended match is play-in-progress but PAUSED, so it keeps its heat fill (color.ts exempts it
+   from the grey pending tier) but is marked by a static amber dashed outline — no breathing pulse,
+   because nothing is happening right now. Distinct hue (amber) and motion (none) from live's teal
+   pulse, so the two in-progress states never read alike. */
+.arc.suspended { opacity: .62; stroke: var(--amber); stroke-width: 1px; stroke-dasharray: 2.5 2; }
 
 /* quarter-owner corner labels — quiet cartographic annotations in the circle-in-square
    dead corners, doubling as tap-to-focus quarter handles. No chip/box chrome on purpose;

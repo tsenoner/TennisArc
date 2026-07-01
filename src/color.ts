@@ -26,7 +26,7 @@ export const SEED_STOPS = ["#352170", "#6d3fd4", "#a36bff", "#e2cdff"];
 
 /** The per-arc inputs a colour function reads: who occupies the arc, which ring (depth) it is,
  *  and whether the arc is a projection (no decided result feeding it yet). */
-export interface ArcColorInput { occupant: string | null; depth: number; projected: boolean; live?: boolean; }
+export interface ArcColorInput { occupant: string | null; depth: number; projected: boolean; live?: boolean; suspended?: boolean; }
 /** Maps an arc to a fill. The Time lens also exposes `pending`: arcs with no real court time yet
  *  (unknown / projected / still-zero), which render.ts styles as `.arc.pending` scaffold. Other
  *  lenses leave `pending` undefined so their projected arcs keep their seed/nationality hue. */
@@ -50,14 +50,17 @@ export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string,
     // A LIVE match is the one exception: it keeps its heat even at zero recorded time, because it
     // is real, current play (the hatch/breathing mark it live). So `live` short-circuits BOTH the
     // projection test AND the zero-time test — a just-started live match with no duration logged
-    // yet stays heat (HEAT(0)), never falling through to the grey "not played yet" tier.
-    const pending = ({ occupant, depth, projected, live }: ArcColorInput): boolean =>
-      !occupant || (!live && (projected || cum.through(occupant, ringRound(depth)) <= 0));
+    // yet stays heat (HEAT(0)), never falling through to the grey "not played yet" tier. A SUSPENDED
+    // match is play-in-progress too (just paused), so it gets the same exemption — its arc stays lit
+    // (styled distinctly by render.ts) rather than reading as an unplayed grey scaffold.
+    const inPlay = (a: ArcColorInput) => a.live || a.suspended;
+    const pending = (a: ArcColorInput): boolean =>
+      !a.occupant || (!inPlay(a) && (a.projected || cum.through(a.occupant, ringRound(a.depth)) <= 0));
     const fn: ColorFn = (a) => {
       // mirrors `pending`, but computes cum.through ONCE and reuses it for the heat value
-      if (!a.occupant || (!a.live && a.projected)) return NEUTRAL[theme];
+      if (!a.occupant || (!inPlay(a) && a.projected)) return NEUTRAL[theme];
       const sec = cum.through(a.occupant, ringRound(a.depth));
-      return !a.live && sec <= 0 ? NEUTRAL[theme] : HEAT(t(sec));
+      return !inPlay(a) && sec <= 0 ? NEUTRAL[theme] : HEAT(t(sec));
     };
     fn.pending = pending;
     return fn;

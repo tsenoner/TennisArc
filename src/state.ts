@@ -38,6 +38,7 @@ export interface SunNode {
   occupant: string | null;    // playerId (decided winner or projected); null = unknown (both feeders TBD)
   projected: boolean;         // occupant is a projection, not a decided result
   live: boolean;              // this node's match is in progress (provisional time accruing, no winner yet)
+  suspended: boolean;         // this node's match is paused mid-play (rain/bad light/curfew)
   depth: number;              // 0 = champion (centre)
   children: SunNode[];
 }
@@ -119,13 +120,19 @@ export function buildSunburst(s: Snapshot): SunNode {
     const children: SunNode[] = feeders.length
       ? feeders.map((f, i) => build(f, depth + 1, `${id}.${i}`))
       : [
-          { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, live: false, depth: depth + 1, children: [] },
-          { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, live: false, depth: depth + 1, children: [] },
+          { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
+          { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
         ];
     // `live` requires no decided result yet (SunNode.live = "in progress, no winner"). A data-lag
     // match — winner already set while status still reads "live" — must NOT be both decided and
     // live, or render would draw it named + heat-filled AND hatched/breathing (and possibly .out).
-    return { id, matchId: m.id, occupant, projected: decided === null, live: decided === null && m.status === "live", depth, children };
+    // `suspended` mirrors `live` but for a paused match (its own arc treatment, no breathing hatch).
+    const undecided = decided === null;
+    return {
+      id, matchId: m.id, occupant, projected: undecided,
+      live: undecided && m.status === "live", suspended: undecided && m.status === "suspended",
+      depth, children,
+    };
   };
   return build(finalMatch(s), 0, "r");
 }
@@ -257,7 +264,7 @@ export interface PlayerTime {
 /** Whether a match's on-court time should be counted, and whether it's provisional. */
 export function countsTime(m: Match): { count: boolean; provisional: boolean } {
   if (m.status === "finished" || m.status === "retired") return { count: true, provisional: false };
-  if (m.status === "live") return { count: true, provisional: true };
+  if (m.status === "live" || m.status === "suspended") return { count: true, provisional: true };
   return { count: false, provisional: false }; // walkover / scheduled / notstarted
 }
 
@@ -497,7 +504,7 @@ export interface InsightSide {
 
 export interface MatchInsight {
   matchId: string; roundName: string; surface: string;
-  status: MatchStatus; winner: "p1" | "p2" | null;
+  status: MatchStatus; winner: "p1" | "p2" | null; wasSuspended: boolean;
   score: SetScore[] | null; durationSec: number | null; durationProvisional: boolean;
   p1: InsightSide; p2: InsightSide;
   badges: string[]; upset: boolean; eloLine: string;
@@ -550,10 +557,13 @@ export function matchInsight(s: Snapshot, matchId: string, time: Map<string, Pla
     if (m.durationSec >= 10800) badges.push("Marathon");
     else if (m.status === "finished" && m.durationSec < 5400) badges.push("Quick");
   }
+  // A completed match that spanned a stoppage: surface the persisted flag so its duration (a per-set
+  // estimate until Sackmann's minutes land) reads in context rather than as a bare number.
+  if (m.wasSuspended && (m.status === "finished" || m.status === "retired")) badges.push("Suspended");
 
   return {
     matchId, roundName: s.rounds[m.roundIndex]?.name ?? "", surface,
-    status: m.status, winner: m.winner, score: m.score,
+    status: m.status, winner: m.winner, wasSuspended: !!m.wasSuspended, score: m.score,
     durationSec: m.durationSec, durationProvisional: m.durationProvisional,
     p1, p2, badges, upset, eloLine,
     aces: m.stats?.aces ?? null, doubleFaults: m.stats?.doubleFaults ?? null,

@@ -1,10 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { type AvailableSlam, type Player, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
+import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
 import { DRAW_SIZE, SLAMS, activeSlam, type SlamConfig } from "./config";
 import { openContext, fetchTournament, resolveSeasonId, fetchTeamCountry } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
-import { enrichMatch, carryForwardCountries, fillMissingCountries } from "./enrich";
+import { enrichMatch, carryForwardCountries, carryForwardSuspended, fillMissingCountries } from "./enrich";
 import { fetchElo, applyElo } from "./elo";
 import { fetchPlayers, applyBirthdates } from "./players";
 import { availableSlamOf, mergeIndex, backfillTargets } from "./manifest";
@@ -72,8 +72,12 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
         if (notYetPlayed) unplayedEntrantIds.add(pid);
       }
     }
-    const prior = await loadPriorPlayers(tour, cfg.year, cfg.slam);
-    const carried = carryForwardCountries(snap.players, prior, unplayedEntrantIds);
+    const prior = await loadPriorSnapshot(tour, cfg.year, cfg.slam);
+    const carried = carryForwardCountries(snap.players, prior?.players ?? null, unplayedEntrantIds);
+    // Persist the sticky suspension flag: matches are re-derived from cuptrees each refresh, so a
+    // once-suspended match would lose its flag once SofaScore reverts it to a plain "finished".
+    const carriedSusp = carryForwardSuspended(snap.matches, prior?.matches ?? null);
+    if (carriedSusp) console.log(`${cfg.slam} ${tour}: ${carriedSusp} suspension flag(s) carried forward`);
     const { filled, missing } = await fillMissingCountries(
       snap.players,
       async (teamId) => { const c = await fetchTeamCountry(page, teamId); await page.waitForTimeout(60); return c; },
@@ -95,13 +99,14 @@ async function loadIndex(): Promise<SlamIndex> {
   }
 }
 
-/** The previous snapshot's players map for a tour/year/slam, or null if there isn't a readable one
- *  yet (first run / missing / unreadable). Lets the country backfill reuse already-resolved countries
- *  instead of re-fetching every not-yet-played entrant's team on every refresh. */
-async function loadPriorPlayers(tour: Tour, year: number, slam: string): Promise<Record<string, Player> | null> {
+/** The previous snapshot for a tour/year/slam, or null if there isn't a readable one yet (first run /
+ *  missing / unreadable). Lets the country backfill reuse already-resolved countries instead of
+ *  re-fetching every not-yet-played entrant's team, and lets the sticky suspension flag persist across
+ *  refreshes (matches are re-derived from cuptrees each run, so the flag would otherwise reset). */
+async function loadPriorSnapshot(tour: Tour, year: number, slam: string): Promise<Snapshot | null> {
   try {
     const raw = await readFile(resolve(OUT_DIR, snapshotPath(tour, year, slam)), "utf8");
-    return (JSON.parse(raw) as Snapshot).players ?? null;
+    return JSON.parse(raw) as Snapshot;
   } catch {
     return null;
   }

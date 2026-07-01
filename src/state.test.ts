@@ -511,3 +511,29 @@ describe("matchInsight", () => {
     expect(ins.p1.elo).not.toBeNull();
   });
 });
+
+import { countsTime, buildSunburst as buildSun3, matchInsight as insight3, timeOnCourt as toc3, type SunNode as SunNode3 } from "./state";
+
+describe("suspended-match handling", () => {
+  const flat = (n: SunNode3): SunNode3[] => [n, ...n.children.flatMap(flat)];
+
+  it("marks a suspended match's node suspended (not live) in the sunburst tree", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    s.matches["0-0"] = { ...s.matches["0-0"], status: "suspended", winner: null };
+    const susp = flat(buildSun3(s)).filter((n) => n.suspended);
+    expect(susp.length).toBeGreaterThan(0);
+    expect(susp.every((n) => n.matchId === "0-0" && !n.live)).toBe(true);
+  });
+
+  it("counts a suspended match's time as provisional, like a live one", () => {
+    expect(countsTime({ status: "suspended" } as any)).toEqual({ count: true, provisional: true });
+  });
+
+  it("badges a finished match that spanned a suspension and exposes wasSuspended", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    s.matches["0-0"] = { ...s.matches["0-0"], wasSuspended: true };
+    const ins = insight3(s, "0-0", toc3(s))!;
+    expect(ins.wasSuspended).toBe(true);
+    expect(ins.badges).toContain("Suspended");
+  });
+});
