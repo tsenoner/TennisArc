@@ -1,7 +1,14 @@
 export type Tour = "ATP" | "WTA";
 export type EntryType = "Q" | "WC" | "LL" | "PR" | null;
 export type MatchStatus =
-  | "notstarted" | "scheduled" | "live" | "finished" | "retired" | "walkover";
+  | "notstarted" | "scheduled" | "live" | "suspended" | "finished" | "retired" | "walkover";
+
+/** The in-progress statuses: a match being played, or one paused mid-play (rain/bad light/curfew).
+ *  Both accrue provisional time and read as "in progress" to the time leaderboard and the slam-status
+ *  classifier — the single source of truth so a future in-progress status lands in one place. (The arc
+ *  layer keeps `live` and `suspended` separate on purpose: they get distinct visual tiers.) */
+export const isInProgress = (status: MatchStatus): boolean =>
+  status === "live" || status === "suspended";
 
 export interface SetScore { p1: number; p2: number; tb?: number; }
 
@@ -61,6 +68,11 @@ export interface Match {
   live: { set: number; game: string; server: "p1" | "p2" } | null;
   durationSec: number | null; // Σ per-set seconds (provisional while live)
   durationProvisional: boolean;
+  /** Sticky: set once a stoppage is observed (live, via the currentPeriodStartTimestamp signal) or
+   *  inferred (a finished match whose per-set time.periodN carries a suspension-inflated set). Persists
+   *  across refreshes (carryForwardSuspended) so a finished-but-once-suspended match stays flagged even
+   *  after SofaScore drops back to a plain code-100 "finished" with no stoppage marker. Absent = false. */
+  wasSuspended?: boolean;
   sofaEventId: number | null;
   sofaCustomId: string | null;
   stats: MatchStats | null;

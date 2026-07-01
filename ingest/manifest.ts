@@ -1,4 +1,5 @@
 import type { AvailableSlam, SlamStatus, Snapshot } from "../src/model";
+import { isInProgress } from "../src/model";
 import { SLAMS, eventWindow } from "./config";
 
 const decided = (status: string): boolean =>
@@ -23,8 +24,8 @@ export function slamStatus(snap: Snapshot, now: Date): SlamStatus {
   const ts = now.getTime();
   if (ts >= window.to) return "complete"; // event is in the past — never live, even with a hole
   if (ts < window.from) return "upcoming"; // event hasn't started yet
-  // inside the window: genuinely in progress
-  if (matches.some((m) => m.status === "live")) return "live";
+  // inside the window: genuinely in progress (a suspended match is paused mid-play, still in progress)
+  if (matches.some((m) => isInProgress(m.status))) return "live";
   return finalDecided ? "complete" : "live";
 }
 

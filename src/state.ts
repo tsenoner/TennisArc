@@ -1,5 +1,5 @@
 import type { Match, MatchStatus, Player, Round, SetScore, Snapshot } from "./model";
-import { isPlaceholderPlayer } from "./model";
+import { isPlaceholderPlayer, isInProgress } from "./model";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -38,6 +38,7 @@ export interface SunNode {
   occupant: string | null;    // playerId (decided winner or projected); null = unknown (both feeders TBD)
   projected: boolean;         // occupant is a projection, not a decided result
   live: boolean;              // this node's match is in progress (provisional time accruing, no winner yet)
+  suspended: boolean;         // this node's match is paused mid-play (rain/bad light/curfew)
   depth: number;              // 0 = champion (centre)
   children: SunNode[];
 }
@@ -119,13 +120,19 @@ export function buildSunburst(s: Snapshot): SunNode {
     const children: SunNode[] = feeders.length
       ? feeders.map((f, i) => build(f, depth + 1, `${id}.${i}`))
       : [
-          { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, live: false, depth: depth + 1, children: [] },
-          { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, live: false, depth: depth + 1, children: [] },
+          { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
+          { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
         ];
     // `live` requires no decided result yet (SunNode.live = "in progress, no winner"). A data-lag
     // match — winner already set while status still reads "live" — must NOT be both decided and
     // live, or render would draw it named + heat-filled AND hatched/breathing (and possibly .out).
-    return { id, matchId: m.id, occupant, projected: decided === null, live: decided === null && m.status === "live", depth, children };
+    // `suspended` mirrors `live` but for a paused match (its own arc treatment, no breathing hatch).
+    const undecided = decided === null;
+    return {
+      id, matchId: m.id, occupant, projected: undecided,
+      live: undecided && m.status === "live", suspended: undecided && m.status === "suspended",
+      depth, children,
+    };
   };
   return build(finalMatch(s), 0, "r");
 }
@@ -256,8 +263,10 @@ export interface PlayerTime {
 
 /** Whether a match's on-court time should be counted, and whether it's provisional. */
 export function countsTime(m: Match): { count: boolean; provisional: boolean } {
-  if (m.status === "finished" || m.status === "retired") return { count: true, provisional: false };
-  if (m.status === "live") return { count: true, provisional: true };
+  // A finished match's time is measured — UNLESS its duration is a locally-healed suspension estimate
+  // (durationProvisional), which ranks with a `*` until Sackmann's exact minutes backfill it.
+  if (m.status === "finished" || m.status === "retired") return { count: true, provisional: m.durationProvisional };
+  if (isInProgress(m.status)) return { count: true, provisional: true };
   return { count: false, provisional: false }; // walkover / scheduled / notstarted
 }
 
@@ -281,8 +290,14 @@ export function timeOnCourt(s: Snapshot): Map<string, PlayerTime> {
         v.sec += m.durationSec;
         v.matches += 1;
         if (provisional) v.provisional = true;
+      } else if (count && provisional) {
+        // An in-progress (live/suspended) match whose current on-court time is still unknown — resumed
+        // after an overnight suspension, or paused mid-play. Its time simply isn't counted yet, so flag
+        // the running total provisional (the `*`) rather than dropping the player off the board — and
+        // with them the prior rounds they HAVE completed — for the whole time the match hangs.
+        v.provisional = true;
       } else if (count) {
-        v.complete = false; // counted match with unknown duration — total undercounts
+        v.complete = false; // a FINISHED match with unknown duration — the total genuinely undercounts
       }
     }
   }
@@ -546,10 +561,15 @@ export function matchInsight(s: Snapshot, matchId: string, time: Map<string, Pla
     const tb = m.score.filter((set) => set.tb != null).length;
     if (tb) badges.push(`${tb} tiebreak${tb > 1 ? "s" : ""}`);
   }
-  if (m.durationSec != null) {
+  // Marathon/Quick describe a measured final duration — skip them while the value is provisional (a live
+  // elapsed, or a suspension-healed estimate), so an estimate can't mint "Marathon" until it's confirmed.
+  if (m.durationSec != null && !m.durationProvisional) {
     if (m.durationSec >= 10800) badges.push("Marathon");
     else if (m.status === "finished" && m.durationSec < 5400) badges.push("Quick");
   }
+  // A completed match that spanned a stoppage: surface the persisted flag so its duration (a per-set
+  // estimate until Sackmann's minutes land) reads in context rather than as a bare number.
+  if (m.wasSuspended && (m.status === "finished" || m.status === "retired")) badges.push("Suspended");
 
   return {
     matchId, roundName: s.rounds[m.roundIndex]?.name ?? "", surface,

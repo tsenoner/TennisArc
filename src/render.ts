@@ -4,6 +4,7 @@ import type { ColorFn } from "./color";
 import { COLOR_DIMS, type ColorDim } from "./color";
 import type { Tour } from "./model";
 import type { Round, SlamIndex } from "./model";
+import { isInProgress } from "./model";
 import type { Theme } from "./theme";
 import { flagEmoji, flagAssetUrl } from "./flags";
 import type { LeaderRow, SeedProgress, SeedSort, NationRow, InsightSide, MatchInsight } from "./state";
@@ -174,6 +175,7 @@ export function renderSunburst(
       const cls = (a.projected ? "arc projected" : "arc")
         + (color.pending?.(a) ? " pending" : "")
         + (a.live ? " live" : "")
+        + (a.suspended ? " suspended" : "")
         + (!a.projected && a.occupant && eliminated?.has(a.occupant) ? " out" : "");
       if (labels && !a.projected && a.occupant && labels.anchors.has(a.id)) {
         // Country lens: a flag image at the arc centroid, rotated tangentially like the
@@ -286,8 +288,11 @@ export function renderSunburst(
   const corners = quarters ? quarterCorners(quarters, c) : "";
 
   // Live-ness reaches screen readers as text, not styling: the chart's accessible name carries
-  // the in-progress count (read on focus); per-match "live" also shows in the inspect strip.
-  const liveNote = liveCount ? ` — ${liveCount} ${liveCount === 1 ? "match" : "matches"} in progress` : "";
+  // the in-progress count (read on focus); per-match "live" also shows in the inspect strip. A
+  // suspended (paused) match is still in progress, so it's counted here too — even though its arc
+  // wears the static amber outline rather than the live hatch above.
+  const inProgressCount = liveCount + arcs.filter((a) => a.suspended).length;
+  const liveNote = inProgressCount ? ` — ${inProgressCount} ${inProgressCount === 1 ? "match" : "matches"} in progress` : "";
   return (
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
     `role="img" aria-label="Tournament bracket sunburst${liveNote}">` +
@@ -501,7 +506,9 @@ export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
   const rank = info.ranking != null ? `#${info.ranking}` : "";
   const seed = info.seed != null ? `seed ${info.seed}` : "";
   const meta1 = [rank, seed].filter(Boolean).join(" · ");
-  const time = info.sec > 0 ? `${formatDuration(info.sec)}${info.provisional ? " (live)" : ""} on court` : "";
+  // `*` (not "(live)") because a player's aggregate can be provisional from an in-progress match OR a
+  // suspension-healed estimate — the same neutral marker the time leaderboard uses.
+  const time = info.sec > 0 ? `${formatDuration(info.sec)}${info.provisional ? "*" : ""} on court` : "";
   const meta2 = [info.roundLabel, time].filter(Boolean).join(" · ");
   return (
     `<div class="readout filled${info.projected ? " projected" : ""}${c}">` +
@@ -550,7 +557,8 @@ export function renderCenterSection(title: string): string {
 }
 
 function insightScore(ins: MatchInsight): string {
-  if (!ins.score || !ins.score.length) return ins.status === "live" ? "Live" : "—";
+  if (!ins.score || !ins.score.length)
+    return ins.status === "live" ? "Live" : ins.status === "suspended" ? "Suspended" : "—";
   return ins.score
     .map((set) => {
       const sup = set.tb != null ? `<sup>${set.tb}</sup>` : "";
@@ -600,8 +608,10 @@ function stripSide(side: InsightSide, win: boolean, rev: boolean): string {
  *  viewport (the same dock pattern the readout already uses ≤960px). The wheel is never
  *  covered; the heavy tail lives one tap away behind "Details ▾" (renderMatchDetail). */
 export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean; noZoom?: boolean }): string {
-  const live = ins.status === "live"
-    ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>` : "";
+  const statusTag = ins.status === "live"
+    ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>`
+    : ins.status === "suspended"
+    ? ` · <span class="ms-susp"><span class="ms-pause" aria-hidden="true"></span>suspended</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
   // Only when the view already sits AT this match's own section does it flip to "Reset
   // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
@@ -615,7 +625,7 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
     : `<button class="ms-zoom" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Zoom</button>`;
   return (
     `<div class="match-strip" role="region" aria-label="Match insight">` +
-    `<div class="ms-hd"><span class="ms-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}${live}</span>` +
+    `<div class="ms-hd"><span class="ms-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}${statusTag}</span>` +
     // aria-controls only while expanded — the #match-detail region is removed from the DOM
     // when collapsed, and a dangling IDREF reads inconsistently on some AT; aria-expanded
     // still conveys the collapsed state on its own.
@@ -639,8 +649,10 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
     .filter((b) => b !== "Upset")
     .map((b) => `<span class="mi-bdg">${escapeHtml(b)}</span>`)
     .join("");
-  const dur = ins.durationSec != null
-    ? `⏱ ${formatDuration(ins.durationSec)}${ins.durationProvisional ? " (live)" : ""}` : "";
+  // Provisional duration: "(live)" while a match is in progress, "(est.)" for a finished match whose
+  // time is a suspension-healed estimate (until Sackmann's measured minutes backfill it).
+  const durTag = ins.durationProvisional ? (isInProgress(ins.status) ? " (live)" : " (est.)") : "";
+  const dur = ins.durationSec != null ? `⏱ ${formatDuration(ins.durationSec)}${durTag}` : "";
   const link = sofaUrl
     ? `<a class="mi-link" href="${sofaUrl}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";
   return (

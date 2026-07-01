@@ -33,6 +33,14 @@ describe("renderMatchStrip", () => {
     expect(html).toContain("7<sup>5</sup>-6");                 // set-2 tiebreak on winner side
   });
 
+  it("renders an amber 'suspended' tag and score fallback for a paused match", () => {
+    const ins: MatchInsight = { ...base, status: "suspended", winner: null, score: null };
+    const html = renderMatchStrip(ins, "r.0", opts);
+    expect(html).toContain('class="ms-susp"');
+    expect(html).toContain("suspended");   // the status tag
+    expect(html).toContain("Suspended");   // insightScore fallback in the score slot
+  });
+
   it("wires the strip actions: accented Zoom (focus), Details toggle, close", () => {
     const html = renderMatchStrip(base, "r.0.1", opts);
     expect(html).toContain('data-action="focus" data-id="r.0.1"');

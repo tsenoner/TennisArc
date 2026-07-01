@@ -1,7 +1,10 @@
 import { describe, it, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseMatchesCsv, applyDurations, qualChallUrl, keepWtaQualItf, type SlamDurationRow } from "./durations";
+import {
+  parseMatchesCsv, applyDurations, qualChallUrl, keepWtaQualItf,
+  recoverLocalDurationSec, MAX_SET_SEC, MAX_LOCAL_SEC, type SlamDurationRow,
+} from "./durations";
 import type { Match, Player } from "../src/model";
 
 const csv = readFileSync(resolve(__dirname, "fixtures/matches-sample.csv"), "utf8");
@@ -123,6 +126,64 @@ describe("applyDurations", () => {
     const matches = { m };
     applyDurations(matches, players, aoRows);
     expect(matches.m.durationSec).toBe(1234);
+  });
+});
+
+describe("recoverLocalDurationSec", () => {
+  it("sums per-set seconds for a clean (un-suspended) match", () => {
+    expect(recoverLocalDurationSec({ period1: 1822, period2: 2463, period3: 3450 })).toBe(1822 + 2463 + 3450);
+  });
+
+  it("ignores non-period keys like currentPeriodStartTimestamp", () => {
+    expect(recoverLocalDurationSec({ period1: 1822, period2: 2463, currentPeriodStartTimestamp: 1782760235 }))
+      .toBe(1822 + 2463);
+  });
+
+  it("heals an overnight-suspended set by estimating it from the un-suspended sets", () => {
+    // Nakashima d. Pinnington Jones, Wimbledon 2026 R128 (6-3 7-6 7-5): set 3 absorbed the 11pm
+    // curfew suspension (65 336s ≈ 18h) while sets 1–2 were normal. Estimate the suspended set as
+    // the mean of the clean ones instead of nulling the whole (finished) match.
+    const got = recoverLocalDurationSec({ period1: 2546, period2: 3217, period3: 65336 });
+    const mean = (2546 + 3217) / 2;
+    expect(got).toBe(Math.round(2546 + 3217 + mean));
+  });
+
+  it("heals a 5-setter suspended overnight (De Jong d. Hijikata, Wimbledon 2026)", () => {
+    const time = { period1: 3715, period2: 2962, period3: 59818, period4: 3036, period5: 2899 };
+    const clean = [3715, 2962, 3036, 2899];
+    const cleanSum = clean.reduce((a, b) => a + b, 0);
+    expect(recoverLocalDurationSec(time)).toBe(Math.round(cleanSum + cleanSum / clean.length));
+  });
+
+  it("flags any set longer than MAX_SET_SEC as suspension-inflated and estimates it from the clean sets", () => {
+    expect(MAX_SET_SEC).toBeLessThan(65336); // a real tiebreak-era set never runs anywhere near this
+    const got = recoverLocalDurationSec({ period1: 3000, period2: 3200, period3: MAX_SET_SEC + 1 });
+    const mean = (3000 + 3200) / 2;
+    expect(got).toBe(Math.round(3000 + 3200 + mean)); // set 3 (inflated) estimated as the mean of sets 1–2
+  });
+
+  it("defers to Sackmann (null) when an inflated set has fewer than two clean anchors", () => {
+    // suspended during set 1 (period1 absorbs the overnight gap), then a retirement a few games into
+    // set 2: a lone 400s partial set is not a representative template for the full suspended set, so
+    // estimating from it would mint an absurdly short, authoritative-looking duration — defer instead.
+    expect(recoverLocalDurationSec({ period1: 65336, period2: 400 })).toBeNull();
+    // even one normal clean set isn't a trustworthy basis for estimating the suspended one
+    expect(recoverLocalDurationSec({ period1: 65336, period2: 2800 })).toBeNull();
+  });
+
+  it("returns null when EVERY set is implausibly long (a genuine >6h epic and uniform garbage are indistinguishable — defer to Sackmann)", () => {
+    expect(recoverLocalDurationSec({ period1: 12000, period2: 11760 })).toBeNull();
+  });
+
+  it("returns null when there are no period entries at all", () => {
+    expect(recoverLocalDurationSec({})).toBeNull();
+    expect(recoverLocalDurationSec({ currentPeriodStartTimestamp: 1782760235 })).toBeNull();
+  });
+
+  it("returns null when the recovered total still exceeds the 6h local bound (genuine epic → Sackmann)", () => {
+    const long = Math.round(MAX_LOCAL_SEC / 3); // ~2h each: under MAX_SET_SEC, so none flagged...
+    expect(recoverLocalDurationSec({ period1: long, period2: long, period3: long, period4: long }))
+      .toBeNull(); // ...but four of them sum past 6h, so the local value is dropped
   });
 });
 

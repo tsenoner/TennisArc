@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
 import { colorScale, COLOR_DIMS, type ArcColorInput } from "./color";
 
-const arc = (occupant: string | null, depth = 1, projected = false, live = false): ArcColorInput => ({ occupant, depth, projected, live });
+const arc = (occupant: string | null, depth = 1, projected = false, live = false, suspended = false): ArcColorInput => ({ occupant, depth, projected, live, suspended });
 
 describe("colorScale", () => {
   it("exposes the supported dimensions", () => {
@@ -87,6 +87,16 @@ describe("colorScale time lens — pending vs played", () => {
     // p0 has zero on-court time → neutral grey, NOT HEAT(0)'s teal "fresh" tone
     expect(scale(arc("p0", numRounds, false))).toMatch(PENDING);
     expect(scale(arc("p0", numRounds, false))).toBe(scale(arc(null)));
+  });
+
+  it("keeps a SUSPENDED arc lit like live (heat, not the grey pending tier) even at zero time", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    const scale = colorScale("time", s);
+    const numRounds = s.rounds.length;
+    // same zero-time occupant: a plain projected arc is grey pending, but marked suspended it keeps heat
+    expect(scale(arc("p0", numRounds, true, false, false))).toMatch(PENDING);      // projected, not in play
+    expect(scale(arc("p0", numRounds, true, false, true))).toMatch(PLAYED);        // suspended → in play → heat
+    expect(scale.pending!(arc("p0", numRounds, true, false, true))).toBe(false);   // not pending
   });
 
   it("still colours a played, decided arc with warm heat (regression guard)", () => {

@@ -44,6 +44,18 @@ describe("renderSunburst", () => {
     expect(svg).toMatch(/class="arc[^"]*\blive\b[^"]*"/);
   });
 
+  it("marks a suspended match arc with the suspended class (paused, still lit)", () => {
+    const suspArc: LayoutArc = {
+      id: "r.0", matchId: "1-0", occupant: "p0", projected: true, suspended: true,
+      depth: 1, x0: 0, x1: Math.PI, y0: 40, y1: 120,
+    };
+    const svg = renderSunburst([suspArc], () => "rgb(200,120,60)", 700);
+    expect(svg).toMatch(/class="arc[^"]*\bsuspended\b[^"]*"/);
+    expect(svg).not.toMatch(/class="arc[^"]*\blive\b[^"]*"/); // suspended is its own tier, not live
+    // a paused match is still in progress: it must reach screen readers via the accessible name
+    expect(svg).toContain("1 match in progress");
+  });
+
   it("hatches live arcs and announces the live count (Option A: static in-progress marker)", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
     s.matches["0-1"] = { ...s.matches["0-1"], status: "live", winner: null, durationSec: 1800, durationProvisional: true };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { enrichMatch, carryForwardCountries, fillMissingCountries } from "./enrich";
+import { enrichMatch, carryForwardCountries, carryForwardSuspended, fillMissingCountries } from "./enrich";
 import { eventSample, statsSample, liveEventSample } from "./fixtures/event-sample";
 import { flagAssetUrl } from "../src/flags";
 import type { Match, Player } from "../src/model";
@@ -27,17 +27,20 @@ describe("enrichMatch", () => {
     expect(pl["101"].country).toBe("FRA");
   });
 
-  it("nulls a finished duration past the 6h SofaScore bound (suspension wall-clock garbage)", () => {
-    const ev = { ...eventSample, time: { period1: 1822, period2: 341176 } }; // rain-suspended set
+  it("recovers a finished duration from the un-suspended sets instead of nulling the whole match", () => {
+    // set 3 spanned an overnight curfew suspension (65 336s ≈ 18h); sets 1–2 are normal. The healed
+    // duration estimates set 3 as the mean of the clean sets — so the finished match shows real time.
+    const ev = { ...eventSample, time: { period1: 2546, period2: 3217, period3: 65336 } };
     const m = enrichMatch(baseMatch(), ev, null, players(), 0);
-    expect(m.durationSec).toBeNull();
-    expect(m.durationProvisional).toBe(false);
+    const mean = (2546 + 3217) / 2;
+    expect(m.durationSec).toBe(Math.round(2546 + 3217 + mean));
+    expect(m.durationProvisional).toBe(true); // healed = estimated, so provisional until Sackmann backfills
   });
 
-  it("conservatively nulls a 6h+ periodN (a genuine epic and a suspension are indistinguishable; Sackmann backfills it)", () => {
-    const ev = { ...eventSample, time: { period1: 12000, period2: 11760 } }; // 23 760s ≈ 6h36 wall-clock
+  it("conservatively nulls a finished match where EVERY set is implausibly long (genuine epic and uniform garbage are indistinguishable; Sackmann backfills it)", () => {
+    const ev = { ...eventSample, time: { period1: 12000, period2: 11760 } }; // both sets > 3h: no clean anchor
     const m = enrichMatch(baseMatch(), ev, null, players(), 0);
-    expect(m.durationSec).toBeNull(); // > MAX_LOCAL_SEC (6h); the CSV pass restores the real on-court time
+    expect(m.durationSec).toBeNull(); // the CSV pass restores the real on-court time
   });
 
   it("for a live event derives provisional duration from now - startTimestamp and sets status live", () => {
@@ -47,6 +50,84 @@ describe("enrichMatch", () => {
     expect(m.durationSec).toBe(1800);
     expect(m.durationProvisional).toBe(true);
     expect(m.stats).toBeNull();
+  });
+
+  it("nulls a live duration whose elapsed exceeds the 6h bound (match resumed after an overnight suspension)", () => {
+    const ev = { ...liveEventSample, startTimestamp: 1000 };
+    const nowSec = ev.startTimestamp + 23 * 3600; // ~23h of wall-clock since it first started yesterday
+    const m = enrichMatch(baseMatch({ status: "live", winner: null, sofaEventId: 555 }), ev, null, players(), nowSec);
+    expect(m.status).toBe("live");
+    expect(m.durationSec).toBeNull(); // suspension wall-clock must not dominate the live leaderboard
+    expect(m.durationProvisional).toBe(false);
+  });
+
+  it("flags a live match with no point update for >20min as suspended (play has stopped)", () => {
+    const nowSec = 1_000_000;
+    // last point was 3h ago (overnight curfew): the feed has gone stale
+    const ev = { ...liveEventSample, startTimestamp: nowSec - 3600, changes: { changeTimestamp: nowSec - 3 * 3600 } };
+    const m = enrichMatch(baseMatch({ status: "live", winner: null, sofaEventId: 555 }), ev, null, players(), nowSec);
+    expect(m.status).toBe("suspended");
+    expect(m.durationSec).toBeNull();          // on-court time is unknown while paused
+    expect(m.durationProvisional).toBe(false);
+    expect(m.wasSuspended).toBe(true);
+  });
+
+  it("suppresses a suspended match's partial mid-play stats, exactly as for a live one", () => {
+    const nowSec = 1_000_000;
+    // paused mid-play (last point 3h ago) but SofaScore still serves a partial /statistics payload
+    const ev = { ...liveEventSample, startTimestamp: nowSec - 3600, changes: { changeTimestamp: nowSec - 3 * 3600 } };
+    const m = enrichMatch(baseMatch({ status: "live", winner: null, sofaEventId: 555 }), ev, statsSample, players(), nowSec);
+    expect(m.status).toBe("suspended");
+    expect(m.stats).toBeNull(); // half-played aces/DF must not read as final while play is paused
+  });
+
+  it("does not flag a decided match as suspended even with a stale feed (winner already in)", () => {
+    const nowSec = 1_000_000;
+    // SofaScore lags on "inprogress" after the deciding point, so the feed is 3h stale — but winnerCode is set
+    const ev = { ...liveEventSample, winnerCode: 1, startTimestamp: nowSec - 3600, changes: { changeTimestamp: nowSec - 3 * 3600 } };
+    const m = enrichMatch(baseMatch({ status: "live", winner: null, sofaEventId: 555 }), ev, null, players(), nowSec);
+    expect(m.status).not.toBe("suspended"); // play is over, not paused
+    expect(m.wasSuspended).toBeFalsy();      // so no sticky suspension flag / badge is minted
+  });
+
+  it("keeps a live match with a fresh feed as live — even a RESUMED one whose set has been 'open' for hours", () => {
+    const nowSec = 1_000_000;
+    // currentPeriodStartTimestamp stays frozen at the pre-suspension value after a mid-set resumption,
+    // but points are flowing again (updated 30s ago) → the staleness signal correctly reads it as live.
+    const ev = { ...liveEventSample, startTimestamp: nowSec - 16 * 3600,
+      time: { currentPeriodStartTimestamp: nowSec - 16 * 3600 }, changes: { changeTimestamp: nowSec - 30 } };
+    const m = enrichMatch(baseMatch({ status: "live", winner: null }), ev, null, players(), nowSec);
+    expect(m.status).toBe("live");
+    expect(m.wasSuspended).toBeFalsy();
+  });
+
+  it("falls back to an implausibly-long-open set when the event carries no update timestamp", () => {
+    const setStart = 100_000;
+    const nowSec = setStart + 16 * 3600; // set 'open' 16h and no `changes` field at all
+    const ev = { ...liveEventSample, startTimestamp: setStart, time: { currentPeriodStartTimestamp: setStart } };
+    const m = enrichMatch(baseMatch({ status: "live", winner: null }), ev, null, players(), nowSec);
+    expect(m.status).toBe("suspended");
+  });
+
+  it("keeps a normal live match as live (a point landed a minute ago)", () => {
+    const nowSec = 100_000;
+    const ev = { ...liveEventSample, startTimestamp: nowSec - 1800, changes: { changeTimestamp: nowSec - 60 } };
+    const m = enrichMatch(baseMatch({ status: "live", winner: null }), ev, null, players(), nowSec);
+    expect(m.status).toBe("live");
+    expect(m.durationSec).toBe(1800);
+    expect(m.wasSuspended).toBeFalsy();
+  });
+
+  it("flags a FINISHED match whose per-set time carries a suspension-inflated set as wasSuspended", () => {
+    const ev = { ...eventSample, time: { period1: 2546, period2: 3217, period3: 65336 } };
+    const m = enrichMatch(baseMatch(), ev, null, players(), 0);
+    expect(m.status).toBe("finished");
+    expect(m.wasSuspended).toBe(true);
+  });
+
+  it("does not flag a normal finished match as wasSuspended", () => {
+    const m = enrichMatch(baseMatch(), eventSample, statsSample, players(), 0);
+    expect(m.wasSuspended).toBeFalsy();
   });
 
   it("maps a retired match (status description) and still counts played time", () => {
@@ -143,6 +224,28 @@ describe("fillMissingCountries", () => {
     expect(seen).toEqual([235576]); // 404404 is not in players → never looked up
     expect(players["235576"].country).toBe("USA");
     expect(res).toEqual({ filled: 1, missing: 1 });
+  });
+});
+
+describe("carryForwardSuspended", () => {
+  it("ORs a prior wasSuspended flag onto the current match (sticky across refreshes)", () => {
+    const matches = { "0-1": baseMatch({ id: "0-1", wasSuspended: false }) };
+    const prior = { "0-1": baseMatch({ id: "0-1", wasSuspended: true }) };
+    const n = carryForwardSuspended(matches, prior);
+    expect(matches["0-1"].wasSuspended).toBe(true);
+    expect(n).toBe(1);
+  });
+
+  it("never clears a flag the current refresh already set, and needs no prior entry", () => {
+    const matches = { "0-1": baseMatch({ id: "0-1", wasSuspended: true }) };
+    expect(carryForwardSuspended(matches, { "0-1": baseMatch({ id: "0-1", wasSuspended: false }) })).toBe(0);
+    expect(matches["0-1"].wasSuspended).toBe(true);
+  });
+
+  it("is a no-op with no prior snapshot (first run)", () => {
+    const matches = { "0-1": baseMatch({ id: "0-1" }) };
+    expect(carryForwardSuspended(matches, null)).toBe(0);
+    expect(matches["0-1"].wasSuspended).toBeFalsy();
   });
 });
 
