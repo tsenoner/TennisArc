@@ -34,7 +34,7 @@ describe("enrichMatch", () => {
     const m = enrichMatch(baseMatch(), ev, null, players(), 0);
     const mean = (2546 + 3217) / 2;
     expect(m.durationSec).toBe(Math.round(2546 + 3217 + mean));
-    expect(m.durationProvisional).toBe(false);
+    expect(m.durationProvisional).toBe(true); // healed = estimated, so provisional until Sackmann backfills
   });
 
   it("conservatively nulls a finished match where EVERY set is implausibly long (genuine epic and uniform garbage are indistinguishable; Sackmann backfills it)", () => {
@@ -70,6 +70,24 @@ describe("enrichMatch", () => {
     expect(m.durationSec).toBeNull();          // on-court time is unknown while paused
     expect(m.durationProvisional).toBe(false);
     expect(m.wasSuspended).toBe(true);
+  });
+
+  it("suppresses a suspended match's partial mid-play stats, exactly as for a live one", () => {
+    const nowSec = 1_000_000;
+    // paused mid-play (last point 3h ago) but SofaScore still serves a partial /statistics payload
+    const ev = { ...liveEventSample, startTimestamp: nowSec - 3600, changes: { changeTimestamp: nowSec - 3 * 3600 } };
+    const m = enrichMatch(baseMatch({ status: "live", winner: null, sofaEventId: 555 }), ev, statsSample, players(), nowSec);
+    expect(m.status).toBe("suspended");
+    expect(m.stats).toBeNull(); // half-played aces/DF must not read as final while play is paused
+  });
+
+  it("does not flag a decided match as suspended even with a stale feed (winner already in)", () => {
+    const nowSec = 1_000_000;
+    // SofaScore lags on "inprogress" after the deciding point, so the feed is 3h stale — but winnerCode is set
+    const ev = { ...liveEventSample, winnerCode: 1, startTimestamp: nowSec - 3600, changes: { changeTimestamp: nowSec - 3 * 3600 } };
+    const m = enrichMatch(baseMatch({ status: "live", winner: null, sofaEventId: 555 }), ev, null, players(), nowSec);
+    expect(m.status).not.toBe("suspended"); // play is over, not paused
+    expect(m.wasSuspended).toBeFalsy();      // so no sticky suspension flag / badge is minted
   });
 
   it("keeps a live match with a fresh feed as live — even a RESUMED one whose set has been 'open' for hours", () => {

@@ -1,5 +1,5 @@
 import type { Match, MatchStatus, Player, Round, SetScore, Snapshot } from "./model";
-import { isPlaceholderPlayer } from "./model";
+import { isPlaceholderPlayer, isInProgress } from "./model";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -263,8 +263,10 @@ export interface PlayerTime {
 
 /** Whether a match's on-court time should be counted, and whether it's provisional. */
 export function countsTime(m: Match): { count: boolean; provisional: boolean } {
-  if (m.status === "finished" || m.status === "retired") return { count: true, provisional: false };
-  if (m.status === "live" || m.status === "suspended") return { count: true, provisional: true };
+  // A finished match's time is measured — UNLESS its duration is a locally-healed suspension estimate
+  // (durationProvisional), which ranks with a `*` until Sackmann's exact minutes backfill it.
+  if (m.status === "finished" || m.status === "retired") return { count: true, provisional: m.durationProvisional };
+  if (isInProgress(m.status)) return { count: true, provisional: true };
   return { count: false, provisional: false }; // walkover / scheduled / notstarted
 }
 
@@ -288,8 +290,14 @@ export function timeOnCourt(s: Snapshot): Map<string, PlayerTime> {
         v.sec += m.durationSec;
         v.matches += 1;
         if (provisional) v.provisional = true;
+      } else if (count && provisional) {
+        // An in-progress (live/suspended) match whose current on-court time is still unknown — resumed
+        // after an overnight suspension, or paused mid-play. Its time simply isn't counted yet, so flag
+        // the running total provisional (the `*`) rather than dropping the player off the board — and
+        // with them the prior rounds they HAVE completed — for the whole time the match hangs.
+        v.provisional = true;
       } else if (count) {
-        v.complete = false; // counted match with unknown duration — total undercounts
+        v.complete = false; // a FINISHED match with unknown duration — the total genuinely undercounts
       }
     }
   }
@@ -504,7 +512,7 @@ export interface InsightSide {
 
 export interface MatchInsight {
   matchId: string; roundName: string; surface: string;
-  status: MatchStatus; winner: "p1" | "p2" | null; wasSuspended: boolean;
+  status: MatchStatus; winner: "p1" | "p2" | null;
   score: SetScore[] | null; durationSec: number | null; durationProvisional: boolean;
   p1: InsightSide; p2: InsightSide;
   badges: string[]; upset: boolean; eloLine: string;
@@ -553,7 +561,9 @@ export function matchInsight(s: Snapshot, matchId: string, time: Map<string, Pla
     const tb = m.score.filter((set) => set.tb != null).length;
     if (tb) badges.push(`${tb} tiebreak${tb > 1 ? "s" : ""}`);
   }
-  if (m.durationSec != null) {
+  // Marathon/Quick describe a measured final duration — skip them while the value is provisional (a live
+  // elapsed, or a suspension-healed estimate), so an estimate can't mint "Marathon" until it's confirmed.
+  if (m.durationSec != null && !m.durationProvisional) {
     if (m.durationSec >= 10800) badges.push("Marathon");
     else if (m.status === "finished" && m.durationSec < 5400) badges.push("Quick");
   }
@@ -563,7 +573,7 @@ export function matchInsight(s: Snapshot, matchId: string, time: Map<string, Pla
 
   return {
     matchId, roundName: s.rounds[m.roundIndex]?.name ?? "", surface,
-    status: m.status, winner: m.winner, wasSuspended: !!m.wasSuspended, score: m.score,
+    status: m.status, winner: m.winner, score: m.score,
     durationSec: m.durationSec, durationProvisional: m.durationProvisional,
     p1, p2, badges, upset, eloLine,
     aces: m.stats?.aces ?? null, doubleFaults: m.stats?.doubleFaults ?? null,

@@ -52,6 +52,8 @@ describe("renderSunburst", () => {
     const svg = renderSunburst([suspArc], () => "rgb(200,120,60)", 700);
     expect(svg).toMatch(/class="arc[^"]*\bsuspended\b[^"]*"/);
     expect(svg).not.toMatch(/class="arc[^"]*\blive\b[^"]*"/); // suspended is its own tier, not live
+    // a paused match is still in progress: it must reach screen readers via the accessible name
+    expect(svg).toContain("1 match in progress");
   });
 
   it("hatches live arcs and announces the live count (Option A: static in-progress marker)", () => {

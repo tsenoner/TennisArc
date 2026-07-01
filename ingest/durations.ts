@@ -57,6 +57,21 @@ export const MAX_LOCAL_SEC = 21_600;
 // it cleanly isolates the corrupted period without ever clipping a real one (see recoverLocalDurationSec).
 export const MAX_SET_SEC = 10_800;
 
+/** The per-set on-court seconds from a SofaScore `time` object (its `periodN` keys, missing coerced to
+ *  0), so the periodN filter lives in one place for both suspension helpers below. */
+function periodSeconds(time: Record<string, number | undefined>): number[] {
+  return Object.entries(time)
+    .filter(([k]) => /^period\d+$/.test(k))
+    .map(([, v]) => v ?? 0);
+}
+
+/** True when any per-set time.periodN exceeds the plausible single-set ceiling — the signature of a
+ *  rain/curfew suspension folded into one set (see recoverLocalDurationSec). Used to mark a finished
+ *  match as having been suspended even after SofaScore drops back to a plain "finished" status. */
+export function hasSuspendedPeriod(time: Record<string, number | undefined>): boolean {
+  return periodSeconds(time).some((s) => s > MAX_SET_SEC);
+}
+
 /**
  * Best-estimate on-court seconds for a FINISHED/RETIRED match from SofaScore's per-set `time.periodN`,
  * healing the rain/curfew-suspension corruption. When play is suspended (e.g. the 11pm Wimbledon
@@ -73,17 +88,8 @@ export const MAX_SET_SEC = 10_800;
  * extrapolating from it would mint an absurd duration); or a recovered total past the 6h local bound.
  * A null finished duration is later restored from Sackmann's CSV.
  */
-/** True when any per-set time.periodN exceeds the plausible single-set ceiling — the signature of a
- *  rain/curfew suspension folded into one set (see recoverLocalDurationSec). Used to mark a finished
- *  match as having been suspended even after SofaScore drops back to a plain "finished" status. */
-export function hasSuspendedPeriod(time: Record<string, number | undefined>): boolean {
-  return Object.entries(time).some(([k, v]) => /^period\d+$/.test(k) && (v ?? 0) > MAX_SET_SEC);
-}
-
 export function recoverLocalDurationSec(time: Record<string, number | undefined>): number | null {
-  const periods = Object.entries(time)
-    .filter(([k, v]) => /^period\d+$/.test(k) && (v ?? 0) > 0)
-    .map(([, v]) => v as number);
+  const periods = periodSeconds(time).filter((s) => s > 0);
   const clean = periods.filter((s) => s <= MAX_SET_SEC);
   const inflatedCount = periods.length - clean.length;
   // Healing an inflated set means estimating its on-court time as the mean of the un-suspended sets —

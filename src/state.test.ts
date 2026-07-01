@@ -123,6 +123,19 @@ describe("timeOnCourt coverage", () => {
     const other = s.matches["0-1"];
     expect(t.get(other.p1!)!.complete).toBe(true);
   });
+
+  it("keeps an in-progress (null-duration) match's players on the board — provisional, not incomplete", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3 });
+    const m = s.matches["0-0"];
+    // a suspended / resumed match whose current on-court time isn't known yet (durationSec null)
+    s.matches["0-0"] = { ...m, status: "suspended", winner: null, durationSec: null };
+    const t = timeOnCourt(s);
+    // unlike a FINISHED null-duration match (which flips complete=false and drops the player), an
+    // in-progress one only marks the total provisional — the player keeps their completed prior rounds
+    expect(t.get(m.p1!)!.complete).toBe(true);
+    expect(t.get(m.p1!)!.provisional).toBe(true);
+    expect(t.get(m.p2!)!.complete).toBe(true);
+  });
 });
 
 describe("timeLeaderboard", () => {
@@ -529,11 +542,26 @@ describe("suspended-match handling", () => {
     expect(countsTime({ status: "suspended" } as any)).toEqual({ count: true, provisional: true });
   });
 
-  it("badges a finished match that spanned a suspension and exposes wasSuspended", () => {
+  it("badges a finished match that spanned a suspension", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     s.matches["0-0"] = { ...s.matches["0-0"], wasSuspended: true };
     const ins = insight3(s, "0-0", toc3(s))!;
-    expect(ins.wasSuspended).toBe(true);
     expect(ins.badges).toContain("Suspended");
+  });
+
+  it("treats a locally-healed (estimated) finished duration as provisional, a measured one as final", () => {
+    expect(countsTime({ status: "finished", durationProvisional: true } as any)).toEqual({ count: true, provisional: true });
+    expect(countsTime({ status: "finished", durationProvisional: false } as any)).toEqual({ count: true, provisional: false });
+  });
+
+  it("does not mint a Marathon badge off a provisional (healed) suspension estimate, and ranks it provisional", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    // a finished match whose >3h duration is a suspension-healed ESTIMATE, not measured minutes
+    s.matches["0-0"] = { ...s.matches["0-0"], status: "finished", durationSec: 12000, durationProvisional: true, wasSuspended: true };
+    const ins = insight3(s, "0-0", toc3(s))!;
+    expect(ins.badges).not.toContain("Marathon"); // an estimate is not a confirmed marathon
+    expect(ins.badges).toContain("Suspended");
+    // and the estimate carries a provisional total (the `*`) rather than ranking as measured
+    expect(toc3(s).get(s.matches["0-0"].p1!)!.provisional).toBe(true);
   });
 });

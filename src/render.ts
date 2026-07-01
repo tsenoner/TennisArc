@@ -4,6 +4,7 @@ import type { ColorFn } from "./color";
 import { COLOR_DIMS, type ColorDim } from "./color";
 import type { Tour } from "./model";
 import type { Round, SlamIndex } from "./model";
+import { isInProgress } from "./model";
 import type { Theme } from "./theme";
 import { flagEmoji, flagAssetUrl } from "./flags";
 import type { LeaderRow, SeedProgress, SeedSort, NationRow, InsightSide, MatchInsight } from "./state";
@@ -287,8 +288,11 @@ export function renderSunburst(
   const corners = quarters ? quarterCorners(quarters, c) : "";
 
   // Live-ness reaches screen readers as text, not styling: the chart's accessible name carries
-  // the in-progress count (read on focus); per-match "live" also shows in the inspect strip.
-  const liveNote = liveCount ? ` — ${liveCount} ${liveCount === 1 ? "match" : "matches"} in progress` : "";
+  // the in-progress count (read on focus); per-match "live" also shows in the inspect strip. A
+  // suspended (paused) match is still in progress, so it's counted here too — even though its arc
+  // wears the static amber outline rather than the live hatch above.
+  const inProgressCount = liveCount + arcs.filter((a) => a.suspended).length;
+  const liveNote = inProgressCount ? ` — ${inProgressCount} ${inProgressCount === 1 ? "match" : "matches"} in progress` : "";
   return (
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
     `role="img" aria-label="Tournament bracket sunburst${liveNote}">` +
@@ -502,7 +506,9 @@ export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
   const rank = info.ranking != null ? `#${info.ranking}` : "";
   const seed = info.seed != null ? `seed ${info.seed}` : "";
   const meta1 = [rank, seed].filter(Boolean).join(" · ");
-  const time = info.sec > 0 ? `${formatDuration(info.sec)}${info.provisional ? " (live)" : ""} on court` : "";
+  // `*` (not "(live)") because a player's aggregate can be provisional from an in-progress match OR a
+  // suspension-healed estimate — the same neutral marker the time leaderboard uses.
+  const time = info.sec > 0 ? `${formatDuration(info.sec)}${info.provisional ? "*" : ""} on court` : "";
   const meta2 = [info.roundLabel, time].filter(Boolean).join(" · ");
   return (
     `<div class="readout filled${info.projected ? " projected" : ""}${c}">` +
@@ -643,8 +649,10 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
     .filter((b) => b !== "Upset")
     .map((b) => `<span class="mi-bdg">${escapeHtml(b)}</span>`)
     .join("");
-  const dur = ins.durationSec != null
-    ? `⏱ ${formatDuration(ins.durationSec)}${ins.durationProvisional ? " (live)" : ""}` : "";
+  // Provisional duration: "(live)" while a match is in progress, "(est.)" for a finished match whose
+  // time is a suspension-healed estimate (until Sackmann's measured minutes backfill it).
+  const durTag = ins.durationProvisional ? (isInProgress(ins.status) ? " (live)" : " (est.)") : "";
+  const dur = ins.durationSec != null ? `⏱ ${formatDuration(ins.durationSec)}${durTag}` : "";
   const link = sofaUrl
     ? `<a class="mi-link" href="${sofaUrl}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";
   return (

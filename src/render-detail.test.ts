@@ -8,7 +8,7 @@ const rounds = [
   { index: 6, name: "Final", size: 2, matchIds: [] },
 ];
 const base: MatchInsight = {
-  matchId: "6-0", roundName: "Final", surface: "Clay", status: "finished", winner: "p1", wasSuspended: false,
+  matchId: "6-0", roundName: "Final", surface: "Clay", status: "finished", winner: "p1",
   score: [{ p1: 4, p2: 6 }, { p1: 7, p2: 6, tb: 5 }, { p1: 6, p2: 3 }],
   durationSec: 11760, durationProvisional: false,
   p1: { id: "a", name: "Carlos Alcaraz", country: "ESP", seed: 2, ranking: 2, elo: 2106, roundReached: 7, sec: 22320, age: 22, birthday: "5 May", birthdayNear: true },

@@ -36,6 +36,12 @@ describe("slamStatus", () => {
   it("is complete when in-window and the final is decided", () => {
     expect(slamStatus(snap([{ nextMatchId: null, status: "finished", winner: "p1" }]), D("2026-06-08T00:00:00Z"))).toBe("complete");
   });
+  it("stays live while a match is suspended (paused mid-play counts as in progress)", () => {
+    expect(slamStatus(snap([
+      { nextMatchId: null, status: "finished", winner: "p1" },
+      { id: "1", nextMatchId: "x", status: "suspended" },
+    ]), D("2026-06-08T00:00:00Z"))).toBe("live");
+  });
   it("is upcoming when the event window hasn't opened yet", () => {
     expect(slamStatus(snap([{ nextMatchId: null, status: "scheduled" }], { slam: "us-open", name: "US Open", surface: "Hard" }), D("2026-06-12T00:00:00Z"))).toBe("upcoming");
   });
