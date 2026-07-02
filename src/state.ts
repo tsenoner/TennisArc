@@ -559,7 +559,10 @@ export function matchInsight(s: Snapshot, matchId: string, time: Map<string, Pla
   if (!m) return null;
   const surface = s.tournament.surface;
   const ref = s.generatedAt ?? new Date().toISOString();
-  const nowSec = Math.floor((Date.parse(ref) || Date.now()) / 1000);
+  // Date.parse returns NaN (not null) for an unparseable ref — guard on NaN, not falsiness, so a valid
+  // epoch-0 ref isn't silently swapped for "now" the way `Date.parse(ref) || Date.now()` would.
+  const parsedRef = Date.parse(ref);
+  const nowSec = Math.floor((Number.isNaN(parsedRef) ? Date.now() : parsedRef) / 1000);
   const p1 = insightSide(s, m.p1, surface, time, ref);
   const p2 = insightSide(s, m.p2, surface, time, ref);
   const badges: string[] = [];

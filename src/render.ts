@@ -340,15 +340,21 @@ export function formatDuration(sec: number): string {
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
 }
 
+// Two order-of-play formatters (compact for the strip; full carries the calendar date), built once at
+// module load. Intl.DateTimeFormat construction is comparatively costly, and both read the runtime's
+// default time zone, which is fixed for the session — so there's nothing to rebuild per call. (Each
+// date's UTC offset, incl. DST, is still resolved at format() time, so cross-DST dates render right.)
+const SCHED_FMT = new Intl.DateTimeFormat("en-GB",
+  { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+const SCHED_FMT_FULL = new Intl.DateTimeFormat("en-GB",
+  { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+
 /** An order-of-play slot for a not-yet-played match: "Thu, 13:40 · Court 2" (compact, for the strip)
  *  or — with `full` — "Thu 2 Jul, 13:40 · Court 2" (for the detail tier). Rendered in the viewer's
  *  local time (the epoch is absolute); the caller frames it as a scheduled, provisional time. Returns
  *  plain text with the court unescaped — escape it at the HTML boundary. */
 export function formatScheduled(start: number, court: string | null, full = false): string {
-  const opts: Intl.DateTimeFormatOptions = full
-    ? { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }
-    : { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false };
-  const when = new Intl.DateTimeFormat("en-GB", opts).format(new Date(start * 1000));
+  const when = (full ? SCHED_FMT_FULL : SCHED_FMT).format(new Date(start * 1000));
   return court ? `${when} · ${court}` : when;
 }
 

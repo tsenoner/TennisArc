@@ -143,7 +143,9 @@ export function enrichMatch(
   // fetches event detail for scheduled matches with two real players (collectEventIds). Absent = unknown.
   const scheduled = status === "scheduled";
   const scheduledStart = scheduled ? ev.startTimestamp : undefined;
-  const scheduledCourt = scheduled ? (ev.venue?.name ?? ev.venue?.stadium?.name) : undefined;
+  // `||` not `??`: a blank venue name ("") should fall through to the stadium name, not stand as an
+  // empty court that renders no court at all (formatScheduled drops a falsy court).
+  const scheduledCourt = scheduled ? (ev.venue?.name || ev.venue?.stadium?.name) : undefined;
 
   return {
     ...m, status, winner,

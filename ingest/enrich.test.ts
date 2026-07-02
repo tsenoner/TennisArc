@@ -146,6 +146,12 @@ describe("enrichMatch", () => {
     expect(m.scheduledCourt).toBe("Centre Court");
   });
 
+  it("falls back to the stadium name when the venue name is blank (not just absent)", () => {
+    const ev = { ...scheduledEventSample, venue: { name: "", stadium: { name: "Centre Court" } } };
+    const m = enrichMatch(baseMatch({ status: "scheduled", winner: null }), ev, null, players(), 0);
+    expect(m.scheduledCourt).toBe("Centre Court");
+  });
+
   it("does NOT stamp scheduled fields onto a finished match", () => {
     const m = enrichMatch(baseMatch(), eventSample, statsSample, players(), 0);
     expect(m.scheduledStart).toBeUndefined();

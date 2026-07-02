@@ -14,7 +14,7 @@ interface SofaBlock {
   finished: boolean; eventInProgress: boolean; order: number;
   participants: SofaParticipant[]; events?: number[];
 }
-interface SofaCuptrees { cupTrees: { rounds: { description: string; blocks: SofaBlock[] }[] }[] }
+export interface SofaCuptrees { cupTrees: { rounds: { description: string; blocks: SofaBlock[] }[] }[] }
 
 const ENTRY_TYPES = new Set(["Q", "WC", "LL", "PR"]);
 
