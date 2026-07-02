@@ -396,7 +396,8 @@ describe("renderSunburst — on-arc scheduled labels", () => {
     expect(renderSunburst([arc({ live: true })], color, 700, sched)).not.toContain("arc-sched");
     expect(renderSunburst([arc({ suspended: true })], color, 700, sched)).not.toContain("arc-sched");
     expect(renderSunburst([arc({ projected: false, occupant: "p9" })], color, 700, sched)).not.toContain("arc-sched");
-    expect(renderSunburst([arc({ depth: 0 })], color, 700, sched)).not.toContain("arc-sched"); // focused hub / centre
+    expect(renderSunburst([arc({ depth: 0, y0: 0, x0: 0, x1: Math.PI * 2 })], color, 700, sched)).not.toContain("arc-sched"); // unfocused root
+    expect(renderSunburst([arc({ depth: 2, y0: 0, y1: 120, x0: 0, x1: Math.PI * 2 })], color, 700, sched)).not.toContain("arc-sched"); // focused hub (original depth preserved, y0===0)
   });
 
   it("emits nothing when sched returns null (no scheduled info)", () => {

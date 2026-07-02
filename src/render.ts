@@ -283,10 +283,10 @@ export function renderSunburst(
         const label = labels.text(a.occupant);
         if (label) emitFitted(a, label);
         } // end image/text branch
-      } else if (labels?.sched && a.projected && !a.live && !a.suspended && a.depth >= 1) {
+      } else if (labels?.sched && a.projected && !a.live && !a.suspended && a.y0 > 0) {
         // Upcoming match: the always-on order-of-play tag, in the same label slot a winner's surname
-        // will occupy once decided. depth 0 is the centre disc (root or focused hub) — its cramped
-        // full-circle path draws garbage, and its pill/strip already carries the info; skip it.
+        // will occupy once decided. The centre disc — root or focused hub — is the one arc with
+        // y0 === 0; its pill/strip already carries the info, and a full-circle textPath draws garbage.
         // splitTwo splits "Tmrw 14:30" into day/time rows on two-column rings; the shortForm keeps
         // a clean bare day-word where even that doesn't fit.
         const stxt = labels.sched(a.matchId);
