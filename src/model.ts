@@ -73,6 +73,13 @@ export interface Match {
    *  across refreshes (carryForwardSuspended) so a finished-but-once-suspended match stays flagged even
    *  after SofaScore drops back to a plain code-100 "finished" with no stoppage marker. Absent = false. */
   wasSuspended?: boolean;
+  /** For a not-yet-played ("scheduled") match once the order of play is published: the SofaScore
+   *  scheduled start (Unix seconds) and the court/venue name. Order of play is released only ~a day
+   *  ahead, so these are present only for imminent matches and absent otherwise. The display layer
+   *  further gates them to a near-term trust window (beyond it SofaScore returns a nominal round-day
+   *  placeholder, not a real time) — see `scheduledInfo`. */
+  scheduledStart?: number;
+  scheduledCourt?: string;
   sofaEventId: number | null;
   sofaCustomId: string | null;
   stats: MatchStats | null;

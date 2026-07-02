@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeCuptrees } from "./normalize";
+import { normalizeCuptrees, collectEventIds } from "./normalize";
 import { cuptreesSample } from "./fixtures/cuptrees-sample";
 
 const meta = {
@@ -74,5 +74,40 @@ describe("normalizeCuptrees", () => {
     expect(s.matches["0-1"]).toMatchObject({ p1: "202", p2: "203", winner: "p2" });
     // Round metadata reflects unique matches, not the inflated block count.
     expect(s.rounds[0]).toMatchObject({ size: 4, matchIds: ["0-0", "0-1"] });
+  });
+});
+
+describe("collectEventIds", () => {
+  const side = (id: number, name: string) => ({ order: id % 2 === 0 ? 2 : 1, winner: false, team: { id, name, slug: name.toLowerCase() } });
+  // one block per case, all in a single round
+  const cup = {
+    cupTrees: [{
+      rounds: [{
+        description: "Round of 64",
+        blocks: [
+          // finished + in-progress: always fetched (existing behaviour)
+          { finished: true, eventInProgress: false, order: 1, events: [1], participants: [side(11, "Real A"), side(12, "Real B")] },
+          { finished: false, eventInProgress: true, order: 2, events: [2], participants: [side(13, "Real C"), side(14, "Real D")] },
+          // scheduled with BOTH sides real → an imminent order-of-play match: fetch it for its time/court
+          { finished: false, eventInProgress: false, order: 3, events: [3], participants: [side(15, "Real E"), side(16, "Real F")] },
+          // scheduled but one side is a "winner-of" placeholder (opponent undecided) → skip
+          { finished: false, eventInProgress: false, order: 4, events: [4], participants: [side(17, "Real G"), { order: 2, winner: false, team: { id: 904, name: "R64P4", slug: "r64p4" } }] },
+          // scheduled with BOTH sides placeholders (far-future slot, nominal time only) → skip
+          { finished: false, eventInProgress: false, order: 5, events: [5], participants: [{ order: 1, winner: false, team: { id: 909, name: "R64P9", slug: "r64p9" } }, { order: 2, winner: false, team: { id: 910, name: "R64P10", slug: "r64p10" } }] },
+        ],
+      }],
+    }],
+  };
+
+  it("fetches finished, in-progress AND scheduled-with-two-real-players events, skipping placeholder-fed slots", () => {
+    expect(collectEventIds(cup as never).sort((a, b) => a - b)).toEqual([1, 2, 3]);
+  });
+
+  it("dedupes an event id that appears in more than one block", () => {
+    const dup = { cupTrees: [{ rounds: [{ description: "R", blocks: [
+      { finished: true, eventInProgress: false, order: 1, events: [7], participants: [] },
+      { finished: true, eventInProgress: false, order: 2, events: [7], participants: [] },
+    ] }] }] };
+    expect(collectEventIds(dup as never)).toEqual([7]);
   });
 });

@@ -126,6 +126,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .ms-susp { color: var(--amber); font-weight: 600; }
 .ms-pause { display: inline-block; width: 6px; height: 8px; vertical-align: -1px; margin: 0 4px 0 1px;
   border-left: 2px solid var(--amber); border-right: 2px solid var(--amber); }
+/* upcoming match: compact order-of-play tag (time + court); natural case, teal accent */
+.ms-sched { color: var(--teal-text); font-weight: 600; text-transform: none; }
 .ms-more, .ms-close { background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px;
   cursor: pointer; padding: 4px 8px; border-radius: 8px; white-space: nowrap; }
 /* the zoom action is deliberately accented — it replaces the old buried ghost Focus button */
@@ -185,6 +187,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 /* the single upset signal (the redundant badge and "— upset" suffix are gone) */
 .mi-elo.upset { color: var(--upset); box-shadow: inset 2px 0 0 var(--upset); }
 .mi-dur { font-size: 12px; color: var(--dim); }
+/* upcoming match: the scheduled order-of-play line — a teal-accented info panel like .mi-elo */
+.mi-sched { font-size: 12px; color: var(--dim); background: var(--inset); border-radius: 8px;
+  padding: 8px 10px; box-shadow: inset 2px 0 0 var(--teal); }
+.mi-prov { opacity: .8; }
 .mi-link { display: block; text-align: center; font-size: 12px; padding: 9px; border-radius: 9px;
   cursor: pointer; text-decoration: none; background: var(--teal); color: #04211f; font-weight: 700; }
 

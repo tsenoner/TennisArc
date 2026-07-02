@@ -14,7 +14,7 @@ interface SofaBlock {
   finished: boolean; eventInProgress: boolean; order: number;
   participants: SofaParticipant[]; events?: number[];
 }
-interface SofaCuptrees { cupTrees: { rounds: { description: string; blocks: SofaBlock[] }[] }[] }
+export interface SofaCuptrees { cupTrees: { rounds: { description: string; blocks: SofaBlock[] }[] }[] }
 
 const ENTRY_TYPES = new Set(["Q", "WC", "LL", "PR"]);
 
@@ -35,6 +35,31 @@ function blockStatus(b: SofaBlock, anyPresent: boolean): MatchStatus {
  *  match side — leaving the slot as a TBD null exactly like an unprovided participant. */
 function realParticipant(p: SofaParticipant | undefined): SofaParticipant | undefined {
   return p && !PLACEHOLDER_TEAM_NAME.test(p.team.name) ? p : undefined;
+}
+
+/** Whether a block's `order`-th side (1 = home, 2 = away) is resolved to a real player. */
+function realSide(b: SofaBlock, order: number): boolean {
+  return !!realParticipant(b.participants.find((p) => p.order === order));
+}
+
+/**
+ * The SofaScore event ids whose per-event detail is worth fetching: every finished or in-progress
+ * match, PLUS every scheduled match whose BOTH sides are already real players — an imminent match
+ * whose published order-of-play time and court we want to surface. A scheduled block still fed by a
+ * "winner-of" placeholder (name like "R32P17") is a far-future slot that only carries a nominal
+ * round-day placeholder time, so its event is skipped to avoid a pointless network round-trip.
+ */
+export function collectEventIds(cup: SofaCuptrees): number[] {
+  const ids: number[] = [];
+  for (const tree of cup?.cupTrees ?? [])
+    for (const round of tree.rounds ?? [])
+      for (const b of round.blocks ?? []) {
+        if (!Array.isArray(b.events) || b.events.length === 0) continue;
+        const played = b.finished || b.eventInProgress;
+        const scheduledReal = !played && realSide(b, 1) && realSide(b, 2);
+        if (played || scheduledReal) ids.push(...b.events);
+      }
+  return [...new Set(ids)];
 }
 
 /** Convert a SofaScore cuptrees payload into our base Snapshot (no per-event detail yet). */

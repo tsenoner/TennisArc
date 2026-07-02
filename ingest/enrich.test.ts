@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { enrichMatch, carryForwardCountries, carryForwardSuspended, fillMissingCountries } from "./enrich";
-import { eventSample, statsSample, liveEventSample } from "./fixtures/event-sample";
+import { eventSample, statsSample, liveEventSample, scheduledEventSample } from "./fixtures/event-sample";
 import { flagAssetUrl } from "../src/flags";
 import type { Match, Player } from "../src/model";
 
@@ -128,6 +128,34 @@ describe("enrichMatch", () => {
   it("does not flag a normal finished match as wasSuspended", () => {
     const m = enrichMatch(baseMatch(), eventSample, statsSample, players(), 0);
     expect(m.wasSuspended).toBeFalsy();
+  });
+
+  it("records a scheduled match's order-of-play start and court, and leaves it timeless", () => {
+    const m = enrichMatch(baseMatch({ status: "scheduled", winner: null, sofaEventId: 999 }), scheduledEventSample, null, players(), 0);
+    expect(m.status).toBe("scheduled");
+    expect(m.scheduledStart).toBe(1782999600);
+    expect(m.scheduledCourt).toBe("Court 2");
+    expect(m.winner).toBeNull();
+    expect(m.durationSec).toBeNull();
+    expect(m.wasSuspended).toBeFalsy();
+  });
+
+  it("falls back to the stadium name when the venue has no direct name", () => {
+    const ev = { ...scheduledEventSample, venue: { stadium: { name: "Centre Court" } } };
+    const m = enrichMatch(baseMatch({ status: "scheduled", winner: null }), ev, null, players(), 0);
+    expect(m.scheduledCourt).toBe("Centre Court");
+  });
+
+  it("falls back to the stadium name when the venue name is blank (not just absent)", () => {
+    const ev = { ...scheduledEventSample, venue: { name: "", stadium: { name: "Centre Court" } } };
+    const m = enrichMatch(baseMatch({ status: "scheduled", winner: null }), ev, null, players(), 0);
+    expect(m.scheduledCourt).toBe("Centre Court");
+  });
+
+  it("does NOT stamp scheduled fields onto a finished match", () => {
+    const m = enrichMatch(baseMatch(), eventSample, statsSample, players(), 0);
+    expect(m.scheduledStart).toBeUndefined();
+    expect(m.scheduledCourt).toBeUndefined();
   });
 
   it("maps a retired match (status description) and still counts played time", () => {

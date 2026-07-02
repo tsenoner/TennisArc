@@ -340,6 +340,24 @@ export function formatDuration(sec: number): string {
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
 }
 
+// Two order-of-play formatters (compact for the strip; full carries the calendar date), built once at
+// module load. Intl.DateTimeFormat construction is comparatively costly, and both read the runtime's
+// default time zone, which is fixed for the session — so there's nothing to rebuild per call. (Each
+// date's UTC offset, incl. DST, is still resolved at format() time, so cross-DST dates render right.)
+const SCHED_FMT = new Intl.DateTimeFormat("en-GB",
+  { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+const SCHED_FMT_FULL = new Intl.DateTimeFormat("en-GB",
+  { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** An order-of-play slot for a not-yet-played match: "Thu, 13:40 · Court 2" (compact, for the strip)
+ *  or — with `full` — "Thu 2 Jul, 13:40 · Court 2" (for the detail tier). Rendered in the viewer's
+ *  local time (the epoch is absolute); the caller frames it as a scheduled, provisional time. Returns
+ *  plain text with the court unescaped — escape it at the HTML boundary. */
+export function formatScheduled(start: number, court: string | null, full = false): string {
+  const when = (full ? SCHED_FMT_FULL : SCHED_FMT).format(new Date(start * 1000));
+  return court ? `${when} · ${court}` : when;
+}
+
 const DIM_LABELS: Record<ColorDim, string> = { time: "Time", seed: "Seed", country: "Country" };
 
 export function renderControls(opts: {
@@ -612,6 +630,10 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
     ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>`
     : ins.status === "suspended"
     ? ` · <span class="ms-susp"><span class="ms-pause" aria-hidden="true"></span>suspended</span>` : "";
+  // Upcoming match: a compact order-of-play tag (time + court) in the caption. Only present within the
+  // near-term trust window (scheduledInfo) — a far-future placeholder time is deliberately withheld.
+  const schedTag = ins.scheduled
+    ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court))}</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
   // Only when the view already sits AT this match's own section does it flip to "Reset
   // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
@@ -625,7 +647,7 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
     : `<button class="ms-zoom" data-action="focus" data-id="${escapeHtml(nodeId)}">⊕ Zoom</button>`;
   return (
     `<div class="match-strip" role="region" aria-label="Match insight">` +
-    `<div class="ms-hd"><span class="ms-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}${statusTag}</span>` +
+    `<div class="ms-hd"><span class="ms-rnd">${escapeHtml(ins.roundName)} · ${escapeHtml(ins.surface)}${statusTag}${schedTag}</span>` +
     // aria-controls only while expanded — the #match-detail region is removed from the DOM
     // when collapsed, and a dangling IDREF reads inconsistently on some AT; aria-expanded
     // still conveys the collapsed state on its own.
@@ -653,6 +675,12 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
   // time is a suspension-healed estimate (until Sackmann's measured minutes backfill it).
   const durTag = ins.durationProvisional ? (isInProgress(ins.status) ? " (live)" : " (est.)") : "";
   const dur = ins.durationSec != null ? `⏱ ${formatDuration(ins.durationSec)}${durTag}` : "";
+  // Upcoming match: the full order-of-play line (date · time · court), flagged provisional — tennis
+  // times shift with match length and weather, and only the first match on a court is a firm start.
+  const sched = ins.scheduled
+    ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, true))}` +
+      ` <span class="mi-prov">· scheduled, subject to change</span></div>`
+    : "";
   const link = sofaUrl
     ? `<a class="mi-link" href="${sofaUrl}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";
   return (
@@ -668,6 +696,7 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
     `<button class="sheet-close" data-action="detail-expand" aria-label="Close details">✕</button></div>` +
     `<div class="mi-mu">${insightPlayer(ins.p1, ins.winner === "p1", rounds)}` +
     `${insightPlayer(ins.p2, ins.winner === "p2", rounds)}</div>` +
+    sched +
     (badges ? `<div class="mi-badges">${badges}</div>` : "") +
     statBar("Aces", ins.aces) + statBar("Double faults", ins.doubleFaults) +
     (ins.eloLine ? `<div class="mi-elo${ins.upset ? " upset" : ""}">${escapeHtml(ins.eloLine)}</div>` : "") +

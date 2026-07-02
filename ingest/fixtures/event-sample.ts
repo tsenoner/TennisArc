@@ -30,3 +30,14 @@ export const liveEventSample = {
   homeTeam: { country: { alpha3: "GER" } }, awayTeam: { country: { alpha3: "CZE" } },
   homeScore: { period1: 4 }, awayScore: { period1: 4 },
 };
+
+// A not-yet-played match once the order of play is published: SofaScore returns a real order-of-play
+// startTimestamp, a `notstarted` status, an empty score, and a `venue` naming the specific court.
+export const scheduledEventSample = {
+  customId: "SCHED42", slug: "e-vs-f", startTimestamp: 1782999600, // Thu 02 Jul 2026, 13:40 UTC
+  status: { code: 0, description: "Not started", type: "notstarted" }, winnerCode: 0,
+  time: {},
+  venue: { name: "Court 2", slug: "court-2", stadium: { name: "Court 2" } },
+  homeTeam: { country: { alpha3: "ITA" } }, awayTeam: { country: { alpha3: "FRA" } },
+  homeScore: {}, awayScore: {},
+};

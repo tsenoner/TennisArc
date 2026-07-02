@@ -331,3 +331,27 @@ describe("renderCenterSection", () => {
     expect(renderCenterSection("")).toBe("");
   });
 });
+
+import { formatScheduled } from "./render";
+
+describe("formatScheduled", () => {
+  const T = 1782999600; // Thu 02 Jul 2026, 13:40 UTC (tests run TZ=UTC)
+
+  it("compact form gives weekday, 24h time and court", () => {
+    const s = formatScheduled(T, "Court 2");
+    expect(s).toContain("Thu");
+    expect(s).toContain("13:40");
+    expect(s).toContain("Court 2");
+  });
+
+  it("full form additionally carries the calendar date", () => {
+    expect(formatScheduled(T, "Court 2", true)).toContain("2 Jul");
+  });
+
+  it("omits the court separator (and never prints 'null') when no court is known", () => {
+    const s = formatScheduled(T, null);
+    expect(s).toContain("13:40");
+    expect(s).not.toContain("·");
+    expect(s).not.toContain("null");
+  });
+});
