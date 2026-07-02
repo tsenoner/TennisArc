@@ -1,10 +1,10 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
   renderCenterSection, renderCrumbs, renderQuarterFocusButtons,
-  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, type ReadoutInfo,
+  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduled, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -264,6 +264,13 @@ export function createApp(root: HTMLElement): () => void {
     const labelImage = state.colorDim === "country"
       ? (occ: string) => flagAssetUrl(snap.players[occ]?.country ?? "")
       : undefined;
+    // Always-on order-of-play tags for upcoming arcs (matchId-keyed — anchors/text serve decided
+    // arcs only). Court is strip/detail-only; arcs stay compact. Lens-independent by design.
+    const schedLabel = (matchId: string): string | null => {
+      const m = snap.matches[matchId];
+      const info = m ? scheduledInfo(m, nowSec) : null;
+      return info ? formatScheduled(info.start, null, { nowSec, precise: info.precise }) : null;
+    };
     // Quarter-owner corner labels (drawn top seed; dimmed once out — quarterOwners). Hidden
     // entirely while focused: the corners become free space and the crumbs name the section.
     const qLabels = state.focusId
@@ -364,7 +371,7 @@ export function createApp(root: HTMLElement): () => void {
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +
-        `<div class="sunburst">${crumbs}${strip}<div class="chart" tabindex="-1">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage }, rings, qLabels, eliminated)}` +
+        `<div class="sunburst">${crumbs}${strip}<div class="chart" tabindex="-1">${renderSunburst(arcs, color, SIZE, { anchors, text: labelText, image: labelImage, sched: schedLabel }, rings, qLabels, eliminated)}` +
           centerId + `</div>` + (qLabels ? renderQuarterFocusButtons(qLabels) : "") + roFloat + `</div>` +
         `<div class="side">${panel}</div>` +
       `</div>` +
@@ -786,6 +793,20 @@ export function createApp(root: HTMLElement): () => void {
     else if (state.pinnedId) { state.pinnedId = undefined; draw(); }
     else if (state.focusId) { setFocus(undefined); draw(); }
   }, { signal });
+
+  // Scheduled-time staleness policy: all scheduled display runs on wall-clock "now" captured per
+  // draw(), so a long-lived tab must redraw when (a) it becomes visible again — the overnight-open
+  // tab — and (b) the viewer's local midnight passes while visible ("Today" must roll over). draw()
+  // self-guards while no snapshot is loaded.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) draw(); }, { signal });
+  let midnightTimer = 0;
+  const armMidnight = () => {
+    const now = new Date();
+    const msToMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
+    midnightTimer = window.setTimeout(() => { draw(); armMidnight(); }, msToMidnight + 1000);
+  };
+  armMidnight();
+  signal.addEventListener("abort", () => clearTimeout(midnightTimer));
 
   // ZOOM deep-link restore is deliberately NOT implemented (zoom is session-only): a
   // pre-existing #focus hash (a reloaded or shared URL) would lie about the unfocused first
