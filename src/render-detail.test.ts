@@ -84,7 +84,7 @@ describe("renderMatchStrip", () => {
 
   it("shows a compact scheduled time + court tag for an upcoming match", () => {
     const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null,
-      scheduled: { start: 1782999600, court: "Centre Court" } }; // Thu 2 Jul 2026, 13:40 UTC
+      scheduled: { start: 1782999600, court: "Centre Court", precise: true } }; // Thu 2 Jul 2026, 13:40 UTC
     const html = renderMatchStrip(ins, "r.0", opts);
     expect(html).toContain("ms-sched");
     expect(html).toContain("13:40");        // TZ=UTC (14:40 BST at Wimbledon)
@@ -131,7 +131,7 @@ describe("renderMatchDetail", () => {
 
   it("renders a scheduled order-of-play line (date, time, court) for an upcoming match", () => {
     const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null, durationSec: null,
-      scheduled: { start: 1782999600, court: "Court 2" } };
+      scheduled: { start: 1782999600, court: "Court 2", precise: true } };
     const html = renderMatchDetail(ins, null, rounds);
     expect(html).toContain("mi-sched");
     expect(html).toContain("2 Jul");   // full form carries the calendar date

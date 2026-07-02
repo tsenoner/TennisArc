@@ -503,23 +503,31 @@ export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limi
     .slice(0, limit);
 }
 
-export interface ScheduledInfo { start: number; court: string | null; }
+export interface ScheduledInfo { start: number; court: string | null; precise: boolean; }
 
-// Tennis publishes the order of play only ~a day ahead, and only the first match on each court gets a
-// real clock time — so a scheduled timestamp is a genuine order-of-play slot only when it's imminent.
-// Beyond ~36h SofaScore returns a nominal round-day placeholder (a bare 11:00 default) we must NOT show
-// as a time; a slot >6h in the past is likewise dropped (the match has surely started by now).
-const SCHED_TRUST_AHEAD_SEC = 36 * 3600;
-const SCHED_TRUST_BEHIND_SEC = 6 * 3600;
+// Two-tier order-of-play display. PRECISE = the per-event startTimestamp override (scheduledPrecise,
+// set at ingest) within a ~36h backstop — only that tier shows a clock time; an event-sourced stamp
+// for a round 2+ days out can itself still be a nominal placeholder. Everything else upcoming is
+// COARSE: a date-only nominal round-day stamp. Hide rules differ: a precise slot >6h past is stale
+// (the match surely started); a coarse slot survives until its UTC calendar day — the venue day —
+// is fully over, so a rain-slipped round keeps its date while the feed catches up.
+const SCHED_PRECISE_AHEAD_SEC = 36 * 3600;
+const SCHED_STALE_BEHIND_SEC = 6 * 3600;
 
-/** The order-of-play time (+ court, when known) to display for a not-yet-played match, or null when
- *  there is no trustworthy time: the match isn't scheduled, carries no recorded start, or the start
- *  falls outside the imminent trust window. `nowSec` is the reference "now" (Unix seconds). */
+/** The order-of-play info to display for a not-yet-played match, or null when there is nothing
+ *  trustworthy to show. `nowSec` is the WALL-CLOCK reference (Unix seconds) — never derive it from
+ *  the snapshot's generatedAt, which can lag hours when the refresh wedges. */
 export function scheduledInfo(m: Match, nowSec: number): ScheduledInfo | null {
-  if (m.status !== "scheduled" || m.scheduledStart == null) return null;
+  const upcoming = m.status === "scheduled" || m.status === "notstarted"; // allowlist: walkover/retired never leak a time
+  if (!upcoming || m.scheduledStart == null) return null;
   const dt = m.scheduledStart - nowSec;
-  if (dt > SCHED_TRUST_AHEAD_SEC || dt < -SCHED_TRUST_BEHIND_SEC) return null;
-  return { start: m.scheduledStart, court: m.scheduledCourt ?? null };
+  const precise = m.scheduledPrecise === true && dt <= SCHED_PRECISE_AHEAD_SEC;
+  if (precise) {
+    if (dt < -SCHED_STALE_BEHIND_SEC) return null;
+  } else if (nowSec >= (Math.floor(m.scheduledStart / 86400) + 1) * 86400) {
+    return null; // coarse: its UTC day is over
+  }
+  return { start: m.scheduledStart, court: m.scheduledCourt ?? null, precise };
 }
 
 export interface InsightSide {
@@ -554,15 +562,14 @@ function insightSide(s: Snapshot, pid: string | null, surface: string, time: Map
 }
 
 /** Derive a rich, narrative match insight (badges, ELO context, per-player path) for one match. */
-export function matchInsight(s: Snapshot, matchId: string, time: Map<string, PlayerTime>): MatchInsight | null {
+export function matchInsight(
+  s: Snapshot, matchId: string, time: Map<string, PlayerTime>,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): MatchInsight | null {
   const m = s.matches[matchId];
   if (!m) return null;
   const surface = s.tournament.surface;
-  const ref = s.generatedAt ?? new Date().toISOString();
-  // Date.parse returns NaN (not null) for an unparseable ref — guard on NaN, not falsiness, so a valid
-  // epoch-0 ref isn't silently swapped for "now" the way `Date.parse(ref) || Date.now()` would.
-  const parsedRef = Date.parse(ref);
-  const nowSec = Math.floor((Number.isNaN(parsedRef) ? Date.now() : parsedRef) / 1000);
+  const ref = s.generatedAt ?? new Date().toISOString(); // ages/birthdays reference only — never gates scheduled display
   const p1 = insightSide(s, m.p1, surface, time, ref);
   const p2 = insightSide(s, m.p2, surface, time, ref);
   const badges: string[] = [];
