@@ -1,6 +1,6 @@
 # Scheduled times for all rounds (order of play to the Final) — design
 
-**Date:** 2026-07-02
+**Date:** 2026-07-02 (rev 2 — after adversarial review panel; rev 1 flaws fixed are marked ⚠)
 **Status:** draft (awaiting user review)
 
 ## Goal
@@ -8,12 +8,12 @@
 Show a scheduled date/time for **every not-yet-played match, all the way to the
 Final** — not just the imminent round — matching what SofaScore's own bracket
 displays (`Qf1 vs Qf2 · 7 Jul 12:00`, `WSF1 vs WSF2 · 12 Jul 17:00`, etc.), and
-label near dates as **Today / Tomorrow**. The time appears **on the match's arc
+label near matches as **Today / Tomorrow**. The time appears **on the match's arc
 in the wheel** (always-on) and, in fuller form, in the match strip + detail panel.
 
-This supersedes the imminent-only feature shipped in PR #49 (`feat/scheduled-match-times`),
-which stamped a time only for scheduled matches with both players decided and
-gated display to a narrow `[-6h, +36h]` trust window.
+This supersedes the imminent-only display shipped in PR #49
+(`feat/scheduled-match-times`) but **keeps its ingest mechanism** (per-event
+detail for imminent scheduled matches) as the precise-time source.
 
 ## Key finding (why this is now cheap)
 
@@ -28,123 +28,170 @@ winner-of slots. Verified live against Wimbledon 2026 (ATP ut 2361 / WTA 2600):
 | R32 (imminent) | real | distinct **per-match** times (real order of play) |
 | R16 / QF / SF / Final | placeholders | one **shared per-round** nominal time |
 
-So the time for all rounds is available with **zero new network requests** — it
-comes straight from the cuptrees block, not from per-event detail.
+So a date for all rounds is available with **zero new network requests**.
 
-## Decisions (locked with the user)
+## Decisions (locked with the user; ⚠ = revised after review)
 
-1. **Source = `block.seriesStartDateTimestamp`** (cuptrees), read in
-   `normalizeCuptrees`. It becomes the single source of `scheduledStart` for
-   every not-yet-played match. Drop the per-event `ev.startTimestamp` stamping
-   added to `enrich.ts` in PR #49.
+1. ⚠ **Two-tier time source.** The cuptrees `seriesStartDateTimestamp` (read in
+   `normalizeCuptrees`) stamps a **coarse** `scheduledStart` on every
+   not-yet-played match. For the imminent scheduled matches whose per-event
+   detail we already fetch (PR #49's `collectEventIds`: both players real),
+   `enrichMatch` **overrides** `scheduledStart` with `ev.startTimestamp` and sets
+   a new **`scheduledPrecise: true`** flag. Rationale: a nominal round-day stamp
+   sits *within* any time window the evening before the round, so precision must
+   be keyed on the **data source** (SofaScore published a per-event order-of-play
+   slot), never on clock distance alone. The per-event value is also the fresher
+   one under intra-day reschedules; cuptrees is the fallback.
 2. **Show all rounds up to the Final.** No far-future suppression. A match whose
-   players are both still TBD (`Qf1 vs Qf2`) still shows its date, exactly as
-   SofaScore does.
-3. **Adaptive precision.** A match within a near window (`start − now ≤ ~36h`,
-   real order of play) shows **day + time** (`Today 14:30`); a match beyond it
-   (shared nominal per-round time) shows **day/date only** (`Sat 7 Jul`) so we
-   never imply a precise slot we don't have. The existing ~36h constant is
-   **repurposed** from *hide* → *precise-vs-coarse*.
+   players are both still TBD (`Qf1 vs Qf2`) still shows its date.
+3. ⚠ **Adaptive precision = `scheduledPrecise && dt ≤ ~36h`** (36h as a backstop:
+   an event-sourced stamp for a round 2+ days out can itself still be nominal).
+   Precise → day + time (`Today 14:30`); coarse → date only (`Sat 7 Jul`).
 4. **Both surfaces (on-arc + panel).** A compact adaptive label on the match's
    arc in the wheel (always-on), plus the full line in the match strip + detail.
-5. **On-arc label reuses the surname label slot.** The wheel draws a name/flag
-   on an arc only when `!a.projected` (match decided). Scheduled/live/future arcs
-   are `projected` → they carry no name. So the scheduled-time label and the
-   winner's surname are **mutually exclusive on any arc** — the time occupies the
-   same label slot and simply flips to the winner's surname once the match is
-   decided. No overlay, no collision, one mechanism.
-6. **On-arc gate = `projected && !live && !suspended` and has `scheduledStart`.**
-   Times show for genuinely not-yet-started matches only — never for past, live,
-   or suspended matches (those show a name, live hatch, or suspended state).
-7. **Court stays imminent-only.** `scheduledCourt` continues to come from the
-   fetched `event.venue`, only for matches we already fetch detail for (SofaScore
-   shows no court for future rounds either). The PR #49 `collectEventIds`
-   scheduled-fetch is **kept** so the imminent round still gets its court.
-8. **Relative-day labels.** `Today` / `Tomorrow` / weekday within 7 days (`Sat`)
-   / `7 Jul` beyond, computed in the viewer's local time.
+5. ⚠ **On-arc label via a parallel, matchId-keyed channel** — NOT the
+   occupant-keyed `labels.anchors`/`labels.text` pipeline (that one is keyed on
+   a decided player id; a TBD match has none). `draw()` precomputes the compact
+   string per match and passes `sched?: (matchId: string) => string | null` in
+   `SunburstLabels`; `renderSunburst` adds a parallel branch that emits
+   `.arc-sched` through the **same curved/radial textPath helpers**. Mutual
+   exclusivity with surnames still holds (names require `!a.projected`; sched
+   labels require `projected`), so the time occupies the empty label slot and
+   flips to the winner's surname once the match is decided.
+6. **On-arc gate = `projected && !live && !suspended`** and the match has
+   scheduled info. Never for past, live, or suspended matches. ⚠ Additionally
+   **suppressed on the centre disc**: under zoom, ANY focused section's node
+   becomes the centre circle (not just the Final) — mirror the existing
+   `anchors.delete(focusId)` exclusion. The centre node's time is available via
+   the match strip on selection; no dedicated centre chip.
+7. **Court stays imminent-only** (from the fetched `event.venue`, matches we
+   already fetch detail for). SofaScore shows no court for future rounds either.
+8. ⚠ **Relative-day words (`Today`/`Tomorrow`) apply to PRECISE slots only**,
+   computed against the **viewer's local calendar midnight** (day-diff 0 →
+   `Today`, 1 → `Tomorrow`, 2–6 → weekday `Sat`, else absolute `7 Jul`; a
+   past-day start falls through to absolute — never a bare weekday, which would
+   read as next week). **Coarse dates are absolute and venue-day-preserving**:
+   formatted with `timeZone: "UTC"`, which keeps the venue calendar date for all
+   four slams (their ~11:00-local nominal stamps stay inside the same UTC day),
+   whereas viewer-local rendering would shift AO a day early for the Americas.
+   Precise times ARE viewer-local — converting the clock is the point there, and
+   Today/Tomorrow is exactly the imminent tier where those words matter.
+9. ⚠ **Single clock.** `nowSec = Date.now()/1000` captured **once per `draw()`**
+   is the one reference for ALL scheduled display: the precise/stale gates in
+   `scheduledInfo` AND the relative-day words AND the arc labels. The snapshot's
+   `generatedAt` is **no longer used** for scheduled display (it remains the ref
+   for ages/birthdays and the "updated Xh ago" status line). Rationale: the
+   refresh can wedge for days; gating on `generatedAt` would confidently render
+   "Today 14:30" for matches that already happened.
+10. ⚠ **Staleness/recompute policy.** Redraw on `visibilitychange → visible`
+    (covers the overnight-open tab at zero cost) plus a timer armed for the next
+    viewer-local midnight while visible. Accepted residual rot: a tab left open
+    and visible past midnight without interaction updates at the midnight tick.
 
-## Non-goals
+## Non-goals / accepted limitations
 
-- No new "order of play" list/schedule view — the times live on the existing
-  bracket + panel surfaces only.
-- No court for future rounds (SofaScore has none either).
-- No push/notification/reminder features.
-- The nominal far-round times are provisional and shift with results/weather;
-  we surface them as SofaScore does and mark them "subject to change" in the
-  detail panel — we do not try to predict or correct them.
+- No new "order of play" list view; no court for future rounds; no notifications.
+- Nominal far-round dates are **per-round**, but slams split rounds across days
+  (R128 over days 1–2, AO/USO QFs over two days) — so pre-tournament, ~half a
+  round's arcs may show a date one day off. SofaScore has the same limitation;
+  the detail panel's "scheduled, subject to change" is the cue. Not solvable
+  from this data; accepted.
+- A washed-out day can push a whole round past its nominal date; coarse dates
+  therefore hide by **calendar day** (see below), not a −6h cutoff, so labels
+  survive a slow feed but drop once their day is truly over.
 
 ## Design
 
 ### 1. Ingest (`ingest/normalize.ts`, `ingest/enrich.ts`)
 
-- Add `seriesStartDateTimestamp?: number` to the `SofaBlock` interface.
-- In `normalizeCuptrees`, when building each `Match`, set
-  `scheduledStart = block.seriesStartDateTimestamp` for every **not-yet-played**
-  match (status `scheduled` or `notstarted`); leave it `undefined` for
-  `finished` / `live`.
-- `enrich.ts`: remove the `scheduledStart` stamping (now owned by normalize);
-  keep `scheduledCourt` (from `ev.venue?.name || ev.venue?.stadium?.name`, for
-  `status === "scheduled"` only). Ensure `enrichMatch` preserves the
-  normalize-set `scheduledStart` (spread `...m`, don't overwrite).
-- Keep `collectEventIds` as merged in PR #49 (imminent scheduled events are still
-  fetched, now only for their court + score, not their time).
+- `SofaBlock` gains `seriesStartDateTimestamp?: number`.
+- `normalizeCuptrees`: for every match with status `scheduled` **or**
+  `notstarted`, set `scheduledStart = block.seriesStartDateTimestamp`
+  (undefined for `finished`/`live`).
+- `enrichMatch` (replaces PR #49's stamping, ⚠ preserving — not clobbering — the
+  normalize-set value): for `status === "scheduled"` with event detail, set
+  `scheduledStart = ev.startTimestamp ?? m.scheduledStart` and
+  `scheduledPrecise: true` (only when `ev.startTimestamp` is present);
+  `scheduledCourt` from `ev.venue?.name || ev.venue?.stadium?.name` as today.
+  For non-scheduled statuses it must **spread `...m` without touching**
+  `scheduledStart`/`scheduledPrecise` (a match flipping to live/finished loses
+  them via normalize on the next refresh anyway; enrich just must not stamp
+  `undefined` over live data mid-pipeline).
+- `collectEventIds` unchanged (its fetch now feeds court + freshest time +
+  score/stats; ⚠ update its docblock — it is no longer the *only* time source).
 
-### 2. State / model (`src/state.ts`, `src/model.ts`)
+### 2. Model / state (`src/model.ts`, `src/state.ts`)
 
-- `Match.scheduledStart` / `scheduledCourt`: unchanged shape; `scheduledStart`
-  now populated for all upcoming matches.
-- Replace `scheduledInfo(m, nowSec)` return with
-  `{ start: number; court: string | null; precise: boolean } | null`. Let
-  `dt = start - nowSec`; three cases:
-  - `dt < -SCHED_STALE_BEHIND_SEC` (≈ 6h in the past) → **`null`**. A stale/overdue
-    slot the feed hasn't flipped to live/finished; hide it. (Future rounds'
-    nominal dates are always ahead, so this only ever trims the imminent round.)
-  - `-SCHED_STALE_BEHIND_SEC ≤ dt ≤ SCHED_PRECISE_AHEAD_SEC` (≈ 36h ahead) →
-    **`precise: true`** (real order of play; a just-overdue match still counts).
-  - `dt > SCHED_PRECISE_AHEAD_SEC` → **`precise: false`** (shown, coarse — the
-    old `> 36h → null` far-future *suppression* is removed; it now shows the
-    nominal day/date instead of hiding).
-  - Also `null` when the match is finished/live/suspended or has no
-    `scheduledStart`. Court included when known.
-  - (These reuse the two existing `~36h` / `~6h` constants, renamed to reflect
-    their new precise-cutoff / stale-cutoff roles.)
-- `MatchInsight.scheduled` becomes `{ start, court, precise } | null`.
+- `Match` gains `scheduledPrecise?: boolean`; `scheduledStart`/`scheduledCourt`
+  unchanged in shape (⚠ update their docblock: cuptrees-sourced, all upcoming
+  rounds, precise flag semantics).
+- ⚠ `scheduledInfo(m, nowSec)` — `nowSec` is now the **wall-clock** reference
+  (Decision 9). Returns `{ start, court, precise } | null`:
+  - **Positive status gate**: non-null only for `status === "scheduled" ||
+    status === "notstarted"` (an allowlist — a denylist would leak walkover/
+    retired-before-play statuses) and `scheduledStart != null`.
+  - `precise = m.scheduledPrecise === true && (start - nowSec) <= PRECISE_AHEAD_SEC (36h)`.
+  - **Hide rules**: precise slot → `null` when `start - nowSec < -STALE_BEHIND_SEC`
+    (6h; overdue-but-running-late still shows). Coarse slot → `null` only once
+    its **UTC calendar day is fully past** (venue day over) — never the −6h rule
+    (⚠ rev 1 wrongly claimed coarse dates are "always ahead"; a rain-slipped
+    round would have blanked).
+- `matchInsight` accepts/threads the wall-clock `nowSec` (its `generatedAt`-based
+  `ref` stays for ages only). `MatchInsight.scheduled` carries `precise`.
 
-### 3. Rendering (`src/render.ts`, `src/app.css`)
+### 3. Rendering (`src/render.ts`, `src/app.ts`, `src/app.css`)
 
-- `formatScheduled(start, court, opts)` gains:
-  - **relative-day** helper: `Today` / `Tomorrow` / weekday (≤7 days) / `D Mon`.
-  - **precision**: append `HH:MM` only when `precise`. Compact form (strip/arc)
-    omits the calendar month when a weekday/relative word suffices; full form
-    (detail) always carries the date.
-- **Match strip + detail panel:** drop the imminent-only gate — render for any
-  match with a `scheduled` info. Detail keeps
-  `🗓 <full> · scheduled, subject to change`.
-- **On-arc label (new):** in the sunburst label pass, for an arc that is
-  `projected && !live && !suspended` whose match has `scheduled` info, emit the
-  compact adaptive label through the **same curved/radial `arc-label` textPath
-  path** used for surnames (reusing `labels.anchors` selection, extended to these
-  future match nodes). Small dedicated class (e.g. `.arc-sched`) for teal styling
-  and slightly smaller size. The Final (innermost / centre) is the one special
-  spot — its time renders in/near the centre-pill area rather than a centre arc.
-- Anchor selection: each upcoming **match node** is its own anchor (one label per
-  match); the repetition of a shared nominal date across a round mirrors
-  SofaScore's per-box dates and is acceptable.
+- `formatScheduled(start, court, opts)` reworked per Decisions 3/8:
+  - precise: relative-day word (viewer-local midnight diff; `Tomorrow` in the
+    detail/full form, `Tmrw` in compact — ⚠ "Tomorrow" doesn't fit a thin-ring
+    radial slot) + `HH:MM`, `· court` when known.
+  - coarse: `Sat 7 Jul` rendered with `timeZone: "UTC"`; no time, no relative
+    words.
+- **Match strip + detail:** render for any match with scheduled info (gate drop);
+  detail keeps `🗓 <full> · scheduled, subject to change`.
+- **On-arc (new):** `draw()` builds `schedLabel(matchId)` using the shared
+  `nowSec`; `renderSunburst` branch for `projected && !live && !suspended` arcs
+  emits `.arc-sched` (teal, slightly smaller) through the existing curved/radial
+  fitting incl. its degradation (drop the time before the day-word on tight
+  arcs). ⚠ `.arc-sched` must keep `pointer-events: none` (labels paint above the
+  arc paths; taps and the touch-hover path rely on hit-through). ⚠ Renders
+  identically on **all three lenses** (it is match-keyed; the Country lens's
+  flag-image slot is occupant-keyed and only for decided arcs — no interaction).
+  ⚠ Centre-disc suppression per Decision 6.
+- **Recompute** per Decision 10: `visibilitychange` listener + next-local-
+  midnight timer, both funnelling into the existing `draw()`.
+- ⚠ **Day-0 check:** pre-tournament, ~127 arcs carry a label (64 thin R128 arcs
+  with identical dates). Implementation must be checked against a day-0-shaped
+  fixture/screenshot; stated fallback if it reads as noise: suppress coarse
+  labels on the outermost (thinnest) ring only — dates remain one tap away in
+  the strip. (Decision deferred to visual check, default = show.)
 
 ### 4. Testing
 
-- **Ingest:** `normalizeCuptrees` stamps `scheduledStart` from
-  `seriesStartDateTimestamp` for scheduled + notstarted, not for finished/live;
-  fixture gains a `seriesStartDateTimestamp` per block.
-- **State:** `scheduledInfo` — `precise` true inside ~36h, false beyond; still
-  returns (coarse) for far-future and just-overdue; `null` for finished/live.
-- **Render:** `formatScheduled` relative-day matrix (Today/Tomorrow/weekday/date)
-  × precise/coarse; strip + detail render for a far-future TBD match; on-arc
-  label emitted for a projected future match and **absent** for decided/live/
-  suspended arcs.
+- **Ingest:** `normalizeCuptrees` stamps from `seriesStartDateTimestamp` for
+  scheduled + notstarted, not finished/live (fixture gains the field);
+  `enrichMatch` override sets precise + prefers `ev.startTimestamp`, falls back
+  to the cuptrees value, and never clobbers normalize-set fields for
+  non-scheduled statuses. ⚠ Rewrite PR #49's enrich tests (they assert the old
+  event-only stamping) and **invert** the far-future suppression tests in
+  state.test.ts (suppression is removed — those would now fail as-is).
+- **State:** `scheduledInfo` matrix — allowlist gate (walkover/retired/finished/
+  live → null); precise only with the flag AND ≤36h (⚠ nominal stamp at dt=20h
+  → coarse); precise stale-hide at −6h; coarse hides only after its UTC day;
+  wall-clock now vs a stale `generatedAt` (12h-old snapshot → overdue slot
+  hidden, day words from the viewer clock).
+- **Render:** relative-day matrix incl. ⚠ the past-day fallthrough (never a bare
+  weekday); coarse UTC venue-date for a UTC−5 viewer (AO-shaped stamp keeps its
+  date); compact `Tmrw` vs full `Tomorrow`; strip + detail for a far-future TBD
+  match; on-arc label present for projected-future, absent for decided/live/
+  suspended and for the centre disc under zoom; `.arc-sched` carries
+  `pointer-events: none`.
+- ⚠ **Docblock checklist** (stale after this change): `model.ts` scheduled
+  fields, `render.ts` formatScheduled, `normalize.ts` collectEventIds,
+  `state.ts` trust-window constants (renamed to precise/stale roles).
 
 ## Open questions
 
-None blocking. The exact on-arc typography (size, teal shade, how the Final's
-time sits by the centre pill) is a visual-polish detail to settle during
-implementation against the running app.
+None blocking. Remaining visual-polish calls (exact `.arc-sched` size/shade,
+day-0 fallback trigger) are settled during implementation against the running
+app per §3.
