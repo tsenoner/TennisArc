@@ -340,21 +340,52 @@ export function formatDuration(sec: number): string {
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
 }
 
-// Two order-of-play formatters (compact for the strip; full carries the calendar date), built once at
-// module load. Intl.DateTimeFormat construction is comparatively costly, and both read the runtime's
-// default time zone, which is fixed for the session — so there's nothing to rebuild per call. (Each
-// date's UTC offset, incl. DST, is still resolved at format() time, so cross-DST dates render right.)
-const SCHED_FMT = new Intl.DateTimeFormat("en-GB",
-  { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
-const SCHED_FMT_FULL = new Intl.DateTimeFormat("en-GB",
-  { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+// Order-of-play formatters, built once at module load (Intl.DateTimeFormat construction is costly;
+// the zone is fixed per session, and each date's UTC offset — incl. DST — is still resolved at
+// format() time). Viewer-local for PRECISE slots (converting the clock is the point); UTC for
+// COARSE date-only slots so the VENUE calendar day never shifts — every slam's nominal ~11:00-local
+// stamp stays inside the same UTC day, where viewer-local rendering would show e.g. the Australian
+// Open a day early in the Americas.
+const SCHED_TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+const SCHED_DAY = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
+const SCHED_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+const SCHED_DATE_UTC = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
-/** An order-of-play slot for a not-yet-played match: "Thu, 13:40 · Court 2" (compact, for the strip)
- *  or — with `full` — "Thu 2 Jul, 13:40 · Court 2" (for the detail tier). Rendered in the viewer's
- *  local time (the epoch is absolute); the caller frames it as a scheduled, provisional time. Returns
- *  plain text with the court unescaped — escape it at the HTML boundary. */
-export function formatScheduled(start: number, court: string | null, full = false): string {
-  const when = (full ? SCHED_FMT_FULL : SCHED_FMT).format(new Date(start * 1000));
+/** Whole viewer-local calendar-day difference (compares local midnights — DST-safe, no 24h buckets). */
+function localDayDiff(start: number, nowSec: number): number {
+  const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((midnight(new Date(start * 1000)) - midnight(new Date(nowSec * 1000))) / 86_400_000);
+}
+
+/** Relative-day word for a PRECISE slot, or null when none applies (past day or >6 days out — a bare
+ *  weekday for yesterday would read as NEXT week, so those fall through to the absolute date). */
+function relativeDay(start: number, nowSec: number, full: boolean): string | null {
+  const d = localDayDiff(start, nowSec);
+  if (d === 0) return "Today";
+  if (d === 1) return full ? "Tomorrow" : "Tmrw";
+  if (d >= 2 && d <= 6) return SCHED_DAY.format(new Date(start * 1000));
+  return null;
+}
+
+export interface SchedFormatOpts { nowSec: number; precise: boolean; full?: boolean; }
+
+/** An order-of-play slot for a not-yet-played match. PRECISE (published per-event time): compact
+ *  "Today 15:40" / "Tmrw 13:40" / "Sun 13:40"; full adds the calendar date — "Tomorrow 3 Jul, 13:40".
+ *  COARSE (nominal round-day stamp): venue-day date only, "Tue 7 Jul", never a clock time or a
+ *  relative word (cross-zone "Tomorrow" on a nominal date misleads). `nowSec` is the wall-clock
+ *  reference. Returns plain text with the court unescaped — escape at the HTML boundary. */
+export function formatScheduled(start: number, court: string | null, opts: SchedFormatOpts): string {
+  const date = new Date(start * 1000);
+  let when: string;
+  if (opts.precise) {
+    const word = relativeDay(start, opts.nowSec, opts.full ?? false);
+    const time = SCHED_TIME.format(date);
+    when = opts.full
+      ? `${word ? `${word} ` : ""}${SCHED_DATE.format(date)}, ${time}`
+      : `${word ?? SCHED_DATE.format(date)} ${time}`;
+  } else {
+    when = SCHED_DATE_UTC.format(date);
+  }
   return court ? `${when} · ${court}` : when;
 }
 
@@ -625,15 +656,15 @@ function stripSide(side: InsightSide, win: boolean, rev: boolean): string {
 /** Slim match context strip — an in-flow summary at the top of the wheel column on EVERY
  *  viewport (the same dock pattern the readout already uses ≤960px). The wheel is never
  *  covered; the heavy tail lives one tap away behind "Details ▾" (renderMatchDetail). */
-export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean; noZoom?: boolean }): string {
+export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean; noZoom?: boolean; nowSec: number }): string {
   const statusTag = ins.status === "live"
     ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>`
     : ins.status === "suspended"
     ? ` · <span class="ms-susp"><span class="ms-pause" aria-hidden="true"></span>suspended</span>` : "";
-  // Upcoming match: a compact order-of-play tag (time + court) in the caption. Only present within the
-  // near-term trust window (scheduledInfo) — a far-future placeholder time is deliberately withheld.
+  // Upcoming match: a compact order-of-play tag in the caption — a precise "Today 15:40 · Court 2"
+  // for the imminent tier, a coarse venue-day date ("Tue 7 Jul") for future rounds.
   const schedTag = ins.scheduled
-    ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court))}</span>` : "";
+    ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec: opts.nowSec, precise: ins.scheduled.precise }))}</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
   // Only when the view already sits AT this match's own section does it flip to "Reset
   // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
@@ -665,7 +696,7 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
  *  context, serve stats, duration and the SofaScore link. In-flow under the strip on
  *  desktop; a fixed bottom sheet with the standard grip/✕ chrome on phones. Every piece
  *  of its chrome (scrim, grip, ✕) collapses ONLY this tier — the strip stays. */
-export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rounds: Round[]): string {
+export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rounds: Round[], nowSec: number): string {
   // The "Upset" pill would triple-signal with the ELO line's accent — one signal only.
   const badges = ins.badges
     .filter((b) => b !== "Upset")
@@ -675,10 +706,8 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
   // time is a suspension-healed estimate (until Sackmann's measured minutes backfill it).
   const durTag = ins.durationProvisional ? (isInProgress(ins.status) ? " (live)" : " (est.)") : "";
   const dur = ins.durationSec != null ? `⏱ ${formatDuration(ins.durationSec)}${durTag}` : "";
-  // Upcoming match: the full order-of-play line (date · time · court), flagged provisional — tennis
-  // times shift with match length and weather, and only the first match on a court is a firm start.
   const sched = ins.scheduled
-    ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, true))}` +
+    ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec, precise: ins.scheduled.precise, full: true }))}` +
       ` <span class="mi-prov">· scheduled, subject to change</span></div>`
     : "";
   const link = sofaUrl

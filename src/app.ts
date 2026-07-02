@@ -234,6 +234,10 @@ export function createApp(root: HTMLElement): () => void {
         `<div class="stage"><div class="loading">Loading ${state.tour} draw…</div></div>`;
       return;
     }
+    // THE wall-clock reference for all scheduled-time display this render pass (never generatedAt —
+    // a wedged refresh must not make stale data claim "Today"). Captured once so the strip, detail
+    // and on-arc labels agree.
+    const nowSec = Math.floor(Date.now() / 1000);
     const time = timeOnCourt(snap);
     const tree = buildSunburst(snap);
     const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
@@ -289,7 +293,7 @@ export function createApp(root: HTMLElement): () => void {
     let strip = "";
     if (isMatch) {
       const mm = snap.matches[state.selectedMatchId!];
-      const ins = matchInsight(snap, state.selectedMatchId!, time)!;
+      const ins = matchInsight(snap, state.selectedMatchId!, time, nowSec)!;
       const u = sofascoreMatchUrl(mm, mm.p1 ? snap.players[mm.p1] ?? null : null, mm.p2 ? snap.players[mm.p2] ?? null : null);
       const nodeId = state.selectedNodeId ?? "r";
       // ⊕ Zoom targets the selected node's own SECTION — itself when it has children, a
@@ -307,8 +311,9 @@ export function createApp(root: HTMLElement): () => void {
           expanded: state.detailExpanded,
           focused: atSection && nodeId === state.focusId,
           noZoom: atSection && nodeId !== state.focusId,
+          nowSec,
         }) +
-        (state.detailExpanded ? renderMatchDetail(ins, u, snap.rounds) : "");
+        (state.detailExpanded ? renderMatchDetail(ins, u, snap.rounds, nowSec) : "");
     }
     const focusArc = state.focusId ? arcs.find((a) => a.id === state.focusId) : undefined;
     const focusOcc = focusArc?.occupant ?? null;
