@@ -111,3 +111,29 @@ describe("collectEventIds", () => {
     expect(collectEventIds(dup as never)).toEqual([7]);
   });
 });
+
+describe("normalizeCuptrees — scheduledStart (coarse order-of-play tier)", () => {
+  const s = normalizeCuptrees(cuptreesSample as never, meta);
+
+  it("stamps a not-yet-played match's scheduledStart from the block's seriesStartDateTimestamp", () => {
+    expect(s.matches["1-0"].scheduledStart).toBe(1783868400); // scheduled final
+  });
+
+  it("leaves finished and live matches timeless", () => {
+    expect(s.matches["0-0"].scheduledStart).toBeUndefined(); // finished
+    expect(s.matches["0-1"].scheduledStart).toBeUndefined(); // live
+  });
+
+  it("stamps a notstarted match (both sides placeholders) too — future rounds carry a nominal date", () => {
+    const cup = { cupTrees: [{ rounds: [{ description: "Quarterfinal", blocks: [{
+      finished: false, eventInProgress: false, order: 1, events: [77], seriesStartDateTimestamp: 1783418400,
+      participants: [
+        { order: 1, winner: false, team: { id: 901, name: "Qf1", slug: "qf1" } },
+        { order: 2, winner: false, team: { id: 902, name: "Qf2", slug: "qf2" } },
+      ],
+    }] }] }] };
+    const snap = normalizeCuptrees(cup as never, meta);
+    expect(snap.matches["0-0"].status).toBe("notstarted");
+    expect(snap.matches["0-0"].scheduledStart).toBe(1783418400);
+  });
+});
