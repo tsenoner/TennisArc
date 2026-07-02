@@ -254,6 +254,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .arc-label { fill: #f4f8fc; font-weight: 700; paint-order: stroke; stroke: rgba(4, 10, 16, .72); stroke-width: 2.4px;
   dominant-baseline: central; pointer-events: none; }
 :root[data-theme="light"] .arc-label { fill: #0c1218; stroke: rgba(255, 255, 255, .8); }
+/* upcoming match: the on-arc order-of-play tag — teal like .ms-sched; pointer-events:none and the
+   halo come from .arc-label (taps fall through to the arc). Both rules needed: the light-theme
+   .arc-label fill outranks a lone class. */
+.arc-sched { fill: var(--teal-text); font-weight: 600; }
+:root[data-theme="light"] .arc-sched { fill: var(--teal-text); }
 .arc-radial { font-weight: 500; }   /* outer spokes (R128/R64): same halo thickness as the rest, for even legibility */
 /* round axis (R128 … Final) pinned to 12 o'clock on each ring */
 .ring-label { fill: var(--dim); font-weight: 700; letter-spacing: .03em; paint-order: stroke;

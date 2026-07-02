@@ -375,3 +375,31 @@ describe("formatScheduled", () => {
     expect(s).not.toContain("null");
   });
 });
+
+describe("renderSunburst — on-arc scheduled labels", () => {
+  const arc = (o: Partial<LayoutArc> = {}): LayoutArc => ({
+    id: "r.0", matchId: "1-0", occupant: null, projected: true, live: false, suspended: false,
+    depth: 1, x0: 0, x1: 1.2, y0: 120, y1: 180, ...o,
+  } as LayoutArc);
+  const color = Object.assign(() => "#123456", {}) as Parameters<typeof renderSunburst>[1];
+  const labels = (sched: (id: string) => string | null) =>
+    ({ anchors: new Set<string>(), text: () => "", sched }) as Parameters<typeof renderSunburst>[3];
+
+  it("emits an .arc-sched label (through the shared arc-label class) for an upcoming projected arc", () => {
+    const html = renderSunburst([arc()], color, 700, labels((id) => (id === "1-0" ? "Tmrw 14:30" : null)));
+    expect(html).toContain("arc-label arc-sched");
+    expect(html).toContain("Tmrw");
+  });
+
+  it("never emits one for live, suspended, or decided arcs, nor for the centre disc", () => {
+    const sched = labels(() => "Tmrw 14:30");
+    expect(renderSunburst([arc({ live: true })], color, 700, sched)).not.toContain("arc-sched");
+    expect(renderSunburst([arc({ suspended: true })], color, 700, sched)).not.toContain("arc-sched");
+    expect(renderSunburst([arc({ projected: false, occupant: "p9" })], color, 700, sched)).not.toContain("arc-sched");
+    expect(renderSunburst([arc({ depth: 0 })], color, 700, sched)).not.toContain("arc-sched"); // focused hub / centre
+  });
+
+  it("emits nothing when sched returns null (no scheduled info)", () => {
+    expect(renderSunburst([arc()], color, 700, labels(() => null))).not.toContain("arc-sched");
+  });
+});
