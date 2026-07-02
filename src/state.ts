@@ -503,6 +503,25 @@ export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limi
     .slice(0, limit);
 }
 
+export interface ScheduledInfo { start: number; court: string | null; }
+
+// Tennis publishes the order of play only ~a day ahead, and only the first match on each court gets a
+// real clock time — so a scheduled timestamp is a genuine order-of-play slot only when it's imminent.
+// Beyond ~36h SofaScore returns a nominal round-day placeholder (a bare 11:00 default) we must NOT show
+// as a time; a slot >6h in the past is likewise dropped (the match has surely started by now).
+const SCHED_TRUST_AHEAD_SEC = 36 * 3600;
+const SCHED_TRUST_BEHIND_SEC = 6 * 3600;
+
+/** The order-of-play time (+ court, when known) to display for a not-yet-played match, or null when
+ *  there is no trustworthy time: the match isn't scheduled, carries no recorded start, or the start
+ *  falls outside the imminent trust window. `nowSec` is the reference "now" (Unix seconds). */
+export function scheduledInfo(m: Match, nowSec: number): ScheduledInfo | null {
+  if (m.status !== "scheduled" || m.scheduledStart == null) return null;
+  const dt = m.scheduledStart - nowSec;
+  if (dt > SCHED_TRUST_AHEAD_SEC || dt < -SCHED_TRUST_BEHIND_SEC) return null;
+  return { start: m.scheduledStart, court: m.scheduledCourt ?? null };
+}
+
 export interface InsightSide {
   id: string | null; name: string; country: string;
   seed: number | null; ranking: number | null;
@@ -517,6 +536,7 @@ export interface MatchInsight {
   p1: InsightSide; p2: InsightSide;
   badges: string[]; upset: boolean; eloLine: string;
   aces: [number, number] | null; doubleFaults: [number, number] | null;
+  scheduled: ScheduledInfo | null;
 }
 
 function insightSide(s: Snapshot, pid: string | null, surface: string, time: Map<string, PlayerTime>, ref: string): InsightSide {
@@ -539,6 +559,7 @@ export function matchInsight(s: Snapshot, matchId: string, time: Map<string, Pla
   if (!m) return null;
   const surface = s.tournament.surface;
   const ref = s.generatedAt ?? new Date().toISOString();
+  const nowSec = Math.floor((Date.parse(ref) || Date.now()) / 1000);
   const p1 = insightSide(s, m.p1, surface, time, ref);
   const p2 = insightSide(s, m.p2, surface, time, ref);
   const badges: string[] = [];
@@ -577,5 +598,6 @@ export function matchInsight(s: Snapshot, matchId: string, time: Map<string, Pla
     durationSec: m.durationSec, durationProvisional: m.durationProvisional,
     p1, p2, badges, upset, eloLine,
     aces: m.stats?.aces ?? null, doubleFaults: m.stats?.doubleFaults ?? null,
+    scheduled: scheduledInfo(m, nowSec),
   };
 }

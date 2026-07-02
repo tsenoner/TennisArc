@@ -565,3 +565,65 @@ describe("suspended-match handling", () => {
     expect(toc3(s).get(s.matches["0-0"].p1!)!.provisional).toBe(true);
   });
 });
+
+import { scheduledInfo } from "./state";
+import type { Match as SchedMatch } from "./model";
+
+const schedMatch = (o: Partial<SchedMatch> = {}): SchedMatch => ({
+  id: "1-0", roundIndex: 1, slot: 0, nextMatchId: null, p1: "a", p2: "b",
+  status: "scheduled", winner: null, score: null, live: null,
+  durationSec: null, durationProvisional: false, sofaEventId: 1, sofaCustomId: null, stats: null, ...o,
+});
+
+describe("scheduledInfo", () => {
+  const NOW = 1_000_000;
+
+  it("returns start and court for a scheduled match within the trust window", () => {
+    expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 3600, scheduledCourt: "Court 2" }), NOW))
+      .toEqual({ start: NOW + 3600, court: "Court 2" });
+  });
+
+  it("returns a null court (time still shows) when the court is unknown", () => {
+    expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 3600 }), NOW))
+      .toEqual({ start: NOW + 3600, court: null });
+  });
+
+  it("suppresses a start more than ~36h ahead — that far out SofaScore gives a nominal placeholder", () => {
+    expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 48 * 3600, scheduledCourt: "Court 2" }), NOW)).toBeNull();
+  });
+
+  it("suppresses a stale start more than 6h in the past", () => {
+    expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 7 * 3600 }), NOW)).toBeNull();
+  });
+
+  it("still shows a just-overdue match (running late) inside the past window", () => {
+    expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 1800, scheduledCourt: "Court 1" }), NOW))
+      .toEqual({ start: NOW - 1800, court: "Court 1" });
+  });
+
+  it("returns null when the match carries no scheduledStart", () => {
+    expect(scheduledInfo(schedMatch(), NOW)).toBeNull();
+  });
+
+  it("returns null for a non-scheduled match even if a stray time is present", () => {
+    expect(scheduledInfo(schedMatch({ status: "finished", scheduledStart: NOW + 3600 }), NOW)).toBeNull();
+  });
+});
+
+describe("matchInsight — scheduled", () => {
+  const NOW = 1_700_000_000; // absolute epoch; the snapshot's generatedAt stands in for "now"
+
+  it("surfaces an in-window scheduled time and court, using generatedAt as the reference now", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    s.generatedAt = new Date(NOW * 1000).toISOString();
+    s.matches["0-0"] = { ...s.matches["0-0"], status: "scheduled", winner: null, scheduledStart: NOW + 2 * 3600, scheduledCourt: "Centre Court" };
+    expect(insight3(s, "0-0", toc3(s))!.scheduled).toEqual({ start: NOW + 2 * 3600, court: "Centre Court" });
+  });
+
+  it("does not surface a far-future scheduled placeholder", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    s.generatedAt = new Date(NOW * 1000).toISOString();
+    s.matches["0-0"] = { ...s.matches["0-0"], status: "scheduled", winner: null, scheduledStart: NOW + 5 * 86400, scheduledCourt: "Court 18" };
+    expect(insight3(s, "0-0", toc3(s))!.scheduled).toBeNull();
+  });
+});

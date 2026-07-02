@@ -15,7 +15,7 @@ const base: MatchInsight = {
   p2: { id: "b", name: "Jannik Sinner", country: "ITA", seed: 1, ranking: 1, elo: 2215, roundReached: 6, sec: 19000, age: 24, birthday: "16 Aug", birthdayNear: false },
   badges: ["Upset", "From a set down", "1 tiebreak", "Marathon"], upset: true,
   eloLine: "Clay-ELO favoured Jannik Sinner 65% (+109)",
-  aces: [9, 12], doubleFaults: [3, 2],
+  aces: [9, 12], doubleFaults: [3, 2], scheduled: null,
 };
 const opts = { expanded: false, focused: false };
 
@@ -81,6 +81,15 @@ describe("renderMatchStrip", () => {
     expect(html).toContain("TBD");
     expect(html).toContain("—"); // placeholder score
   });
+
+  it("shows a compact scheduled time + court tag for an upcoming match", () => {
+    const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null,
+      scheduled: { start: 1782999600, court: "Centre Court" } }; // Thu 2 Jul 2026, 13:40 UTC
+    const html = renderMatchStrip(ins, "r.0", opts);
+    expect(html).toContain("ms-sched");
+    expect(html).toContain("13:40");        // TZ=UTC (14:40 BST at Wimbledon)
+    expect(html).toContain("Centre Court");
+  });
 });
 
 describe("renderMatchDetail", () => {
@@ -118,5 +127,19 @@ describe("renderMatchDetail", () => {
     const html = renderMatchDetail(ins, null, rounds);
     expect(html).toContain("TBD");
     expect(html).not.toContain("Open in SofaScore");
+  });
+
+  it("renders a scheduled order-of-play line (date, time, court) for an upcoming match", () => {
+    const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null, durationSec: null,
+      scheduled: { start: 1782999600, court: "Court 2" } };
+    const html = renderMatchDetail(ins, null, rounds);
+    expect(html).toContain("mi-sched");
+    expect(html).toContain("2 Jul");   // full form carries the calendar date
+    expect(html).toContain("13:40");
+    expect(html).toContain("Court 2");
+  });
+
+  it("omits the scheduled line for a match with no scheduled info", () => {
+    expect(renderMatchDetail(base, null, rounds)).not.toContain("mi-sched");
   });
 });

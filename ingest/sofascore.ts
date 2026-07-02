@@ -1,6 +1,7 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { pickSeasonId, type SofaSeason } from "./seasons";
 import { alpha3Of } from "./sofa-country";
+import { collectEventIds } from "./normalize";
 
 export interface RawTournament {
   cuptrees: unknown;
@@ -97,7 +98,7 @@ export async function fetchTeamCountry(page: Page, teamId: number): Promise<stri
 /** Fetch the full cuptrees + per-event detail/stats for a tournament season (caller owns the page/browser). */
 export async function fetchTournament(page: Page, utId: number, seasonId: number): Promise<RawTournament> {
   const cuptrees = await apiGet(page, `/unique-tournament/${utId}/season/${seasonId}/cuptrees`);
-  const eventIds = collectEventIds(cuptrees);
+  const eventIds = collectEventIds(cuptrees as Parameters<typeof collectEventIds>[0]);
   const events = new Map<number, { detail: unknown; stats: unknown }>();
   for (const id of eventIds) {
     try {
@@ -109,14 +110,4 @@ export async function fetchTournament(page: Page, utId: number, seasonId: number
     await page.waitForTimeout(60);
   }
   return { cuptrees, events };
-}
-
-function collectEventIds(cuptrees: any): number[] {
-  const ids: number[] = [];
-  for (const tree of cuptrees?.cupTrees ?? [])
-    for (const round of tree.rounds ?? [])
-      for (const block of round.blocks ?? [])
-        if ((block.finished || block.eventInProgress) && Array.isArray(block.events))
-          ids.push(...block.events);
-  return [...new Set(ids)];
 }
