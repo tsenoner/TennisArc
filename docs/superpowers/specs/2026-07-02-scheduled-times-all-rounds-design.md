@@ -1,7 +1,10 @@
 # Scheduled times for all rounds (order of play to the Final) — design
 
 **Date:** 2026-07-02 (rev 2 — after adversarial review panel; rev 1 flaws fixed are marked ⚠)
-**Status:** draft (awaiting user review)
+**Status:** implemented (branch `feat/scheduled-times-all-rounds`; day-0 clutter call resolved at
+the visual check: labels render cleanly at the observed density — default **show** stands, no
+outer-ring fallback needed. One deviation from §3: the centre-disc suppression gates on `y0 > 0`,
+not depth — under zoom the focused hub keeps its hierarchy depth while becoming the centre disc.)
 
 ## Goal
 
