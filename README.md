@@ -57,6 +57,8 @@ Optional follow-ups:
 - **Auto-deploy on push:** install the Vercel GitHub App on `tsenoner/TennisArc` (Vercel → project → Settings → Git) so pushes to `main` deploy automatically. Until then deploys are manual (`vercel deploy --prod`).
 - **Live data:** the site ships with the committed real RG 2026 seed in `public/data/`. To serve refreshed data, run `scripts/publish-data.sh` from a residential IP (see "Refreshing data") to populate the `data` branch, then set the Vercel env var `VITE_DATA_BASE_URL=https://raw.githubusercontent.com/tsenoner/TennisArc/data`. The app prefers that branch and falls back to the seed if it's missing.
 
+> **Deploy/data gotchas** (routing 404s on hard reload, why probing `tennisarc.vercel.app/data/` shows stale data) are logged in [`docs/findings.md`](docs/findings.md). Add an entry there when a non-obvious cause costs you time.
+
 ## Architecture
 
 `model.ts` (types) → `state.ts` (bracket tree, time-on-court, projections) → `layout.ts` (d3 radial partition) → `color.ts` (swappable scales) → `render.ts` (SVG/HTML strings) → `app.ts` (offline-first loop). `store.ts` (idb-keyval) + `api.ts` (fetch) feed the loop; `ingest/` produces the data. Design docs in `docs/superpowers/`.
