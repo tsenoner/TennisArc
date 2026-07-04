@@ -40,9 +40,10 @@ describe("colorScale", () => {
     // violet ⇒ blue channel exceeds green (the warm time ramp is the opposite)
     const [, g, b] = rgbOf(scale(arc("p0")));
     expect(b).toBeGreaterThan(g);
-    // unseeded → neutral fallback
+    // unseeded → the neutral fallback, i.e. the exact colour of a null occupant (not a seed band)
     s.players["p3"] = { ...s.players["p3"], seed: null };
-    expect(colorScale("seed", s)(arc("p3"))).toMatch(/^(#|rgb)/);
+    const unseeded = colorScale("seed", s);
+    expect(unseeded(arc("p3"))).toBe(unseeded(arc(null)));
   });
 
   it("ELO sort bands the top 32 by surface ELO with the same tiers; players with no ELO go neutral", () => {
