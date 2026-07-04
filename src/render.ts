@@ -288,9 +288,14 @@ export function renderSunburst(
         // will occupy once decided. The centre disc — root or focused hub — is the one arc with
         // y0 === 0; its pill/strip already carries the info, and a full-circle textPath draws garbage.
         // splitTwo splits "Tmrw 14:30" into day/time rows on two-column rings; the shortForm keeps
-        // a clean bare day-word where even that doesn't fit.
+        // a clean day part where even that doesn't fit: drop the trailing clock time ("1 Jul 13:40"
+        // → "1 Jul" — first-word alone would leave a meaningless bare digit), and for the time-less
+        // coarse shape fall back to the leading day word ("Tue 7 Jul" → "Tue").
         const stxt = labels.sched(a.matchId);
-        if (stxt) emitFitted(a, stxt, " arc-sched", stxt.split(" ")[0]);
+        if (stxt) {
+          const sansTime = stxt.replace(/ \d{2}:\d{2}$/, "");
+          emitFitted(a, stxt, " arc-sched", sansTime === stxt ? stxt.split(" ")[0] : sansTime);
+        }
       }
       const path = `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
         `data-action="inspect" data-id="${a.id}" data-match="${a.matchId}" data-occupant="${escapeHtml(a.occupant ?? "")}"></path>`;
@@ -370,10 +375,16 @@ const SCHED_DAY = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
 const SCHED_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
 const SCHED_DATE_UTC = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
+/** Local-midnight epoch ms for `d`, shifted by `dayOffset` calendar days. The Date constructor
+ *  normalises the day overflow, so the result is DST-correct where naive ±86 400 000 arithmetic
+ *  is not. Shared clock geometry for the Today/Tmrw words below and app.ts's midnight re-render. */
+export function startOfLocalDay(d: Date, dayOffset = 0): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + dayOffset).getTime();
+}
+
 /** Whole viewer-local calendar-day difference (compares local midnights — DST-safe, no 24h buckets). */
 function localDayDiff(start: number, nowSec: number): number {
-  const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  return Math.round((midnight(new Date(start * 1000)) - midnight(new Date(nowSec * 1000))) / 86_400_000);
+  return Math.round((startOfLocalDay(new Date(start * 1000)) - startOfLocalDay(new Date(nowSec * 1000))) / 86_400_000);
 }
 
 /** Relative-day word for a PRECISE slot, or null when none applies (past day or >6 days out — a bare

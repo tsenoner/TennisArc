@@ -4,7 +4,7 @@ import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
   renderCenterSection, renderCrumbs, renderQuarterFocusButtons,
-  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduled, type ReadoutInfo,
+  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduled, startOfLocalDay, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -224,6 +224,8 @@ export function createApp(root: HTMLElement): () => void {
     open: state.openMenu, helpOpen: state.helpOpen,
   });
 
+  let lastDrawMs = 0; // last full render, for the visibilitychange debounce below
+
   const draw = () => {
     if (!state.panelOpen) state.panelExpanded = false; // invariant: a closed drawer always reopens at peek
     hlNodes = []; hlCurrent = null; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
@@ -238,6 +240,7 @@ export function createApp(root: HTMLElement): () => void {
     // a wedged refresh must not make stale data claim "Today"). Captured once so the strip, detail
     // and on-arc labels agree.
     const nowSec = Math.floor(Date.now() / 1000);
+    lastDrawMs = nowSec * 1000;
     const time = timeOnCourt(snap);
     const tree = buildSunburst(snap);
     const arcs = layout(tree, SIZE / 2 - 8, state.focusId);
@@ -266,10 +269,20 @@ export function createApp(root: HTMLElement): () => void {
       : undefined;
     // Always-on order-of-play tags for upcoming arcs (matchId-keyed — anchors/text serve decided
     // arcs only). Court is strip/detail-only; arcs stay compact. Lens-independent by design.
+    // Memoised per pass: coarse rounds share one nominal stamp per round, so a pre-tournament
+    // 128 draw collapses ~127 format calls to one per unique (start, precise) pair.
+    const schedFmt = new Map<string, string>();
     const schedLabel = (matchId: string): string | null => {
       const m = snap.matches[matchId];
       const info = m ? scheduledInfo(m, nowSec) : null;
-      return info ? formatScheduled(info.start, null, { nowSec, precise: info.precise }) : null;
+      if (!info) return null;
+      const key = `${info.start}:${info.precise}`;
+      let s = schedFmt.get(key);
+      if (s === undefined) {
+        s = formatScheduled(info.start, null, { nowSec, precise: info.precise });
+        schedFmt.set(key, s);
+      }
+      return s;
     };
     // Quarter-owner corner labels (drawn top seed; dimmed once out — quarterOwners). Hidden
     // entirely while focused: the corners become free space and the crumbs name the section.
@@ -796,14 +809,24 @@ export function createApp(root: HTMLElement): () => void {
 
   // Scheduled-time staleness policy: all scheduled display runs on wall-clock "now" captured per
   // draw(), so a long-lived tab must redraw when (a) it becomes visible again — the overnight-open
-  // tab — and (b) the viewer's local midnight passes while visible ("Today" must roll over). draw()
-  // self-guards while no snapshot is loaded.
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) draw(); }, { signal });
+  // tab — and (b) a day boundary passes: the viewer's LOCAL midnight rolls "Today"/"Tmrw" over,
+  // while UTC midnight flips the coarse tier's hide gate and venue dates (scheduledInfo /
+  // SCHED_DATE_UTC) — the timer ticks at whichever comes first, and draws even while hidden (one
+  // rebuild a day is free, and it keeps the tab honest the moment it is next seen). That standing
+  // freshness is what lets the visibility redraw be debounced: a quick tab flip must not wipe
+  // scroll/selection/focus over a display that only moves in minutes. draw() self-guards while no
+  // snapshot is loaded.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && Date.now() - lastDrawMs > 60_000) draw();
+  }, { signal });
   let midnightTimer = 0;
   const armMidnight = () => {
     const now = new Date();
-    const msToMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
-    midnightTimer = window.setTimeout(() => { draw(); armMidnight(); }, msToMidnight + 1000);
+    const msToTick = Math.min(
+      startOfLocalDay(now, 1) - now.getTime(),                                     // next local midnight
+      (Math.floor(now.getTime() / 86_400_000) + 1) * 86_400_000 - now.getTime(),   // next UTC midnight
+    );
+    midnightTimer = window.setTimeout(() => { draw(); armMidnight(); }, msToTick + 1000);
   };
   armMidnight();
   signal.addEventListener("abort", () => clearTimeout(midnightTimer));

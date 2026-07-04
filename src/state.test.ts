@@ -514,7 +514,7 @@ describe("matchInsight", () => {
     // winner dropped the first set, then a tiebreak set
     s.matches["0-0"] = { ...m, score: [{ p1: 4, p2: 6 }, { p1: 7, p2: 6, tb: 5 }, { p1: 6, p2: 3 }] };
     if (m.winner === "p2") s.matches["0-0"].score = [{ p1: 6, p2: 4 }, { p1: 6, p2: 7, tb: 5 }, { p1: 3, p2: 6 }];
-    const ins = matchInsight(s, "0-0", timeOnCourt(s))!;
+    const ins = matchInsight(s, "0-0", timeOnCourt(s), 1_700_000_000)!;
     expect(ins.upset).toBe(true);
     expect(ins.badges).toContain("Upset");
     expect(ins.badges).toContain("From a set down");
@@ -545,7 +545,7 @@ describe("suspended-match handling", () => {
   it("badges a finished match that spanned a suspension", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     s.matches["0-0"] = { ...s.matches["0-0"], wasSuspended: true };
-    const ins = insight3(s, "0-0", toc3(s))!;
+    const ins = insight3(s, "0-0", toc3(s), 1_700_000_000)!;
     expect(ins.badges).toContain("Suspended");
   });
 
@@ -558,7 +558,7 @@ describe("suspended-match handling", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     // a finished match whose >3h duration is a suspension-healed ESTIMATE, not measured minutes
     s.matches["0-0"] = { ...s.matches["0-0"], status: "finished", durationSec: 12000, durationProvisional: true, wasSuspended: true };
-    const ins = insight3(s, "0-0", toc3(s))!;
+    const ins = insight3(s, "0-0", toc3(s), 1_700_000_000)!;
     expect(ins.badges).not.toContain("Marathon"); // an estimate is not a confirmed marathon
     expect(ins.badges).toContain("Suspended");
     // and the estimate carries a provisional total (the `*`) rather than ranking as measured

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
+import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, isUpcoming, snapshotPath } from "../src/model";
 import { DRAW_SIZE, SLAMS, activeSlam, type SlamConfig } from "./config";
 import { openContext, fetchTournament, resolveSeasonId, fetchTeamCountry } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
@@ -65,7 +65,7 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
     const unplayedEntrantIds = new Set<string>();
     for (const id of snap.rounds[0]?.matchIds ?? []) {
       const m = snap.matches[id];
-      const notYetPlayed = m.status === "scheduled" || m.status === "notstarted";
+      const notYetPlayed = isUpcoming(m.status);
       for (const pid of [m.p1, m.p2]) {
         if (!pid) continue;
         entrantIds.add(pid);

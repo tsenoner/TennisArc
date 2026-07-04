@@ -17,7 +17,8 @@ const base: MatchInsight = {
   eloLine: "Clay-ELO favoured Jannik Sinner 65% (+109)",
   aces: [9, 12], doubleFaults: [3, 2], scheduled: null,
 };
-const opts = { expanded: false, focused: false, nowSec: 1_782_999_600 };
+const NOW = 1_782_999_600; // Thu 02 Jul 2026, 13:40 UTC — the shared reference clock for every call below
+const opts = { expanded: false, focused: false, nowSec: NOW };
 
 describe("renderMatchStrip", () => {
   it("renders caption, flags, dual-form names, winner check and the tiebreak score", () => {
@@ -60,7 +61,7 @@ describe("renderMatchStrip", () => {
   });
 
   it("flips the Zoom button to Reset zoom while focused — empty-id focus, NOT the nuclear reset", () => {
-    const html = renderMatchStrip(base, "r.0.1", { expanded: true, focused: true, nowSec: 1_782_999_600 });
+    const html = renderMatchStrip(base, "r.0.1", { expanded: true, focused: true, nowSec: NOW });
     expect(html).toContain("Reset zoom");
     expect(html).toContain('data-action="focus" data-id=""'); // routes through setFocus(undefined)
     expect(html).not.toContain('data-action="reset"');        // pin + match must survive the un-zoom
@@ -84,7 +85,7 @@ describe("renderMatchStrip", () => {
 
   it("shows a compact precise scheduled tag for an imminent match", () => {
     const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null,
-      scheduled: { start: 1782999600 + 2 * 3600, court: "Centre Court", precise: true } };
+      scheduled: { start: NOW + 2 * 3600, court: "Centre Court", precise: true } };
     const html = renderMatchStrip(ins, "r.0", opts);
     expect(html).toContain("ms-sched");
     expect(html).toContain("Today 15:40");
@@ -93,7 +94,7 @@ describe("renderMatchStrip", () => {
 
   it("shows a coarse venue-day date for a far-future TBD match", () => {
     const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null,
-      scheduled: { start: 1782999600 + 5 * 86400, court: null, precise: false } };
+      scheduled: { start: NOW + 5 * 86400, court: null, precise: false } };
     const html = renderMatchStrip(ins, "r.0", opts);
     expect(html).toContain("7 Jul");
     expect(html).not.toMatch(/\d{2}:\d{2}/); // no fake clock time on a nominal date
@@ -102,7 +103,7 @@ describe("renderMatchStrip", () => {
 
 describe("renderMatchDetail", () => {
   it("renders per-player meta, badges, accented ELO line, stats, duration and the link", () => {
-    const html = renderMatchDetail(base, "https://www.sofascore.com/tennis/match/x/abc", rounds, 1_782_999_600);
+    const html = renderMatchDetail(base, "https://www.sofascore.com/tennis/match/x/abc", rounds, NOW);
     expect(html).toContain("Carlos Alcaraz");
     expect(html).toContain("#1 · seed 1");                       // rank/seed meta
     expect(html).toContain("22y");                               // age meta
@@ -118,7 +119,7 @@ describe("renderMatchDetail", () => {
   });
 
   it("carries the bottom-sheet chrome, all collapsing only the tier (detail-expand)", () => {
-    const html = renderMatchDetail(base, null, rounds, 1_782_999_600);
+    const html = renderMatchDetail(base, null, rounds, NOW);
     // a disclosure REGION, not a (false) modal dialog — desktop renders it in-flow and the
     // phone sheet has no focus containment; tabindex -1 = programmatic focus target on expand
     expect(html).toContain('<aside id="match-detail" class="mi-detail" role="region" aria-label="Match details" tabindex="-1">');
@@ -132,15 +133,15 @@ describe("renderMatchDetail", () => {
   it("tolerates a TBD side and a missing link", () => {
     const ins = { ...base, winner: null, score: null, eloLine: "", badges: [], aces: null, doubleFaults: null,
       p2: { ...base.p2, id: null, name: "TBD", elo: null } };
-    const html = renderMatchDetail(ins, null, rounds, 1_782_999_600);
+    const html = renderMatchDetail(ins, null, rounds, NOW);
     expect(html).toContain("TBD");
     expect(html).not.toContain("Open in SofaScore");
   });
 
   it("renders the full scheduled line, flagged provisional", () => {
     const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null, durationSec: null,
-      scheduled: { start: 1782999600 + 24 * 3600, court: "Court 2", precise: true } };
-    const html = renderMatchDetail(ins, null, rounds, 1_782_999_600);
+      scheduled: { start: NOW + 24 * 3600, court: "Court 2", precise: true } };
+    const html = renderMatchDetail(ins, null, rounds, NOW);
     expect(html).toContain("mi-sched");
     expect(html).toContain("Tomorrow 3 Jul, 13:40");
     expect(html).toContain("Court 2");
@@ -148,6 +149,6 @@ describe("renderMatchDetail", () => {
   });
 
   it("omits the scheduled line for a match with no scheduled info", () => {
-    expect(renderMatchDetail(base, null, rounds, 1_782_999_600)).not.toContain("mi-sched");
+    expect(renderMatchDetail(base, null, rounds, NOW)).not.toContain("mi-sched");
   });
 });

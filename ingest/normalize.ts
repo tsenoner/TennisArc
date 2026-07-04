@@ -1,5 +1,5 @@
 import type { EntryType, Match, MatchStatus, Player, Round, Snapshot, Tour } from "../src/model";
-import { PLACEHOLDER_TEAM_NAME } from "../src/model";
+import { PLACEHOLDER_TEAM_NAME, isUpcoming } from "../src/model";
 
 export interface TournamentMeta {
   tour: Tour; slam: string; name: string; year: number; surface: string;
@@ -108,7 +108,7 @@ export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snap
         // round — a real per-match time once the order of play is out, a shared nominal round-day time
         // on future placeholder rounds. Stamped only while unplayed; enrichMatch upgrades the imminent
         // matches to the precise per-event time (scheduledPrecise).
-        scheduledStart: status === "scheduled" || status === "notstarted" ? b.seriesStartDateTimestamp : undefined,
+        scheduledStart: isUpcoming(status) ? b.seriesStartDateTimestamp : undefined,
         score: null, live: null, durationSec: null, durationProvisional: false,
         sofaEventId: b.events?.[0] ?? null, sofaCustomId: null, stats: null,
       };

@@ -403,4 +403,12 @@ describe("renderSunburst — on-arc scheduled labels", () => {
   it("emits nothing when sched returns null (no scheduled info)", () => {
     expect(renderSunburst([arc()], color, 700, labels(() => null))).not.toContain("arc-sched");
   });
+
+  it("shortens a cramped past-day precise tag to its date, never a bare day-of-month digit", () => {
+    // A sliver arc forces the shortForm fallback: "1 Jul 13:40" must degrade to "1 Jul", not "1"
+    // (the first-word rule that turns "Tmrw 14:30" into "Tmrw" would strand a meaningless digit).
+    const html = renderSunburst([arc({ x0: 0, x1: 0.05 })], color, 700, labels(() => "1 Jul 13:40"));
+    expect(html).toContain(">1 Jul<");
+    expect(html).not.toContain(">1<");
+  });
 });

@@ -10,6 +10,12 @@ export type MatchStatus =
 export const isInProgress = (status: MatchStatus): boolean =>
   status === "live" || status === "suspended";
 
+/** The not-yet-played statuses: a match with a known slot ("scheduled") or one still fed by
+ *  placeholders ("notstarted"). The single source of truth for the order-of-play surfaces —
+ *  scheduledInfo's display allowlist and normalize's coarse-stamp gate must never drift apart. */
+export const isUpcoming = (status: MatchStatus): boolean =>
+  status === "scheduled" || status === "notstarted";
+
 export interface SetScore { p1: number; p2: number; tb?: number; }
 
 export interface MatchStats {

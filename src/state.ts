@@ -1,5 +1,5 @@
 import type { Match, MatchStatus, Player, Round, SetScore, Snapshot } from "./model";
-import { isPlaceholderPlayer, isInProgress } from "./model";
+import { isPlaceholderPlayer, isInProgress, isUpcoming } from "./model";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -509,8 +509,13 @@ export interface ScheduledInfo { start: number; court: string | null; precise: b
 // set at ingest) within a ~36h backstop — only that tier shows a clock time; an event-sourced stamp
 // for a round 2+ days out can itself still be a nominal placeholder. Everything else upcoming is
 // COARSE: a date-only nominal round-day stamp. Hide rules differ: a precise slot >6h past is stale
-// (the match surely started); a coarse slot survives until its UTC calendar day — the venue day —
-// is fully over, so a rain-slipped round keeps its date while the feed catches up.
+// (the match surely started); a coarse slot survives until its UTC calendar day is fully over, so a
+// rain-slipped round keeps its date while the feed catches up. The UTC day is a PROXY for the venue
+// day: exact for the nominal ~11:00-local stamps this tier is built for (they land mid-UTC-day at
+// every slam), but a real evening slot that leaks into the coarse tier can cross UTC midnight, so
+// the flip can run hours early (far-west venues) or late (far-east). render.ts's SCHED_DATE_UTC
+// formatter encodes the same UTC≈venue-day assumption — change one, change both (the honest fix for
+// either is a venue time zone per slam threaded through both).
 const SCHED_PRECISE_AHEAD_SEC = 36 * 3600;
 const SCHED_STALE_BEHIND_SEC = 6 * 3600;
 
@@ -518,8 +523,7 @@ const SCHED_STALE_BEHIND_SEC = 6 * 3600;
  *  trustworthy to show. `nowSec` is the WALL-CLOCK reference (Unix seconds) — never derive it from
  *  the snapshot's generatedAt, which can lag hours when the refresh wedges. */
 export function scheduledInfo(m: Match, nowSec: number): ScheduledInfo | null {
-  const upcoming = m.status === "scheduled" || m.status === "notstarted"; // allowlist: walkover/retired never leak a time
-  if (!upcoming || m.scheduledStart == null) return null;
+  if (!isUpcoming(m.status) || m.scheduledStart == null) return null; // allowlist: walkover/retired never leak a time
   const dt = m.scheduledStart - nowSec;
   const precise = m.scheduledPrecise === true && dt <= SCHED_PRECISE_AHEAD_SEC;
   if (precise) {
@@ -561,10 +565,12 @@ function insightSide(s: Snapshot, pid: string | null, surface: string, time: Map
   };
 }
 
-/** Derive a rich, narrative match insight (badges, ELO context, per-player path) for one match. */
+/** Derive a rich, narrative match insight (badges, ELO context, per-player path) for one match.
+ *  `nowSec` is deliberately required: the one-wall-clock-capture-per-draw() invariant is enforced
+ *  by the signature, not by caller discipline — a defaulted Date.now() here would let a second,
+ *  drifting clock sneak into a render pass unnoticed. */
 export function matchInsight(
-  s: Snapshot, matchId: string, time: Map<string, PlayerTime>,
-  nowSec: number = Math.floor(Date.now() / 1000),
+  s: Snapshot, matchId: string, time: Map<string, PlayerTime>, nowSec: number,
 ): MatchInsight | null {
   const m = s.matches[matchId];
   if (!m) return null;
