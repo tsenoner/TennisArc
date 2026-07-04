@@ -3,7 +3,7 @@ import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
-  renderCenterSection, renderCrumbs, renderQuarterFocusButtons,
+  renderCenterSection, renderCenterSched, renderCrumbs, renderQuarterFocusButtons,
   renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduled, startOfLocalDay, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
@@ -346,21 +346,24 @@ export function createApp(root: HTMLElement): () => void {
     const floatIdle = !pinned;
     roCurrent = defaultId; roIdle = floatIdle; // the markup below renders the float readout for defaultId
 
-    // The centre pill: a DECIDED result is a fact, shown on every lens — a finished slam's champion
-    // (flag + surname) anchors the Time and Country wheels too, not just Seed. A PROJECTION is a
-    // guess, so it stays on the Seed lens only (quiet + italic) and the Time/Country centres stay
-    // clean while a slam is live. The same split governs a focused section: a decided occupant
-    // shows everywhere; a projected one — or the all-TBD section-title fallback — is Seed-only.
+    // The centre pill shows FACTS only: a DECIDED result (flag + surname) anchors every lens —
+    // a projection is a guess and never appears here (removed 2026-07; it used to show on Seed).
+    // While the final is undecided the centre instead names the final's order-of-play slot (the
+    // champion disc is the one arc that can't carry an on-arc sched tag — see renderCenterSched).
+    // A focused section follows the same rule: decided occupant everywhere; otherwise Seed falls
+    // back to the section title and Time/Country stay clean.
     const onSeed = state.colorDim === "seed";
     let centerId = "";
     if (state.focusId) {
       const fp = focusOcc ? snap.players[focusOcc] : undefined;
       const projected = focusArc?.projected ?? false;
-      if (fp && (!projected || onSeed)) centerId = renderCenterId(fp.country, surname(fp.name), projected);
-      else if (!fp && onSeed) centerId = renderCenterSection(sectionTitle(snap, tree, state.focusId));
-    } else if (tree.occupant && (!tree.projected || onSeed)) {
+      if (fp && !projected) centerId = renderCenterId(fp.country, surname(fp.name));
+      else if (onSeed) centerId = renderCenterSection(sectionTitle(snap, tree, state.focusId));
+    } else if (tree.occupant && !tree.projected) {
       const champ = snap.players[tree.occupant];
-      centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
+      centerId = champ ? renderCenterId(champ.country, surname(champ.name)) : "";
+    } else {
+      centerId = renderCenterSched(schedLabel(tree.matchId) ?? "");
     }
     const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
 

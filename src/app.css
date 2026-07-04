@@ -366,12 +366,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   font-size: 12px; font-weight: 700; pointer-events: none; }
-/* a projected champion is a guess, not a result: quiet it down (smaller, dim, no pill chrome,
-   italic) so the centre anchors the view without claiming a winner. A decided champion keeps the
-   full-weight pill above. */
-.center-id.projected { font-size: 10.5px; font-weight: 600; opacity: .6;
-  border-color: transparent; background: color-mix(in srgb, var(--bg) 50%, transparent); }
-.center-id.projected span { font-style: italic; }
+/* the final's order-of-play pill (undecided final): teal like the on-arc .arc-sched tags */
+.center-id.center-sched span { color: var(--teal-text); font-weight: 600; }
 /* focused-section fallback pill (no occupant known yet): quieter than a player identity */
 .center-id.center-sec span { color: var(--dim); }
 

@@ -607,10 +607,9 @@ export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
  *  — the constant anchor while the float readout names whoever is hovered/pinned (and the
  *  champion's only name when the readout idles or shows someone else, so it stays in the
  *  accessibility tree). Pointer-events pass through to the centre disc beneath. */
-export function renderCenterId(iso3: string, name: string, projected: boolean): string {
+export function renderCenterId(iso3: string, name: string): string {
   if (!name) return "";
-  return `<div class="center-id${projected ? " projected" : ""}">` +
-    `${flagImg(iso3, 12)}<span>${escapeHtml(name)}</span></div>`;
+  return `<div class="center-id">${flagImg(iso3, 12)}<span>${escapeHtml(name)}</span></div>`;
 }
 
 /** Breadcrumb chips for a focused section: "‹ Full draw" (data-id="" on purpose — the
@@ -633,6 +632,14 @@ export function renderCrumbs(trail: { id: string; label: string }[], current: st
 export function renderCenterSection(title: string): string {
   if (!title) return "";
   return `<div class="center-id center-sec"><span>${escapeHtml(title)}</span></div>`;
+}
+
+/** Centre-disc order-of-play pill while the final is undecided: the champion slot is the one
+ *  arc that can't carry an on-arc sched tag (a full-circle textPath draws garbage), so the
+ *  final's slot is named here instead — same pill chrome, teal like the .arc-sched tags. */
+export function renderCenterSched(sched: string): string {
+  if (!sched) return "";
+  return `<div class="center-id center-sched"><span>Final · ${escapeHtml(sched)}</span></div>`;
 }
 
 function insightScore(ins: MatchInsight): string {

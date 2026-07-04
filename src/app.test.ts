@@ -444,8 +444,29 @@ describe("finalist pill + corner readout", () => {
     }
   });
 
-  it("keeps a projected champion's pill to the Seed lens only while the slam is in progress", async () => {
-    // final unplayed → the champion is a projection, which must stay quiet on Time/Country
+  it("shows the final's schedule in the centre — never a predicted champion — while the slam is in progress", async () => {
+    // final unplayed → no champion yet; the centre names the final's slot on EVERY lens,
+    // never a projected favourite (predictions were removed from the pill entirely)
+    const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
+    const final = Object.values(live.matches).find((m) => !m.nextMatchId)!;
+    final.scheduledStart = Math.floor(Date.now() / 1000) + 3 * 86400; // coarse tier: date-only tag
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      const body = u.includes("index.json") ? INDEX
+        : u.includes("roland-garros") || u.includes("wimbledon") ? live : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as typeof fetch;
+    const root = await mountApp();
+    for (const dim of ["time", "seed", "country"]) {
+      setLens(root, dim);
+      expect(root.querySelector(".center-id.projected"), `no projected pill on ${dim}`).toBeNull();
+      const sched = root.querySelector(".center-id.center-sched");
+      expect(sched, `final sched pill on ${dim}`).not.toBeNull();
+      expect(sched!.textContent, `names the final on ${dim}`).toContain("Final");
+    }
+  });
+
+  it("keeps the centre empty while the final is undecided AND unscheduled", async () => {
     const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
     globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
       const u = String(url);
@@ -454,11 +475,10 @@ describe("finalist pill + corner readout", () => {
       return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
     }) as typeof fetch;
     const root = await mountApp();
-    expect(root.querySelector(".center-id")).toBeNull();              // Time lens: projected champ hidden
-    setLens(root, "seed");
-    expect(root.querySelector(".center-id.projected")).not.toBeNull(); // Seed lens: quiet projected pill
-    setLens(root, "country");
-    expect(root.querySelector(".center-id")).toBeNull();              // Country lens: hidden again
+    for (const dim of ["time", "seed", "country"]) {
+      setLens(root, dim);
+      expect(root.querySelector(".center-id"), `clean centre on ${dim}`).toBeNull();
+    }
   });
 
   it("keeps naming the finalist in the centre while another player is pinned", async () => {
@@ -1033,8 +1053,9 @@ describe("centre pill while focused", () => {
     }
   });
 
-  it("keeps a PROJECTED focused occupant's pill to the Seed lens only (slam in progress)", async () => {
-    // nothing played → the focused quarter (r.0.0) has a projected-favourite occupant, not a decided one
+  it("names the SECTION — not a projected favourite — when a focused occupant is undecided (Seed only)", async () => {
+    // nothing played → the focused quarter (r.0.0) has a projected-favourite occupant, not a decided
+    // one. Predictions are gone from the pill: Seed falls back to the section title instead.
     const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 0 });
     globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
       const u = String(url);
@@ -1045,10 +1066,13 @@ describe("centre pill while focused", () => {
     mockBack();
     click(qArc(root)); click(qArc(root));                            // focus the unplayed (projected) quarter
     setLens(root, "seed");
-    expect(root.querySelector(".center-id.projected")).not.toBeNull(); // quiet projected pill on Seed
+    expect(root.querySelector(".center-id.projected")).toBeNull();     // no predicted player, ever
+    const pill = root.querySelector(".center-id.center-sec");
+    expect(pill).not.toBeNull();                                       // section title instead
+    expect(pill!.textContent!.trim()).not.toBe("");
     for (const dim of ["time", "country"]) {
       setLens(root, dim);
-      expect(root.querySelector(".center-id"), `projected pill hidden on ${dim}`).toBeNull();
+      expect(root.querySelector(".center-id"), `centre stays clean on ${dim}`).toBeNull();
     }
   });
 });

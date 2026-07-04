@@ -310,16 +310,24 @@ describe("renderCountryPanel", () => {
   });
 });
 
-import { renderCenterId, renderCenterSection } from "./render";
+import { renderCenterId, renderCenterSection, renderCenterSched } from "./render";
 
 describe("renderCenterId", () => {
-  it("carries the flag + name; projection italicizes; empty name renders nothing", () => {
-    const html = renderCenterId("SRB", "Djokovic", false);
+  it("carries the flag + name; empty name renders nothing", () => {
+    const html = renderCenterId("SRB", "Djokovic");
     expect(html).toContain("Djokovic");
     expect(html).toContain("center-id");
     expect(html).not.toContain("projected");
-    expect(renderCenterId("SRB", "Djokovic", true)).toContain("projected");
-    expect(renderCenterId("SRB", "", false)).toBe("");
+    expect(renderCenterId("SRB", "")).toBe("");
+  });
+});
+
+describe("renderCenterSched", () => {
+  it("renders the final's order-of-play pill; empty sched renders nothing", () => {
+    const html = renderCenterSched("Fri 10 Jul");
+    expect(html).toContain('class="center-id center-sched"');
+    expect(html).toContain("Final · Fri 10 Jul");
+    expect(renderCenterSched("")).toBe("");
   });
 });
 
