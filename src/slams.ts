@@ -1,4 +1,4 @@
-import type { AvailableSlam, SlamIndex, Tour } from "./model";
+import type { AvailableSlam, SlamIndex, SlamStatus, Tour } from "./model";
 
 export const SLAM_ORDER = ["australian-open", "roland-garros", "wimbledon", "us-open"] as const;
 export const SLAM_ABBR: Record<string, string> = {
@@ -31,6 +31,13 @@ export function slamsForYear(index: SlamIndex, year: number, tour: Tour): SlamSl
     surface: SLAM_SURFACE[slam],
     entry: index.slams.find((s) => s.tour === tour && s.year === year && s.slam === slam) ?? null,
   }));
+}
+
+/** Manifest status for one tour/year/slam, or undefined when the entry is absent. */
+export function statusFor(
+  index: SlamIndex | undefined, tour: Tour, year: number, slam: string,
+): SlamStatus | undefined {
+  return index?.slams.find((s) => s.tour === tour && s.year === year && s.slam === slam)?.status;
 }
 
 /** Default selection for a tour: most recent live, else most recent complete, else most recent of any. */

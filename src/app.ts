@@ -8,9 +8,8 @@ import {
 } from "./render";
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
-import { createStore, type Store } from "./store";
 import { fetchSnapshot, fetchIndex } from "./api";
-import { pickDefaultSlam, availableYears, slamsForYear } from "./slams";
+import { pickDefaultSlam, availableYears, slamsForYear, statusFor } from "./slams";
 import type { Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
@@ -37,8 +36,12 @@ interface AppState {
   panelExpanded: boolean;   // mobile bottom sheet: peek (false) vs tall (true)
   pinnedId: string | undefined; // tap/click-pinned player: path stays lit, readout names them
   helpOpen: boolean;        // the Help modal (sourced from docs/HELP.md) — global overlay
+  loadFailed: boolean;      // nothing renderable AND the last fetch failed → draw() shows Retry, not a spinner
+  refreshing: string | undefined;    // snapKey of the view whose manual refresh is in flight — its chip shows "updating…"
+  refreshFailed: string | undefined; // snapKey of the view whose last manual refresh got no data — its chip says so
 }
 
+// Copy for the status chip's age label; freshnessLabel (in createApp) layers refresh state on top.
 function staleLabel(generatedAt: string | undefined, nowMs: number): string {
   if (!generatedAt) return "";
   const ageMin = Math.round((nowMs - Date.parse(generatedAt)) / 60000);
@@ -66,8 +69,8 @@ export function createApp(root: HTMLElement): () => void {
     tour: initial.tour ?? "ATP", year: 0, slam: "", index: undefined, snapshots: {},
     colorDim: initial.view ?? "time", seedSort: initial.sub ?? "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
     openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined, helpOpen: false,
+    loadFailed: false, refreshing: undefined, refreshFailed: undefined,
   };
-  let store: Store | undefined;
 
   // ---- Help overlay ----
   // Help is a TRUE global overlay, so it lives in its own host node OUTSIDE root.innerHTML.
@@ -226,6 +229,15 @@ export function createApp(root: HTMLElement): () => void {
 
   let lastDrawMs = 0; // last full render, for the visibilitychange debounce below
 
+  // The status chip's copy for the current view: manual-refresh state wins over the age label.
+  // Shared by draw() and the minute ticker below so the two can never disagree.
+  const freshnessLabel = (snap: Snapshot): string => {
+    const k = snapKey(state.tour, state.year, state.slam);
+    return state.refreshing === k ? "updating…"
+      : state.refreshFailed === k ? "update failed"
+      : staleLabel(snap.generatedAt, Date.now()) || "refresh";
+  };
+
   const draw = () => {
     if (!state.panelOpen) state.panelExpanded = false; // invariant: a closed drawer always reopens at peek
     hlNodes = []; hlCurrent = null; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
@@ -233,7 +245,10 @@ export function createApp(root: HTMLElement): () => void {
     if (!snap) {
       root.innerHTML =
         renderControls(controlsOpts()) +
-        `<div class="stage"><div class="loading">Loading ${state.tour} draw…</div></div>`;
+        (state.loadFailed
+          ? `<div class="stage"><div class="loading load-error"><p>Couldn’t load the draw — check your connection.</p>` +
+            `<button class="retry" data-action="retry">Retry</button></div></div>`
+          : `<div class="stage"><div class="loading">Loading ${state.tour} draw…</div></div>`);
       return;
     }
     // THE wall-clock reference for all scheduled-time display this render pass (never generatedAt —
@@ -389,7 +404,8 @@ export function createApp(root: HTMLElement): () => void {
         `<div class="side">${panel}</div>` +
       `</div>` +
       renderLegend(state.colorDim, state.seedSort, hasPending) +
-      `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}` +
+      `<div class="status">${snap.tournament.name} · ` +
+        `<button class="status-refresh" data-action="refresh" title="Refresh now"><span class="status-label">${freshnessLabel(snap)}</span> <span aria-hidden="true">↻</span></button>` +
         // CC BY-NC-SA: historical durations + ELO + birthdates come from Jeff Sackmann's data
         ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener noreferrer">Tennis Abstract</a></span></div>`;
     // Help is NOT part of this innerHTML — it lives in helpHost (see setHelp) so this swap
@@ -403,18 +419,59 @@ export function createApp(root: HTMLElement): () => void {
     }
   };
 
-  const load = async (tour: Tour, year: number, slam: string) => {
+  let lastLoadMs = 0; // last snapshot fetch that actually RETURNED data for the current view (visibility refetch throttle)
+  const inflight = new Map<string, Promise<boolean>>();
+  // Single-flight per snapshot key: coincident callers (poll tick, visibility refetch, the chip,
+  // Retry, view switches) share one fetch, so two responses for the same view can never resolve
+  // out of order and clobber newer data. Resolves true when the fetch produced a snapshot.
+  const load = (tour: Tour, year: number, slam: string): Promise<boolean> => {
     const k = snapKey(tour, year, slam);
-    if (store && !state.snapshots[k]) {
-      const cached = await store.getSnapshot(tour, year, slam);
-      if (cached) { state.snapshots[k] = cached; if (snapKey(state.tour, state.year, state.slam) === k) draw(); }
-    }
-    const fresh = await fetchSnapshot(tour, year, slam);
-    if (fresh) {
-      state.snapshots[k] = fresh;
-      void store?.setSnapshot(tour, year, slam, fresh);
-      if (snapKey(state.tour, state.year, state.slam) === k) draw();
-    }
+    const pending = inflight.get(k);
+    if (pending) return pending;
+    const p = (async () => {
+      const fresh = await fetchSnapshot(tour, year, slam);
+      const isCurrent = snapKey(state.tour, state.year, state.slam) === k;
+      if (!fresh) {
+        if (isCurrent && !state.snapshots[k] && !state.loadFailed) {
+          // only a view with nothing to show degrades to the Retry state — a failed background
+          // refresh of an already-rendered draw keeps the (stale) bracket on screen, and an
+          // error already on screen must not be rebuilt by every failed poll tick
+          state.loadFailed = true; draw();
+        }
+        return false;
+      }
+      const prev = state.snapshots[k];
+      // Never let an older payload replace newer data: api.ts falls back to the stale origin
+      // seed on a transient outage, and raw CDN edges can disagree within their TTL — either
+      // would flip live scores backwards for a tick.
+      const regressed = prev != null && Date.parse(fresh.generatedAt) < Date.parse(prev.generatedAt);
+      if (!regressed) state.snapshots[k] = fresh;
+      if (state.refreshFailed === k) state.refreshFailed = undefined; // data arrived — the chip's failure note is stale
+      if (isCurrent) {
+        lastLoadMs = Date.now();
+        state.loadFailed = false;
+        // redraw only when the data actually moved — polling must not wipe panel scroll /
+        // in-flight interactions every 90s just to repaint identical bytes
+        if (!prev || (!regressed && prev.generatedAt !== fresh.generatedAt)) draw();
+      }
+      return true;
+    })().finally(() => inflight.delete(k));
+    inflight.set(k, p);
+    return p;
+  };
+  /** Refetch the snapshot the user is looking at — every refresh path names the current view through here. */
+  const loadCurrent = (): Promise<boolean> => load(state.tour, state.year, state.slam);
+
+  const LIVE_POLL_MS = 90_000;
+  const isLiveView = (): boolean =>
+    statusFor(state.index, state.tour, state.year, state.slam) === "live";
+  // The gate above must not freeze at its mount-time answer: a tab left open across the
+  // manifest's upcoming→live flip would never start polling, and a finished slam would poll
+  // forever. Every refresh path re-reads the manifest through here (a failure keeps the old one).
+  let lastIndexMs = 0;
+  const refreshIndex = async (): Promise<void> => {
+    const idx = await fetchIndex();
+    if (idx) { state.index = idx; lastIndexMs = Date.now(); }
   };
 
   // EVERY dismissal of a selected match routes through here — the detail tier must never
@@ -526,6 +583,7 @@ export function createApp(root: HTMLElement): () => void {
     state.focusId = undefined; ownsEntry = false;
     closeMatch();
     state.selectedCountry = undefined; state.pinnedId = undefined;
+    state.loadFailed = false; // the Retry state is per-view: a switched-to draw starts from the spinner
   };
 
   // Switch to the best available slam for a tour, keeping the current year if that tour has it.
@@ -590,6 +648,32 @@ export function createApp(root: HTMLElement): () => void {
     } else if (a === "panel-expand") {
       state.panelExpanded = !state.panelExpanded;
       draw();
+    } else if (a === "retry") {
+      state.loadFailed = false;
+      draw(); // back to the spinner while we refetch
+      const done: Promise<unknown> = !state.year ? bootstrap() : Promise.all([refreshIndex(), loadCurrent()]);
+      void done.then(() => {
+        // the swap destroyed the button mid-press: if the refetch failed again, keyboard focus
+        // would otherwise strand on <body> instead of the fresh Retry control
+        if (state.loadFailed && document.activeElement === document.body)
+          root.querySelector<HTMLElement>(".load-error .retry")?.focus();
+      });
+    } else if (a === "refresh") {
+      const k = snapKey(state.tour, state.year, state.slam);
+      if (state.refreshing === k) return;
+      state.refreshing = k;
+      draw(); // show "updating…" immediately
+      root.querySelector<HTMLElement>(".status-refresh")?.focus(); // the swap dropped the pressed chip's focus
+      void Promise.all([refreshIndex(), loadCurrent()]).then(([, ok]) => {
+        if (state.refreshing !== k) return; // superseded — a newer refresh owns the chip now
+        state.refreshing = undefined;
+        if (!ok) state.refreshFailed = k;  // an explicit refresh must not fail silently — the chip says so
+        if (snapKey(state.tour, state.year, state.slam) !== k) return; // never repaint a view this didn't refresh
+        const hadFocus = document.activeElement === document.body ||
+          !!(document.activeElement as HTMLElement | null)?.classList.contains("status-refresh");
+        draw(); // restore the label ("updated …" / "update failed")
+        if (hadFocus) root.querySelector<HTMLElement>(".status-refresh")?.focus();
+      });
     } else if (a === "tour" && el.dataset.tour) {
       selectForTour(el.dataset.tour as Tour);
     } else if (a === "slam" && el.dataset.slam) {
@@ -597,7 +681,7 @@ export function createApp(root: HTMLElement): () => void {
       state.openMenu = undefined;
       resetSelection();
       syncUrl(true);
-      draw(); void load(state.tour, state.year, state.slam);
+      draw(); void loadCurrent();
     } else if (a === "year" && el.dataset.year) {
       const y = Number(el.dataset.year);
       if (Number.isFinite(y) && state.index) {
@@ -608,7 +692,7 @@ export function createApp(root: HTMLElement): () => void {
         state.openMenu = undefined;
         resetSelection();
         syncUrl(true);
-        draw(); void load(state.tour, state.year, state.slam);
+        draw(); void loadCurrent();
       }
     } else if (a === "colordim" && el.dataset.dim) {
       state.colorDim = el.dataset.dim as ColorDim;
@@ -749,14 +833,14 @@ export function createApp(root: HTMLElement): () => void {
     const drawChanged = r.tour !== state.tour || r.year !== state.year || r.slam !== state.slam;
     state.tour = r.tour; state.year = r.year; state.slam = r.slam;
     state.colorDim = r.view; state.seedSort = r.sub;
-    if (drawChanged) { closeMatch(); state.selectedCountry = undefined; state.pinnedId = undefined; }
+    if (drawChanged) { closeMatch(); state.selectedCountry = undefined; state.pinnedId = undefined; state.loadFailed = false; }
     const f = (e.state as { f?: string } | null)?.f ?? (location.hash ? location.hash.slice(1) : undefined);
     state.focusId = normalizeFocus(f);
     ownsEntry = !!state.focusId;
     if (!state.focusId && location.hash) history.replaceState(null, "", location.pathname + location.search);
     draw();
     if (drawChanged && !state.snapshots[snapKey(state.tour, state.year, state.slam)]) {
-      void load(state.tour, state.year, state.slam);
+      void loadCurrent();
     }
   }, { signal });
 
@@ -817,8 +901,39 @@ export function createApp(root: HTMLElement): () => void {
   // scroll/selection/focus over a display that only moves in minutes. draw() self-guards while no
   // snapshot is loaded.
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && Date.now() - lastDrawMs > 60_000) draw();
+    if (document.hidden) return;
+    // a returning tab wants fresh scores, not just fresh labels — but don't hammer the CDN on
+    // quick tab flips (half a poll interval since the last fetch that returned data). The
+    // manifest is re-read first so the live gate reflects a status flip (upcoming→live) that
+    // happened while the tab was away.
+    void (async () => {
+      if (Date.now() - lastIndexMs > LIVE_POLL_MS / 2) await refreshIndex();
+      if (isLiveView() && Date.now() - lastLoadMs > LIVE_POLL_MS / 2) void loadCurrent();
+    })();
+    if (Date.now() - lastDrawMs > 60_000) draw();
   }, { signal });
+  // Live polling: while the manifest says the viewed slam is in play, refetch on a fixed tick.
+  // draw() only fires when generatedAt moves (see load), so an idle tick costs one cheap fetch.
+  // The tick also re-reads the manifest while the status could still flip (upcoming→live→complete),
+  // so the gate opens and closes on its own; archival views never tick anything.
+  const pollTimer = window.setInterval(() => {
+    if (document.hidden) return;
+    const status = statusFor(state.index, state.tour, state.year, state.slam);
+    if (status !== "live" && status !== "upcoming") return;
+    void refreshIndex();
+    if (status === "live") void loadCurrent();
+  }, LIVE_POLL_MS);
+  signal.addEventListener("abort", () => clearInterval(pollTimer));
+  // The chip is the user's staleness signal, and draw() deliberately skips identical data — so
+  // tick the label TEXT in place (never a full redraw) while the tab is visible, or "updated
+  // 2 min ago" would freeze exactly when the upstream refresh wedges.
+  const labelTimer = window.setInterval(() => {
+    if (document.hidden) return;
+    const label = root.querySelector(".status-refresh .status-label");
+    const snap = state.snapshots[snapKey(state.tour, state.year, state.slam)];
+    if (label && snap) label.textContent = freshnessLabel(snap);
+  }, 60_000);
+  signal.addEventListener("abort", () => clearInterval(labelTimer));
   let midnightTimer = 0;
   const armMidnight = () => {
     const now = new Date();
@@ -839,10 +954,9 @@ export function createApp(root: HTMLElement): () => void {
   if (location.hash || history.state) history.replaceState(null, "", location.pathname + location.search);
 
   draw(); // initial loading state
-  void (async () => {
-    store = await createStore();
-    state.index = (await fetchIndex()) ?? (await store.getIndex()) ?? undefined;
-    if (state.index) void store.setIndex(state.index);
+  // Extracted (not an IIFE) so the Retry action can re-run it after a mount-time outage.
+  const bootstrap = async () => {
+    await refreshIndex(); // both callers arrive with loadFailed already false (initial state / Retry)
     if (state.index) {
       // Resolve the URL's candidate view against the manifest (stale/partial/"/" → default),
       // then canonicalize the URL in place so it honestly names the resolved view and a
@@ -853,8 +967,8 @@ export function createApp(root: HTMLElement): () => void {
       // by a lens click during the loading window — don't clobber them with the mount-time candidate.
       if (state.year) history.replaceState(null, "", buildUrl());
     }
-    if (!state.year) return; // no manifest yet → stay on loading state
-    await load(state.tour, state.year, state.slam);
+    if (!state.year) { state.loadFailed = true; draw(); return; } // no manifest → Retry state
+    await loadCurrent();
     // Warm the other tour's same-or-default slam in the background.
     const other: Tour = state.tour === "ATP" ? "WTA" : "ATP";
     if (state.index) {
@@ -864,7 +978,8 @@ export function createApp(root: HTMLElement): () => void {
         : pickDefaultSlam(state.index, other);
       if (otherSel) void load(other, otherSel.year, otherSel.slam);
     }
-  })();
+  };
+  void bootstrap();
 
   return () => { ac.abort(); root.removeAttribute("inert"); helpHost.remove(); };
 }
