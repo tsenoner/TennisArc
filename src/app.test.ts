@@ -72,6 +72,8 @@ function installFetchStub(): void {
 // window/document/root listeners), so no handler leaks across mounts; then reset shared globals.
 const mounted: Array<() => void> = [];
 afterEach(async () => {
+  vi.useRealTimers();                       // a failed fake-timer test must not starve the drain below
+  Object.defineProperty(document, "hidden", { value: false, configurable: true }); // polling gate reset
   for (const dispose of mounted) dispose();
   mounted.length = 0;
   // A prior test's REAL history.back() fires popstate on a later macrotask; dispose has already
@@ -1173,5 +1175,55 @@ describe("load failure", () => {
       if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not rendered yet");
     }, { timeout: 2000 });
     expect(root.querySelector(".load-error")).toBeNull();
+  });
+});
+
+describe("live polling", () => {
+  const LIVE_INDEX: SlamIndex = {
+    ...INDEX,
+    slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]],
+  };
+
+  /** Fetch stub whose snapshot body is re-read per request; returns a roland-garros call counter. */
+  function installLiveFetchStub(snap: () => unknown): () => number {
+    const fn = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      const body = u.includes("index.json") ? LIVE_INDEX
+        : u.includes("roland-garros") || u.includes("wimbledon") ? snap() : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    });
+    globalThis.fetch = fn as unknown as typeof fetch;
+    return () => fn.mock.calls.filter(([u]) => String(u).includes("roland-garros")).length;
+  }
+
+  it("refetches the live slam every 90s and redraws only when generatedAt changes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let served: unknown = SNAP;
+    const snapCalls = installLiveFetchStub(() => served);
+    const root = await mountApp();
+    const before = snapCalls();
+
+    // unchanged data: the tick fetches but must not rebuild the DOM
+    const marker = root.querySelector(".chart")!;
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(snapCalls()).toBeGreaterThan(before);
+    expect(root.querySelector(".chart")).toBe(marker); // same node → no innerHTML swap
+
+    // changed data: the next tick redraws
+    served = { ...SNAP, generatedAt: new Date(Date.now() + 60_000).toISOString() };
+    await vi.advanceTimersByTimeAsync(90_000);
+    await vi.waitFor(() => {
+      if (root.querySelector(".chart") === marker) throw new Error("not redrawn yet");
+    }, { timeout: 2000 });
+  });
+
+  it("does not poll while the tab is hidden", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const snapCalls = installLiveFetchStub(() => SNAP);
+    await mountApp();
+    Object.defineProperty(document, "hidden", { value: true, configurable: true });
+    const before = snapCalls();
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(snapCalls()).toBe(before);
   });
 });

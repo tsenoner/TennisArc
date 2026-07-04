@@ -9,7 +9,7 @@ import {
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { fetchSnapshot, fetchIndex } from "./api";
-import { pickDefaultSlam, availableYears, slamsForYear } from "./slams";
+import { pickDefaultSlam, availableYears, slamsForYear, statusFor } from "./slams";
 import type { Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
@@ -406,19 +406,31 @@ export function createApp(root: HTMLElement): () => void {
     }
   };
 
+  let lastLoadMs = 0; // last completed snapshot fetch for the CURRENT view (visibility refetch throttle)
   const load = async (tour: Tour, year: number, slam: string) => {
     const k = snapKey(tour, year, slam);
     const fresh = await fetchSnapshot(tour, year, slam);
     const isCurrent = snapKey(state.tour, state.year, state.slam) === k;
+    if (isCurrent) lastLoadMs = Date.now();
     if (fresh) {
+      const prev = state.snapshots[k];
       state.snapshots[k] = fresh;
-      if (isCurrent) { state.loadFailed = false; draw(); }
+      if (isCurrent) {
+        state.loadFailed = false;
+        // redraw only when the data actually moved — polling must not wipe panel scroll /
+        // in-flight interactions every 90s just to repaint identical bytes
+        if (!prev || prev.generatedAt !== fresh.generatedAt) draw();
+      }
     } else if (isCurrent && !state.snapshots[k]) {
       // only a view with nothing to show degrades to the Retry state — a failed background
       // refresh of an already-rendered draw keeps the (stale) bracket on screen
       state.loadFailed = true; draw();
     }
   };
+
+  const LIVE_POLL_MS = 90_000;
+  const isLiveView = (): boolean =>
+    statusFor(state.index, state.tour, state.year, state.slam) === "live";
 
   // EVERY dismissal of a selected match routes through here — the detail tier must never
   // survive its match (a stale detailExpanded would pre-expand the next match's sheet).
@@ -825,8 +837,19 @@ export function createApp(root: HTMLElement): () => void {
   // scroll/selection/focus over a display that only moves in minutes. draw() self-guards while no
   // snapshot is loaded.
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && Date.now() - lastDrawMs > 60_000) draw();
+    if (document.hidden) return;
+    // a returning tab wants fresh scores, not just fresh labels — but don't hammer the CDN
+    // on quick tab flips (half a poll interval since the last completed fetch)
+    if (isLiveView() && Date.now() - lastLoadMs > LIVE_POLL_MS / 2) void load(state.tour, state.year, state.slam);
+    if (Date.now() - lastDrawMs > 60_000) draw();
   }, { signal });
+  // Live polling: while the manifest says the viewed slam is in play, refetch on a fixed tick.
+  // draw() only fires when generatedAt moves (see load), so an idle tick costs one cheap fetch.
+  const pollTimer = window.setInterval(() => {
+    if (document.hidden || !isLiveView()) return;
+    void load(state.tour, state.year, state.slam);
+  }, LIVE_POLL_MS);
+  signal.addEventListener("abort", () => clearInterval(pollTimer));
   let midnightTimer = 0;
   const armMidnight = () => {
     const now = new Date();
