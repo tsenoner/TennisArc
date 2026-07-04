@@ -54,13 +54,19 @@ beforeEach(() => {
   if (typeof document.elementFromPoint !== "function") {
     (document as unknown as { elementFromPoint: () => Element | null }).elementFromPoint = () => null;
   }
+  installFetchStub();
+});
+
+/** The standard network: manifest + the two synthetic slams. Tests that simulate outages
+ *  overwrite globalThis.fetch and call this to bring the network back. */
+function installFetchStub(): void {
   globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
     const u = String(url);
     const body = u.includes("index.json") ? INDEX
       : u.includes("roland-garros") || u.includes("wimbledon") ? SNAP : null;
     return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
   }) as typeof fetch;
-});
+}
 
 // Dispose every app mounted during a test (createApp returns a disposer that detaches its
 // window/document/root listeners), so no handler leaks across mounts; then reset shared globals.
@@ -1145,5 +1151,27 @@ describe("Help modal (sourced from docs/HELP.md)", () => {
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // Escape closes Help (no second rung needed)
     expect(sheet()).toBeNull();
+  });
+});
+
+describe("load failure", () => {
+  it("shows an error with Retry when nothing can be fetched, and recovers on retry", async () => {
+    // every fetch fails → the bootstrap can get neither manifest nor snapshot
+    globalThis.fetch = vi.fn(async () => ({ ok: false, status: 500, json: async () => null } as Response)) as typeof fetch;
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.getElementById("app")!;
+    mounted.push(createApp(root));
+    await vi.waitFor(() => {
+      if (!root.querySelector(".load-error")) throw new Error("error state not rendered yet");
+    }, { timeout: 2000 });
+    expect(root.querySelector('.load-error [data-action="retry"]')).toBeTruthy();
+
+    // the network comes back → Retry re-runs the bootstrap and renders the bracket
+    installFetchStub();
+    click(root.querySelector('[data-action="retry"]')!);
+    await vi.waitFor(() => {
+      if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not rendered yet");
+    }, { timeout: 2000 });
+    expect(root.querySelector(".load-error")).toBeNull();
   });
 });

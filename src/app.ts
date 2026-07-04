@@ -36,6 +36,7 @@ interface AppState {
   panelExpanded: boolean;   // mobile bottom sheet: peek (false) vs tall (true)
   pinnedId: string | undefined; // tap/click-pinned player: path stays lit, readout names them
   helpOpen: boolean;        // the Help modal (sourced from docs/HELP.md) — global overlay
+  loadFailed: boolean;      // nothing renderable AND the last fetch failed → draw() shows Retry, not a spinner
 }
 
 function staleLabel(generatedAt: string | undefined, nowMs: number): string {
@@ -65,6 +66,7 @@ export function createApp(root: HTMLElement): () => void {
     tour: initial.tour ?? "ATP", year: 0, slam: "", index: undefined, snapshots: {},
     colorDim: initial.view ?? "time", seedSort: initial.sub ?? "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
     openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined, helpOpen: false,
+    loadFailed: false,
   };
 
   // ---- Help overlay ----
@@ -231,7 +233,10 @@ export function createApp(root: HTMLElement): () => void {
     if (!snap) {
       root.innerHTML =
         renderControls(controlsOpts()) +
-        `<div class="stage"><div class="loading">Loading ${state.tour} draw…</div></div>`;
+        (state.loadFailed
+          ? `<div class="stage"><div class="loading load-error"><p>Couldn’t load the draw — check your connection.</p>` +
+            `<button class="retry" data-action="retry">Retry</button></div></div>`
+          : `<div class="stage"><div class="loading">Loading ${state.tour} draw…</div></div>`);
       return;
     }
     // THE wall-clock reference for all scheduled-time display this render pass (never generatedAt —
@@ -404,9 +409,14 @@ export function createApp(root: HTMLElement): () => void {
   const load = async (tour: Tour, year: number, slam: string) => {
     const k = snapKey(tour, year, slam);
     const fresh = await fetchSnapshot(tour, year, slam);
+    const isCurrent = snapKey(state.tour, state.year, state.slam) === k;
     if (fresh) {
       state.snapshots[k] = fresh;
-      if (snapKey(state.tour, state.year, state.slam) === k) draw();
+      if (isCurrent) { state.loadFailed = false; draw(); }
+    } else if (isCurrent && !state.snapshots[k]) {
+      // only a view with nothing to show degrades to the Retry state — a failed background
+      // refresh of an already-rendered draw keeps the (stale) bracket on screen
+      state.loadFailed = true; draw();
     }
   };
 
@@ -583,6 +593,11 @@ export function createApp(root: HTMLElement): () => void {
     } else if (a === "panel-expand") {
       state.panelExpanded = !state.panelExpanded;
       draw();
+    } else if (a === "retry") {
+      state.loadFailed = false;
+      draw(); // back to the spinner while we refetch
+      if (!state.year) void bootstrap();
+      else void load(state.tour, state.year, state.slam);
     } else if (a === "tour" && el.dataset.tour) {
       selectForTour(el.dataset.tour as Tour);
     } else if (a === "slam" && el.dataset.slam) {
@@ -832,7 +847,9 @@ export function createApp(root: HTMLElement): () => void {
   if (location.hash || history.state) history.replaceState(null, "", location.pathname + location.search);
 
   draw(); // initial loading state
-  void (async () => {
+  // Extracted (not an IIFE) so the Retry action can re-run it after a mount-time outage.
+  const bootstrap = async () => {
+    state.loadFailed = false;
     state.index = (await fetchIndex()) ?? undefined;
     if (state.index) {
       // Resolve the URL's candidate view against the manifest (stale/partial/"/" → default),
@@ -844,7 +861,7 @@ export function createApp(root: HTMLElement): () => void {
       // by a lens click during the loading window — don't clobber them with the mount-time candidate.
       if (state.year) history.replaceState(null, "", buildUrl());
     }
-    if (!state.year) return; // no manifest yet → stay on loading state
+    if (!state.year) { state.loadFailed = true; draw(); return; } // no manifest → Retry state
     await load(state.tour, state.year, state.slam);
     // Warm the other tour's same-or-default slam in the background.
     const other: Tour = state.tour === "ATP" ? "WTA" : "ATP";
@@ -855,7 +872,8 @@ export function createApp(root: HTMLElement): () => void {
         : pickDefaultSlam(state.index, other);
       if (otherSel) void load(other, otherSel.year, otherSel.slam);
     }
-  })();
+  };
+  void bootstrap();
 
   return () => { ac.abort(); root.removeAttribute("inert"); helpHost.remove(); };
 }
