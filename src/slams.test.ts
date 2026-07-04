@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { availableYears, slamsForYear, pickDefaultSlam, SLAM_ORDER } from "./slams";
+import { availableYears, slamsForYear, pickDefaultSlam, statusFor, SLAM_ORDER } from "./slams";
 import type { AvailableSlam, SlamIndex } from "./model";
 
 const slam = (o: Partial<AvailableSlam>): AvailableSlam => ({
@@ -59,5 +59,14 @@ describe("pickDefaultSlam", () => {
   });
   it("returns null when the tour has no slams", () => {
     expect(pickDefaultSlam(index([slam({ tour: "WTA" })]), "ATP")).toBeNull();
+  });
+});
+
+describe("statusFor", () => {
+  it("returns the manifest status for a tour/year/slam and undefined when absent", () => {
+    const idx = index([slam({ slam: "wimbledon", status: "live" })]);
+    expect(statusFor(idx, "ATP", 2026, "wimbledon")).toBe("live");
+    expect(statusFor(idx, "WTA", 2026, "wimbledon")).toBeUndefined();
+    expect(statusFor(undefined, "ATP", 2026, "wimbledon")).toBeUndefined();
   });
 });
