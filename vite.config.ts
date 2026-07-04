@@ -55,6 +55,6 @@ export default defineConfig(({ mode }) => {
       },
     }),
   ],
-  test: { globals: true, environment: "node" },
+  test: { globals: true, environment: "node", setupFiles: ["./vitest.setup.ts"] },
   };
 });
