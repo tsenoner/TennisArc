@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Branch: `feat/scheduled-times-all-rounds` (already exists; spec committed on it).
-- Tests MUST run with `TZ=UTC`: use `pnpm test` (defined as `TZ=UTC vitest run`) or prefix manually. A bare `npx vitest run` fails 4+ tests on non-UTC machines.
+- Tests are pinned to `TZ=UTC` via `test.env` in `vite.config.ts` (since 2026-07-04), so any launch — `pnpm test`, a bare `npx vitest run`, or an IDE runner — is deterministic on non-UTC machines. The `TZ=UTC` prefix on the `Run:` commands below is now redundant (harmless if kept).
 - `npx tsc --noEmit` must be clean after every task.
 - One wall-clock `nowSec = Math.floor(Date.now() / 1000)` per `draw()` is the ONLY time reference for scheduled display. `snap.generatedAt` must never gate it.
 - Precise tier constant: `36 * 3600` (backstop). Stale-behind constant: `6 * 3600` (precise slots only). Coarse slots hide only once their UTC calendar day is fully past.

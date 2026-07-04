@@ -335,7 +335,7 @@ Anisimova/Zheng are fixed. What remains:
 npx tsx ingest/calibrate-elo.ts          # re-fit seed vs live board (network, 1968+full model); prints max|dev|
 # transcribe winning seeds into ingest/elo-config.ts
 pnpm backfill-elo && pnpm reindex         # recompute all 113 snapshots (network), rebuild the index
-ELO_FIXTURE=1 TZ=UTC npx vitest run ingest/historical-elo.fixture.test.ts   # opt-in regression guard
+ELO_FIXTURE=1 npx vitest run ingest/historical-elo.fixture.test.ts   # opt-in regression guard (UTC pinned in vite.config.ts)
 npx tsx ingest/elo-wayback.ts [--fetch]   # (re-fetch +) rebuild ingest/fixtures/ta-elo-historical.json
 npx tsx ingest/elo-burnin.ts              # burn-in offset per year vs the committed historical fixture
 npx tsx ingest/elo-reconstruct.ts ATP "Novak Djokovic"   # per-player month-by-month reconstruction
