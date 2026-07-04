@@ -591,9 +591,12 @@ describe("scheduledInfo", () => {
       .toEqual({ start: NOW + 20 * 3600, court: null, precise: false });
   });
 
-  it("coarse: a flagged stamp beyond 36h degrades to coarse (backstop)", () => {
-    expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 48 * 3600, scheduledPrecise: true }), NOW))
-      .toEqual({ start: NOW + 48 * 3600, court: null, precise: false });
+  it("precise: a flagged stamp keeps its time at ANY distance (provisional showpiece slots)", () => {
+    // SofaScore publishes real provisional times for semis/finals a week out (scheduledPrecise
+    // comes from the data source, not clock distance) — display them instead of degrading to a
+    // date-only coarse tag. Nominal placeholders stay coarse because they are never flagged.
+    expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 8 * DAY, scheduledPrecise: true }), NOW))
+      .toEqual({ start: NOW + 8 * DAY, court: null, precise: true });
   });
 
   it("far-future placeholder rounds are shown (coarse), not suppressed", () => {

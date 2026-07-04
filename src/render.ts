@@ -507,15 +507,15 @@ export function renderPanelFab(dim: ColorDim, seedSort: SeedSort = "seed"): stri
 }
 
 export function renderLegend(dim: ColorDim, seedSort: SeedSort = "seed", hasPending = false): string {
-  if (dim === "country") return `<div class="legend">Colour: nationality</div>`;
+  // Early in a slam the wheel is mostly "not yet played" grey — name it so the scaffold doesn't
+  // read as a gap. Every lens has the pending tier now: projections carry no hue anywhere.
+  const pendingKey = hasPending
+    ? `<span class="legend-key"><i class="legend-pending" aria-hidden="true"></i>not played yet</span>` : "";
+  if (dim === "country") return `<div class="legend">Colour: nationality${pendingKey}</div>`;
   const label = dim === "time" ? "fresh → most court time"
     : dim === "seed" && seedSort === "elo" ? "weaker → stronger (ELO)"
     : "unseeded → top seed";
   const grad = dim === "seed" ? "legend-grad seed" : "legend-grad";
-  // Early in a slam the Time wheel is mostly "not yet played" grey — name it so the scaffold
-  // doesn't read as a gap. Only the Time lens has a pending tier; other lenses colour projections.
-  const pendingKey = dim === "time" && hasPending
-    ? `<span class="legend-key"><i class="legend-pending" aria-hidden="true"></i>not played yet</span>` : "";
   return `<div class="legend"><span class="${grad}" aria-hidden="true"></span><span>${label}</span>${pendingKey}</div>`;
 }
 

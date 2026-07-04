@@ -27,9 +27,11 @@ export const SEED_STOPS = ["#352170", "#6d3fd4", "#a36bff", "#e2cdff"];
 /** The per-arc inputs a colour function reads: who occupies the arc, which ring (depth) it is,
  *  and whether the arc is a projection (no decided result feeding it yet). */
 export interface ArcColorInput { occupant: string | null; depth: number; projected: boolean; live?: boolean; suspended?: boolean; }
-/** Maps an arc to a fill. The Time lens also exposes `pending`: arcs with no real court time yet
- *  (unknown / projected / still-zero), which render.ts styles as `.arc.pending` scaffold. Other
- *  lenses leave `pending` undefined so their projected arcs keep their seed/nationality hue. */
+/** Maps an arc to a fill. Every lens exposes `pending`: arcs with nothing DECIDED to colour
+ *  (unknown occupant, pure projection, or zero court time on the Time lens), which render.ts
+ *  styles as the `.arc.pending` grey scaffold. A projection is a guess, so it never carries a
+ *  lens hue forward — the one exception is an in-play (live/suspended) arc, which is happening,
+ *  not forecast. */
 export interface ColorFn { (arc: ArcColorInput): string; pending?(arc: ArcColorInput): boolean; }
 
 export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string, seedSort: SeedSort = "seed", theme: Theme = "dark"): ColorFn {
@@ -65,6 +67,10 @@ export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string,
     fn.pending = pending;
     return fn;
   }
+  // Seed/Country share one pending rule: an undecided (projected) arc is neutral scaffold — no
+  // forward wash of the favourite's hue or nation — unless the match is in play right now.
+  const inPlay = (a: ArcColorInput) => a.live || a.suspended;
+  const pending = (a: ArcColorInput): boolean => !a.occupant || (!inPlay(a) && a.projected);
   if (dim === "seed") {
     // Same violet ramp in both sub-modes — only the meaning changes (top seed ↔ strongest by ELO),
     // and both are top-32 rankings, so the 1→32 domain maps cleanly either way.
@@ -72,20 +78,29 @@ export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string,
     if (seedSort === "elo") {
       // ELO sort: the wheel lights the top 32 by surface ELO, keyed by their ELO rank.
       const rank = eloRank(s);
-      return ({ occupant }) => {
-        const r = occupant ? rank.get(occupant) : undefined;
+      const fn: ColorFn = (a) => {
+        if (pending(a)) return NEUTRAL[theme];
+        const r = a.occupant ? rank.get(a.occupant) : undefined;
         return r != null && r <= 32 ? SEED(t(r)) : NEUTRAL[theme];   // outside the top 32 → neutral
       };
+      fn.pending = pending;
+      return fn;
     }
-    return ({ occupant }) => {
-      const seed = occupant ? s.players[occupant]?.seed : null;
+    const fn: ColorFn = (a) => {
+      if (pending(a)) return NEUTRAL[theme];
+      const seed = a.occupant ? s.players[a.occupant]?.seed : null;
       return seed != null && seed <= 32 ? SEED(t(seed)) : NEUTRAL[theme];   // unseeded / beyond-32 → neutral (mirrors the ELO branch)
     };
+    fn.pending = pending;
+    return fn;
   }
   // country — neutral wheel; the selected nation lights up (flags carry identity)
-  return ({ occupant }) => {
-    const c = occupant ? s.players[occupant]?.country : null;
+  const fn: ColorFn = (a) => {
+    if (pending(a)) return NEUTRAL[theme];
+    const c = a.occupant ? s.players[a.occupant]?.country : null;
     if (!c) return NEUTRAL[theme];
     return selectedCountry && c === selectedCountry ? COUNTRY_HL[theme] : COUNTRY_MUTED[theme];
   };
+  fn.pending = pending;
+  return fn;
 }

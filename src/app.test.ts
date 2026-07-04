@@ -466,6 +466,21 @@ describe("finalist pill + corner readout", () => {
     }
   });
 
+  it("includes the provisional time in the centre pill when the final's slot is precise", async () => {
+    const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
+    const final = Object.values(live.matches).find((m) => !m.nextMatchId)!;
+    final.scheduledStart = Math.floor(Date.now() / 1000) + 8 * 86400;
+    final.scheduledPrecise = true;                                  // SofaScore's provisional showpiece slot
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      const body = u.includes("index.json") ? INDEX
+        : u.includes("roland-garros") || u.includes("wimbledon") ? live : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as typeof fetch;
+    const root = await mountApp();
+    expect(root.querySelector(".center-id.center-sched")!.textContent).toMatch(/^Final · .*\d{2}:\d{2}$/);
+  });
+
   it("keeps the centre empty while the final is undecided AND unscheduled", async () => {
     const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
     globalThis.fetch = vi.fn(async (url: string | URL | Request) => {

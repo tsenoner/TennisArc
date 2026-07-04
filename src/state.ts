@@ -506,9 +506,11 @@ export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limi
 export interface ScheduledInfo { start: number; court: string | null; precise: boolean; }
 
 // Two-tier order-of-play display. PRECISE = the per-event startTimestamp override (scheduledPrecise,
-// set at ingest) within a ~36h backstop — only that tier shows a clock time; an event-sourced stamp
-// for a round 2+ days out can itself still be a nominal placeholder. Everything else upcoming is
-// COARSE: a date-only nominal round-day stamp. Hide rules differ: a precise slot >6h past is stale
+// set at ingest) — only that tier shows a clock time. The flag is trusted at ANY distance: SofaScore
+// publishes real provisional slots for showpiece matches (semis/final) a week out, and nominal
+// placeholders are never flagged, so data quality — not clock distance — draws the line (a ~36h
+// backstop used to degrade far-future flagged stamps to coarse; dropped 2026-07-04). Everything else
+// upcoming is COARSE: a date-only nominal round-day stamp. Hide rules differ: a precise slot >6h past is stale
 // (the match surely started); a coarse slot survives until its UTC calendar day is fully over, so a
 // rain-slipped round keeps its date while the feed catches up. The UTC day is a PROXY for the venue
 // day: exact for the nominal ~11:00-local stamps this tier is built for (they land mid-UTC-day at
@@ -516,7 +518,6 @@ export interface ScheduledInfo { start: number; court: string | null; precise: b
 // the flip can run hours early (far-west venues) or late (far-east). render.ts's SCHED_DATE_UTC
 // formatter encodes the same UTC≈venue-day assumption — change one, change both (the honest fix for
 // either is a venue time zone per slam threaded through both).
-const SCHED_PRECISE_AHEAD_SEC = 36 * 3600;
 const SCHED_STALE_BEHIND_SEC = 6 * 3600;
 
 /** The order-of-play info to display for a not-yet-played match, or null when there is nothing
@@ -525,7 +526,7 @@ const SCHED_STALE_BEHIND_SEC = 6 * 3600;
 export function scheduledInfo(m: Match, nowSec: number): ScheduledInfo | null {
   if (!isUpcoming(m.status) || m.scheduledStart == null) return null; // allowlist: walkover/retired never leak a time
   const dt = m.scheduledStart - nowSec;
-  const precise = m.scheduledPrecise === true && dt <= SCHED_PRECISE_AHEAD_SEC;
+  const precise = m.scheduledPrecise === true;
   if (precise) {
     if (dt < -SCHED_STALE_BEHIND_SEC) return null;
   } else if (nowSec >= (Math.floor(m.scheduledStart / 86400) + 1) * 86400) {

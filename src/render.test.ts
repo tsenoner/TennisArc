@@ -27,12 +27,12 @@ describe("renderSunburst", () => {
     expect(svg).toContain("arc projected");
   });
 
-  it("marks no-court-time arcs with the pending class under the time lens", () => {
+  it("marks no-court-time arcs with the pending class on every lens", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
     const arcs = layout(buildSunburst(s), 150);
     expect(renderSunburst(arcs, colorScale("time", s), 340)).toContain("pending");
-    // the seed lens keeps projected arcs coloured by seed — no pending scaffold
-    expect(renderSunburst(arcs, colorScale("seed", s), 340)).not.toContain("pending");
+    // projections carry no seed hue forward — the scaffold applies on the seed lens too
+    expect(renderSunburst(arcs, colorScale("seed", s), 340)).toContain("pending");
   });
 
   it("marks a live match arc with the live class (active, coloured, no winner name)", () => {
