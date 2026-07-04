@@ -1,5 +1,6 @@
 /// <reference types="vitest" />
 import { defineConfig } from "vite";
+import { configDefaults } from "vitest/config";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
@@ -49,7 +50,8 @@ export default defineConfig({
     globals: true,
     environment: "node",
     // parallel Claude sessions keep git worktrees under .claude/worktrees — without this
-    // exclude their checked-out test copies double the suite (and can fail it from outside)
-    exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/**"],
+    // exclude their checked-out test copies double the suite (and can fail it from outside).
+    // Extend (never replace) vitest's defaults, which already cover node_modules/dist/.git etc.
+    exclude: [...configDefaults.exclude, "**/.claude/**"],
   },
 });

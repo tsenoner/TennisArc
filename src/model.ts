@@ -82,10 +82,11 @@ export interface Match {
   /** Order-of-play display fields, re-derived every refresh. `scheduledStart` (Unix seconds) is
    *  stamped by normalizeCuptrees for EVERY not-yet-played match, all rounds to the Final, from the
    *  cuptrees block's seriesStartDateTimestamp — a shared nominal round-day time on future rounds.
-   *  For the imminent scheduled matches whose per-event detail is fetched (both players real),
-   *  enrichMatch overrides it with the published per-event startTimestamp and sets
-   *  `scheduledPrecise` — only that tier may display a clock time (see `scheduledInfo`).
-   *  `scheduledCourt` is per-event too, so it exists only for the imminent tier. */
+   *  For the scheduled matches whose per-event detail is fetched, enrichMatch overrides it with
+   *  the published per-event startTimestamp and sets `scheduledPrecise`. Display is uniform —
+   *  every tier shows a date + provisional time; the flag governs HIDE RULES only (a precise slot
+   *  hides >6h past, a nominal one survives until its UTC day ends — see `scheduledInfo`).
+   *  `scheduledCourt` is per-event too, so it exists only where detail was fetched. */
   scheduledStart?: number;
   scheduledPrecise?: boolean;
   scheduledCourt?: string;

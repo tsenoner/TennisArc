@@ -382,8 +382,10 @@ describe("renderSunburst — on-arc scheduled labels", () => {
     depth: 1, x0: 0, x1: 1.2, y0: 120, y1: 180, ...o,
   } as LayoutArc);
   const color = Object.assign(() => "#123456", {}) as Parameters<typeof renderSunburst>[1];
-  const pair = (base: string, full?: string) => ({ base, full: full ?? base });
-  const labels = (sched: (id: string) => { base: string; full: string } | null) =>
+  // mirrors formatScheduledArc's shapes: short = the day/date word(s) without the clock time
+  const pair = (base: string, full?: string) =>
+    ({ base, full: full ?? base, short: base.replace(/ \d{2}:\d{2}$/, "") });
+  const labels = (sched: (id: string) => { base: string; full: string; short: string } | null) =>
     ({ anchors: new Set<string>(), text: () => "", sched }) as Parameters<typeof renderSunburst>[3];
 
   it("emits an .arc-sched label (through the shared arc-label class) for an upcoming projected arc", () => {

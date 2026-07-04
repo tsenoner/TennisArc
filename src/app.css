@@ -103,9 +103,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .legend-grad { width: 120px; height: 8px; border-radius: 4px; border: 1px solid var(--line);
   background: linear-gradient(90deg, #2f6f8f, #d9a441, #e0683c); }
 .legend-grad.seed { background: linear-gradient(90deg, #352170, #6d3fd4, #a36bff, #e2cdff); }
-/* "not played yet" key — the NEUTRAL pending swatch from color.ts (dark #3a4350 / light #cfcbc1) */
+/* "not played yet" key — the NEUTRAL pending swatch from color.ts (dark #3a4350 / light #cfcbc1),
+   dashed like .arc.projected so the key points at the dashed scaffold arcs specifically: the same
+   NEUTRAL fill also paints DECIDED unseeded / unknown-country arcs, which render solid */
 .legend-key { display: inline-flex; align-items: center; gap: 5px; }
-.legend-pending { width: 11px; height: 8px; border-radius: 2px; border: 1px solid var(--line); background: #3a4350; }
+.legend-pending { width: 11px; height: 8px; border-radius: 2px; border: 1px dashed var(--dim); background: #3a4350; }
 :root[data-theme="light"] .legend-pending { background: #cfcbc1; }
 
 /* match context strip — slim, frosted, in-flow at the top of the wheel column on EVERY

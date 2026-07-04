@@ -4,7 +4,7 @@ import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
   renderCenterSection, renderCrumbs, renderQuarterFocusButtons,
-  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduledArc, startOfLocalDay, type ReadoutInfo,
+  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduledArc, startOfLocalDay, type ArcSched, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -271,16 +271,15 @@ export function createApp(root: HTMLElement): () => void {
     // arcs only). Court is strip/detail-only; arcs stay compact. Lens-independent by design.
     // Memoised per pass: nominal rounds share one stamp per round, so a pre-tournament
     // 128 draw collapses ~127 format calls to one per unique start.
-    const schedFmt = new Map<string, { base: string; full: string }>();
-    const schedLabel = (matchId: string): { base: string; full: string } | null => {
+    const schedFmt = new Map<number, ArcSched>();
+    const schedLabel = (matchId: string): ArcSched | null => {
       const m = snap.matches[matchId];
       const info = m ? scheduledInfo(m, nowSec) : null;
       if (!info) return null;
-      const key = String(info.start);
-      let s = schedFmt.get(key);
+      let s = schedFmt.get(info.start);
       if (s === undefined) {
         s = formatScheduledArc(info.start, nowSec);
-        schedFmt.set(key, s);
+        schedFmt.set(info.start, s);
       }
       return s;
     };
