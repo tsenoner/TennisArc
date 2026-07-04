@@ -13,8 +13,9 @@ import ref from "./fixtures/ta-elo-reference.json";
 // surface blend, or dropping the qual/challenger scope, or losing the fitted seed — blows these medians
 // far past the bands (overall jumps ~250, surfaces ~200). Byte-exact is impossible (see RESEARCH.md).
 //
-// NETWORK + full-history replay, so it's OPT-IN: run `ELO_FIXTURE=1 TZ=UTC npx vitest run
-// ingest/historical-elo.fixture.test.ts`. CSVs are served from ingest/.cache/elo when present.
+// NETWORK + full-history replay, so it's OPT-IN: run `ELO_FIXTURE=1 npx vitest run
+// ingest/historical-elo.fixture.test.ts` (UTC is pinned in vite.config.ts). CSVs are served from
+// ingest/.cache/elo when present.
 // TA drifts weekly: when these bands fail for non-bug reasons, re-capture the fixture deliberately
 // (.scratch/capture-ta-reference.ts) and re-run the calibration.
 

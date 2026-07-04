@@ -75,7 +75,7 @@ Per-individual analysis shows the field is well-fit (most players ~5–10 Elo; A
 npx tsx ingest/calibrate-elo.ts                 # re-fit the seed vs the live board (network)
 # transcribe the winning seeds into ingest/elo-config.ts
 pnpm backfill-elo && pnpm reindex               # recompute all snapshots (network), rebuild the index
-ELO_FIXTURE=1 TZ=UTC npx vitest run ingest/historical-elo.fixture.test.ts   # opt-in regression guard
+ELO_FIXTURE=1 npx vitest run ingest/historical-elo.fixture.test.ts   # opt-in regression guard (UTC pinned in vite.config.ts)
 ```
 
 TA updates ~weekly, so the fixture reference (`ingest/fixtures/ta-elo-reference.json`) is pinned with its `asOf` date and re-captured deliberately via `.scratch/capture-ta-reference.ts`. Acceptance sanity check (issue #20): RG 2016 frozen → Djokovic #1 overall **and** #1 clay, Nadal #2 clay.
