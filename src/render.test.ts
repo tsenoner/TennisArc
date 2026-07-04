@@ -335,23 +335,80 @@ describe("renderCenterSection", () => {
 import { formatScheduled } from "./render";
 
 describe("formatScheduled", () => {
-  const T = 1782999600; // Thu 02 Jul 2026, 13:40 UTC (tests run TZ=UTC)
+  const NOW = 1_782_999_600; // Thu 02 Jul 2026, 13:40 UTC (tests run TZ=UTC → viewer-local == UTC)
+  const at = (h: number) => NOW + h * 3600;
 
-  it("compact form gives weekday, 24h time and court", () => {
-    const s = formatScheduled(T, "Court 2");
-    expect(s).toContain("Thu");
-    expect(s).toContain("13:40");
-    expect(s).toContain("Court 2");
+  it("precise same-day → 'Today HH:MM · court'", () => {
+    expect(formatScheduled(at(2), "Court 2", { nowSec: NOW, precise: true })).toBe("Today 15:40 · Court 2");
   });
 
-  it("full form additionally carries the calendar date", () => {
-    expect(formatScheduled(T, "Court 2", true)).toContain("2 Jul");
+  it("precise next-day: compact 'Tmrw', full 'Tomorrow' + calendar date", () => {
+    expect(formatScheduled(at(24), null, { nowSec: NOW, precise: true })).toBe("Tmrw 13:40");
+    expect(formatScheduled(at(24), null, { nowSec: NOW, precise: true, full: true })).toBe("Tomorrow 3 Jul, 13:40");
+  });
+
+  it("precise 2-6 days out → weekday + time", () => {
+    expect(formatScheduled(at(3 * 24), null, { nowSec: NOW, precise: true })).toBe("Sun 13:40"); // 5 Jul 2026
+  });
+
+  it("precise past-day falls through to the absolute date — never a bare weekday", () => {
+    expect(formatScheduled(at(-24), null, { nowSec: NOW, precise: true })).toBe("1 Jul 13:40");
+  });
+
+  it("coarse → venue-day date only, no clock time, no relative words", () => {
+    const s = formatScheduled(at(5 * 24), null, { nowSec: NOW, precise: false });
+    expect(s).toContain("Tue");
+    expect(s).toContain("7 Jul");
+    expect(s).not.toMatch(/\d{2}:\d{2}/);
+    expect(s).not.toContain("Today");
+  });
+
+  it("coarse renders in UTC so the venue date never shifts for far-zone viewers", () => {
+    // An AO-shaped nominal stamp at 00:00 UTC: viewer-local rendering west of UTC would say 9 Jul.
+    const s = formatScheduled(Date.UTC(2026, 6, 10) / 1000, null, { nowSec: NOW, precise: false });
+    expect(s).toContain("10 Jul");
   });
 
   it("omits the court separator (and never prints 'null') when no court is known", () => {
-    const s = formatScheduled(T, null);
-    expect(s).toContain("13:40");
+    const s = formatScheduled(at(2), null, { nowSec: NOW, precise: true });
     expect(s).not.toContain("·");
     expect(s).not.toContain("null");
+  });
+});
+
+describe("renderSunburst — on-arc scheduled labels", () => {
+  const arc = (o: Partial<LayoutArc> = {}): LayoutArc => ({
+    id: "r.0", matchId: "1-0", occupant: null, projected: true, live: false, suspended: false,
+    depth: 1, x0: 0, x1: 1.2, y0: 120, y1: 180, ...o,
+  } as LayoutArc);
+  const color = Object.assign(() => "#123456", {}) as Parameters<typeof renderSunburst>[1];
+  const labels = (sched: (id: string) => string | null) =>
+    ({ anchors: new Set<string>(), text: () => "", sched }) as Parameters<typeof renderSunburst>[3];
+
+  it("emits an .arc-sched label (through the shared arc-label class) for an upcoming projected arc", () => {
+    const html = renderSunburst([arc()], color, 700, labels((id) => (id === "1-0" ? "Tmrw 14:30" : null)));
+    expect(html).toContain("arc-label arc-sched");
+    expect(html).toContain("Tmrw");
+  });
+
+  it("never emits one for live, suspended, or decided arcs, nor for the centre disc", () => {
+    const sched = labels(() => "Tmrw 14:30");
+    expect(renderSunburst([arc({ live: true })], color, 700, sched)).not.toContain("arc-sched");
+    expect(renderSunburst([arc({ suspended: true })], color, 700, sched)).not.toContain("arc-sched");
+    expect(renderSunburst([arc({ projected: false, occupant: "p9" })], color, 700, sched)).not.toContain("arc-sched");
+    expect(renderSunburst([arc({ depth: 0, y0: 0, x0: 0, x1: Math.PI * 2 })], color, 700, sched)).not.toContain("arc-sched"); // unfocused root
+    expect(renderSunburst([arc({ depth: 2, y0: 0, y1: 120, x0: 0, x1: Math.PI * 2 })], color, 700, sched)).not.toContain("arc-sched"); // focused hub (original depth preserved, y0===0)
+  });
+
+  it("emits nothing when sched returns null (no scheduled info)", () => {
+    expect(renderSunburst([arc()], color, 700, labels(() => null))).not.toContain("arc-sched");
+  });
+
+  it("shortens a cramped past-day precise tag to its date, never a bare day-of-month digit", () => {
+    // A sliver arc forces the shortForm fallback: "1 Jul 13:40" must degrade to "1 Jul", not "1"
+    // (the first-word rule that turns "Tmrw 14:30" into "Tmrw" would strand a meaningless digit).
+    const html = renderSunburst([arc({ x0: 0, x1: 0.05 })], color, 700, labels(() => "1 Jul 13:40"));
+    expect(html).toContain(">1 Jul<");
+    expect(html).not.toContain(">1<");
   });
 });

@@ -39,6 +39,10 @@ export interface SunburstLabels {
    *  centroid instead of a textPath label — WebKit never paints colour emoji on a
    *  textPath, and Windows has no flag emoji at all (#6). Null falls back to text. */
   image?: (occupant: string) => string | null;
+  /** Always-on order-of-play tag for an UPCOMING match's arc, keyed by matchId (the anchors/text
+   *  channel is occupant-keyed and only serves decided arcs). Null = no label. Mutually exclusive
+   *  with the name label by construction: names need !projected, sched needs projected. */
+  sched?: (matchId: string) => string | null;
 }
 
 /** Inline flag <img> from the bundled flag-icons set (identical on every platform);
@@ -164,6 +168,82 @@ export function renderSunburst(
     })
     .join("");
 
+  /** Fit `label` onto arc `a` through the curved/radial cascade and emit it into defs/texts.
+   *  `extra` suffixes the class (e.g. " arc-sched"); `shortForm`, when given, replaces the
+   *  truncate-last-resort (a chopped "Tmrw 14…" is worse than a clean "Tmrw"). */
+  const emitFitted = (a: LayoutArc, label: string, extra = "", shortForm?: string) => {
+    const rc = (a.y0 + a.y1) / 2;
+    const span = a.x1 - a.x0;
+    const mid = (a.x0 + a.x1) / 2;
+    const radial = a.y1 - a.y0;
+    const idb = a.id.replace(/[^a-z0-9]/gi, "");
+    const big = span > Math.PI ? 1 : 0;
+    const apad = Math.min(0.03, span * 0.12);
+    const s0 = a.x0 + apad, s1 = a.x1 - apad;
+    const chord = rc * (s1 - s0);               // usable tangential length for fitting
+    const revT = mid > Math.PI / 2 && mid < 3 * Math.PI / 2;  // curved flips on the bottom half
+    const revR = mid > Math.PI;                 // radial (spoke) flips on the left half
+    const fitOrShort = (l: string, budget: number): string =>
+      l.length <= budget ? l : shortForm && shortForm.length <= budget ? shortForm : fitLabel(l, budget);
+    const curved = (r: number, txt: string, f: number, id: string) => {
+      const dPath = revT
+        ? `M${pt(r, s1)} A${r},${r} 0 ${big} 0 ${pt(r, s0)}`
+        : `M${pt(r, s0)} A${r},${r} 0 ${big} 1 ${pt(r, s1)}`;
+      defs.push(`<path id="${id}" d="${dPath}"></path>`);
+      texts.push(
+        `<text class="arc-label${extra}" font-size="${f.toFixed(1)}">` +
+        `<textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(txt)}</textPath></text>`,
+      );
+    };
+    const radialAt = (ang: number, txt: string, f: number, id: string) => {
+      const dPath = revR
+        ? `M${pt(a.y1 - 2, ang)} L${pt(a.y0 + 2, ang)}`
+        : `M${pt(a.y0 + 2, ang)} L${pt(a.y1 - 2, ang)}`;
+      defs.push(`<path id="${id}" d="${dPath}"></path>`);
+      texts.push(
+        `<text class="arc-label arc-radial${extra}" font-size="${f.toFixed(1)}">` +
+        `<textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(txt)}</textPath></text>`,
+      );
+    };
+    const [l1, l2] = splitTwo(label);
+    if (radial > rc * span) {
+      // RADIAL — text runs OUTWARDS along the ring depth (R128, R64). A ring wide enough for two
+      // columns (R64) gets a SECOND radial row so long names show in full without rotating to a
+      // curve; the thinnest ring (R128) keeps a single spoke.
+      const rf = Math.min(11, Math.max(7.5, radial * 0.24));
+      const rbudget = Math.max(2, Math.floor((radial - 4) / (rf * 0.6)));
+      const colW = rf * 1.05;
+      if (rc * span >= 2 * colW && label.length > rbudget) {
+        const off = (colW * 0.5) / rc;            // angular offset for two side-by-side columns
+        // order columns by which half of the wheel we're on (matches the revR reading flip), so
+        // the first row never lands above the second in the top-left / bottom-right quarters
+        radialAt(revR ? mid + off : mid - off, fitOrShort(l1, rbudget), rf, `lr1${idb}`);
+        radialAt(revR ? mid - off : mid + off, fitOrShort(l2, rbudget), rf, `lr2${idb}`);
+      } else {
+        radialAt(mid, fitOrShort(label, rbudget), rf, `lr${idb}`);
+      }
+    } else {
+      // CURVED — text follows the ring (R32 inward): one line → two lines (≥3 chars) → truncate.
+      const fs = Math.min(13, Math.max(8, radial * 0.42));
+      const budget = Math.floor(chord / (fs * 0.58));
+      const f2 = Math.min(fs, 10);                // slightly smaller so two lines fit narrow rings
+      const budget2 = Math.floor(chord / (f2 * 0.58));
+      const fitFs = chord / (label.length * 0.58); // font size at which the whole name fills one line
+      if (label.length <= budget) {
+        curved(rc, label, fs, `lp${idb}`);        // fits on one line at full size
+      } else if (radial >= 2.3 * f2 && l1.length >= 3 && l2.length >= 3 && l1.length <= budget2 && l2.length <= budget2) {
+        const gap = f2 * 0.62;                     // two curved lines — whole name, no mid-word break
+        const upper = Math.cos(mid) > 0;           // top half → first line on the outer ring
+        curved(upper ? rc + gap : rc - gap, l1, f2, `la${idb}`);
+        curved(upper ? rc - gap : rc + gap, l2, f2, `lb${idb}`);
+      } else if (fitFs >= 8) {
+        curved(rc, label, Math.min(fs, fitFs), `lp${idb}`); // shrink one line to show the full short name ("Halys")
+      } else {
+        curved(rc, fitOrShort(label, budget), fs, `lp${idb}`); // truncate — last resort (or the shortForm)
+      }
+    }
+  };
+
   const paths = arcs
     .map((a) => {
       const d = arcGen(a) ?? "";
@@ -201,77 +281,21 @@ export function renderSunburst(
           }
         } else {
         const label = labels.text(a.occupant);
-        if (label) {
-          const rc = (a.y0 + a.y1) / 2;
-          const span = a.x1 - a.x0;
-          const mid = (a.x0 + a.x1) / 2;
-          const radial = a.y1 - a.y0;
-          const idb = a.id.replace(/[^a-z0-9]/gi, "");
-          const big = span > Math.PI ? 1 : 0;
-          const apad = Math.min(0.03, span * 0.12);
-          const s0 = a.x0 + apad, s1 = a.x1 - apad;
-          const chord = rc * (s1 - s0);               // usable tangential length for fitting
-          const revT = mid > Math.PI / 2 && mid < 3 * Math.PI / 2;  // curved flips on the bottom half
-          const revR = mid > Math.PI;                 // radial (spoke) flips on the left half
-          const curved = (r: number, txt: string, f: number, id: string) => {
-            const dPath = revT
-              ? `M${pt(r, s1)} A${r},${r} 0 ${big} 0 ${pt(r, s0)}`
-              : `M${pt(r, s0)} A${r},${r} 0 ${big} 1 ${pt(r, s1)}`;
-            defs.push(`<path id="${id}" d="${dPath}"></path>`);
-            texts.push(
-              `<text class="arc-label" font-size="${f.toFixed(1)}">` +
-              `<textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(txt)}</textPath></text>`,
-            );
-          };
-          const radialAt = (ang: number, txt: string, f: number, id: string) => {
-            const dPath = revR
-              ? `M${pt(a.y1 - 2, ang)} L${pt(a.y0 + 2, ang)}`
-              : `M${pt(a.y0 + 2, ang)} L${pt(a.y1 - 2, ang)}`;
-            defs.push(`<path id="${id}" d="${dPath}"></path>`);
-            texts.push(
-              `<text class="arc-label arc-radial" font-size="${f.toFixed(1)}">` +
-              `<textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(txt)}</textPath></text>`,
-            );
-          };
-          const [l1, l2] = splitTwo(label);
-          if (radial > rc * span) {
-            // RADIAL — text runs OUTWARDS along the ring depth (R128, R64). A ring wide enough for two
-            // columns (R64) gets a SECOND radial row so long names show in full without rotating to a
-            // curve; the thinnest ring (R128) keeps a single spoke.
-            const rf = Math.min(11, Math.max(7.5, radial * 0.24));
-            const rbudget = Math.max(2, Math.floor((radial - 4) / (rf * 0.6)));
-            const colW = rf * 1.05;
-            if (rc * span >= 2 * colW && label.length > rbudget) {
-              const off = (colW * 0.5) / rc;            // angular offset for two side-by-side columns
-              // order columns by which half of the wheel we're on (matches the revR reading flip), so
-              // the first row never lands above the second in the top-left / bottom-right quarters
-              radialAt(revR ? mid + off : mid - off, fitLabel(l1, rbudget), rf, `lr1${idb}`);
-              radialAt(revR ? mid - off : mid + off, fitLabel(l2, rbudget), rf, `lr2${idb}`);
-            } else {
-              radialAt(mid, fitLabel(label, rbudget), rf, `lr${idb}`);
-            }
-          } else {
-            // CURVED — text follows the ring (R32 inward): one line → two lines (≥3 chars) → truncate.
-            const fs = Math.min(13, Math.max(8, radial * 0.42));
-            const budget = Math.floor(chord / (fs * 0.58));
-            const f2 = Math.min(fs, 10);                // slightly smaller so two lines fit narrow rings
-            const budget2 = Math.floor(chord / (f2 * 0.58));
-            const fitFs = chord / (label.length * 0.58); // font size at which the whole name fills one line
-            if (label.length <= budget) {
-              curved(rc, label, fs, `lp${idb}`);        // fits on one line at full size
-            } else if (radial >= 2.3 * f2 && l1.length >= 3 && l2.length >= 3 && l1.length <= budget2 && l2.length <= budget2) {
-              const gap = f2 * 0.62;                     // two curved lines — whole name, no mid-word break
-              const upper = Math.cos(mid) > 0;           // top half → first line on the outer ring
-              curved(upper ? rc + gap : rc - gap, l1, f2, `la${idb}`);
-              curved(upper ? rc - gap : rc + gap, l2, f2, `lb${idb}`);
-            } else if (fitFs >= 8) {
-              curved(rc, label, Math.min(fs, fitFs), `lp${idb}`); // shrink one line to show the full short name ("Halys")
-            } else {
-              curved(rc, fitLabel(label, budget), fs, `lp${idb}`); // truncate — last resort
-            }
-          }
-        }
+        if (label) emitFitted(a, label);
         } // end image/text branch
+      } else if (labels?.sched && a.projected && !a.live && !a.suspended && a.y0 > 0) {
+        // Upcoming match: the always-on order-of-play tag, in the same label slot a winner's surname
+        // will occupy once decided. The centre disc — root or focused hub — is the one arc with
+        // y0 === 0; its pill/strip already carries the info, and a full-circle textPath draws garbage.
+        // splitTwo splits "Tmrw 14:30" into day/time rows on two-column rings; the shortForm keeps
+        // a clean day part where even that doesn't fit: drop the trailing clock time ("1 Jul 13:40"
+        // → "1 Jul" — first-word alone would leave a meaningless bare digit), and for the time-less
+        // coarse shape fall back to the leading day word ("Tue 7 Jul" → "Tue").
+        const stxt = labels.sched(a.matchId);
+        if (stxt) {
+          const sansTime = stxt.replace(/ \d{2}:\d{2}$/, "");
+          emitFitted(a, stxt, " arc-sched", sansTime === stxt ? stxt.split(" ")[0] : sansTime);
+        }
       }
       const path = `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
         `data-action="inspect" data-id="${a.id}" data-match="${a.matchId}" data-occupant="${escapeHtml(a.occupant ?? "")}"></path>`;
@@ -340,21 +364,58 @@ export function formatDuration(sec: number): string {
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
 }
 
-// Two order-of-play formatters (compact for the strip; full carries the calendar date), built once at
-// module load. Intl.DateTimeFormat construction is comparatively costly, and both read the runtime's
-// default time zone, which is fixed for the session — so there's nothing to rebuild per call. (Each
-// date's UTC offset, incl. DST, is still resolved at format() time, so cross-DST dates render right.)
-const SCHED_FMT = new Intl.DateTimeFormat("en-GB",
-  { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
-const SCHED_FMT_FULL = new Intl.DateTimeFormat("en-GB",
-  { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+// Order-of-play formatters, built once at module load (Intl.DateTimeFormat construction is costly;
+// the zone is fixed per session, and each date's UTC offset — incl. DST — is still resolved at
+// format() time). Viewer-local for PRECISE slots (converting the clock is the point); UTC for
+// COARSE date-only slots so the VENUE calendar day never shifts — every slam's nominal ~11:00-local
+// stamp stays inside the same UTC day, where viewer-local rendering would show e.g. the Australian
+// Open a day early in the Americas.
+const SCHED_TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+const SCHED_DAY = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
+const SCHED_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+const SCHED_DATE_UTC = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
-/** An order-of-play slot for a not-yet-played match: "Thu, 13:40 · Court 2" (compact, for the strip)
- *  or — with `full` — "Thu 2 Jul, 13:40 · Court 2" (for the detail tier). Rendered in the viewer's
- *  local time (the epoch is absolute); the caller frames it as a scheduled, provisional time. Returns
- *  plain text with the court unescaped — escape it at the HTML boundary. */
-export function formatScheduled(start: number, court: string | null, full = false): string {
-  const when = (full ? SCHED_FMT_FULL : SCHED_FMT).format(new Date(start * 1000));
+/** Local-midnight epoch ms for `d`, shifted by `dayOffset` calendar days. The Date constructor
+ *  normalises the day overflow, so the result is DST-correct where naive ±86 400 000 arithmetic
+ *  is not. Shared clock geometry for the Today/Tmrw words below and app.ts's midnight re-render. */
+export function startOfLocalDay(d: Date, dayOffset = 0): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + dayOffset).getTime();
+}
+
+/** Whole viewer-local calendar-day difference (compares local midnights — DST-safe, no 24h buckets). */
+function localDayDiff(start: number, nowSec: number): number {
+  return Math.round((startOfLocalDay(new Date(start * 1000)) - startOfLocalDay(new Date(nowSec * 1000))) / 86_400_000);
+}
+
+/** Relative-day word for a PRECISE slot, or null when none applies (past day or >6 days out — a bare
+ *  weekday for yesterday would read as NEXT week, so those fall through to the absolute date). */
+function relativeDay(start: number, nowSec: number, full: boolean): string | null {
+  const d = localDayDiff(start, nowSec);
+  if (d === 0) return "Today";
+  if (d === 1) return full ? "Tomorrow" : "Tmrw";
+  if (d >= 2 && d <= 6) return SCHED_DAY.format(new Date(start * 1000));
+  return null;
+}
+
+export interface SchedFormatOpts { nowSec: number; precise: boolean; full?: boolean; }
+
+/** An order-of-play slot for a not-yet-played match. PRECISE (published per-event time): compact
+ *  "Today 15:40" / "Tmrw 13:40" / "Sun 13:40"; full adds the calendar date — "Tomorrow 3 Jul, 13:40".
+ *  COARSE (nominal round-day stamp): venue-day date only, "Tue 7 Jul", never a clock time or a
+ *  relative word (cross-zone "Tomorrow" on a nominal date misleads). `nowSec` is the wall-clock
+ *  reference. Returns plain text with the court unescaped — escape at the HTML boundary. */
+export function formatScheduled(start: number, court: string | null, opts: SchedFormatOpts): string {
+  const date = new Date(start * 1000);
+  let when: string;
+  if (opts.precise) {
+    const word = relativeDay(start, opts.nowSec, opts.full ?? false);
+    const time = SCHED_TIME.format(date);
+    when = opts.full
+      ? `${word ? `${word} ` : ""}${SCHED_DATE.format(date)}, ${time}`
+      : `${word ?? SCHED_DATE.format(date)} ${time}`;
+  } else {
+    when = SCHED_DATE_UTC.format(date);
+  }
   return court ? `${when} · ${court}` : when;
 }
 
@@ -625,15 +686,15 @@ function stripSide(side: InsightSide, win: boolean, rev: boolean): string {
 /** Slim match context strip — an in-flow summary at the top of the wheel column on EVERY
  *  viewport (the same dock pattern the readout already uses ≤960px). The wheel is never
  *  covered; the heavy tail lives one tap away behind "Details ▾" (renderMatchDetail). */
-export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean; noZoom?: boolean }): string {
+export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expanded: boolean; focused: boolean; noZoom?: boolean; nowSec: number }): string {
   const statusTag = ins.status === "live"
     ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>`
     : ins.status === "suspended"
     ? ` · <span class="ms-susp"><span class="ms-pause" aria-hidden="true"></span>suspended</span>` : "";
-  // Upcoming match: a compact order-of-play tag (time + court) in the caption. Only present within the
-  // near-term trust window (scheduledInfo) — a far-future placeholder time is deliberately withheld.
+  // Upcoming match: a compact order-of-play tag in the caption — a precise "Today 15:40 · Court 2"
+  // for the imminent tier, a coarse venue-day date ("Tue 7 Jul") for future rounds.
   const schedTag = ins.scheduled
-    ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court))}</span>` : "";
+    ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec: opts.nowSec, precise: ins.scheduled.precise }))}</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
   // Only when the view already sits AT this match's own section does it flip to "Reset
   // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
@@ -665,7 +726,7 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
  *  context, serve stats, duration and the SofaScore link. In-flow under the strip on
  *  desktop; a fixed bottom sheet with the standard grip/✕ chrome on phones. Every piece
  *  of its chrome (scrim, grip, ✕) collapses ONLY this tier — the strip stays. */
-export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rounds: Round[]): string {
+export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rounds: Round[], nowSec: number): string {
   // The "Upset" pill would triple-signal with the ELO line's accent — one signal only.
   const badges = ins.badges
     .filter((b) => b !== "Upset")
@@ -675,10 +736,8 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
   // time is a suspension-healed estimate (until Sackmann's measured minutes backfill it).
   const durTag = ins.durationProvisional ? (isInProgress(ins.status) ? " (live)" : " (est.)") : "";
   const dur = ins.durationSec != null ? `⏱ ${formatDuration(ins.durationSec)}${durTag}` : "";
-  // Upcoming match: the full order-of-play line (date · time · court), flagged provisional — tennis
-  // times shift with match length and weather, and only the first match on a court is a firm start.
   const sched = ins.scheduled
-    ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, true))}` +
+    ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec, precise: ins.scheduled.precise, full: true }))}` +
       ` <span class="mi-prov">· scheduled, subject to change</span></div>`
     : "";
   const link = sofaUrl

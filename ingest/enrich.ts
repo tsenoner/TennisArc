@@ -138,20 +138,22 @@ export function enrichMatch(
   const awayCountry = alpha3Of(ev.awayTeam);
   if (m.p2 && players[m.p2] && awayCountry) players[m.p2].country = awayCountry;
 
-  // Order-of-play time + court, only for a not-yet-played match (its startTimestamp is a scheduled
-  // slot, not an on-court start). A far-future placeholder slot never reaches here — the ingest only
-  // fetches event detail for scheduled matches with two real players (collectEventIds). Absent = unknown.
+  // Precise order-of-play tier: the per-event startTimestamp is the published per-match slot (and
+  // the freshest value under intra-day reshuffles) — it overrides normalize's coarse cuptrees stamp
+  // and flags the time precise. Every other status passes the normalize-set fields through
+  // untouched; the next refresh's normalize drops them once the match is no longer upcoming.
   const scheduled = status === "scheduled";
-  const scheduledStart = scheduled ? ev.startTimestamp : undefined;
+  const scheduledStart = scheduled ? (ev.startTimestamp ?? m.scheduledStart) : m.scheduledStart;
+  const scheduledPrecise = scheduled && ev.startTimestamp != null ? true : m.scheduledPrecise;
   // `||` not `??`: a blank venue name ("") should fall through to the stadium name, not stand as an
   // empty court that renders no court at all (formatScheduled drops a falsy court).
-  const scheduledCourt = scheduled ? (ev.venue?.name || ev.venue?.stadium?.name) : undefined;
+  const scheduledCourt = scheduled ? (ev.venue?.name || ev.venue?.stadium?.name) : m.scheduledCourt;
 
   return {
     ...m, status, winner,
     score: buildScore(ev.homeScore, ev.awayScore),
     durationSec, durationProvisional: provisional, wasSuspended,
-    scheduledStart, scheduledCourt,
+    scheduledStart, scheduledPrecise, scheduledCourt,
     sofaCustomId: ev.customId ?? m.sofaCustomId,
     // A suspended match is paused mid-play, so its /statistics payload is as partial as a live match's —
     // suppress it in both in-progress states (a half-played ace/DF line reads as final otherwise).

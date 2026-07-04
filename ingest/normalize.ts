@@ -1,5 +1,5 @@
 import type { EntryType, Match, MatchStatus, Player, Round, Snapshot, Tour } from "../src/model";
-import { PLACEHOLDER_TEAM_NAME } from "../src/model";
+import { PLACEHOLDER_TEAM_NAME, isUpcoming } from "../src/model";
 
 export interface TournamentMeta {
   tour: Tour; slam: string; name: string; year: number; surface: string;
@@ -13,6 +13,7 @@ interface SofaParticipant {
 interface SofaBlock {
   finished: boolean; eventInProgress: boolean; order: number;
   participants: SofaParticipant[]; events?: number[];
+  seriesStartDateTimestamp?: number;  // per-block scheduled start; a shared nominal round-day time on future rounds
 }
 export interface SofaCuptrees { cupTrees: { rounds: { description: string; blocks: SofaBlock[] }[] }[] }
 
@@ -45,9 +46,11 @@ function realSide(b: SofaBlock, order: number): boolean {
 /**
  * The SofaScore event ids whose per-event detail is worth fetching: every finished or in-progress
  * match, PLUS every scheduled match whose BOTH sides are already real players — an imminent match
- * whose published order-of-play time and court we want to surface. A scheduled block still fed by a
- * "winner-of" placeholder (name like "R32P17") is a far-future slot that only carries a nominal
- * round-day placeholder time, so its event is skipped to avoid a pointless network round-trip.
+ * whose per-event detail we still want (court, the freshest order-of-play time, live score/stats)
+ * — the coarse time for every round now comes from the blocks' seriesStartDateTimestamp. A
+ * scheduled block still fed by a "winner-of" placeholder (name like "R32P17") is a far-future slot
+ * that only carries a nominal round-day placeholder time, so its event is skipped to avoid a
+ * pointless network round-trip.
  */
 export function collectEventIds(cup: SofaCuptrees): number[] {
   const ids: number[] = [];
@@ -94,13 +97,18 @@ export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snap
       }
 
       const winner = home?.winner ? "p1" : away?.winner ? "p2" : null;
+      const status = blockStatus(b, !!home || !!away);
       const match: Match = {
         id, roundIndex, slot,
         nextMatchId: roundIndex < lastRound ? `${roundIndex + 1}-${Math.floor(slot / 2)}` : null,
         p1: home ? String(home.team.id) : null,
         p2: away ? String(away.team.id) : null,
-        status: blockStatus(b, !!home || !!away),
-        winner,
+        status, winner,
+        // Coarse order-of-play tier: cuptrees carries seriesStartDateTimestamp on EVERY block, every
+        // round — a real per-match time once the order of play is out, a shared nominal round-day time
+        // on future placeholder rounds. Stamped only while unplayed; enrichMatch upgrades the imminent
+        // matches to the precise per-event time (scheduledPrecise).
+        scheduledStart: isUpcoming(status) ? b.seriesStartDateTimestamp : undefined,
         score: null, live: null, durationSec: null, durationProvisional: false,
         sofaEventId: b.events?.[0] ?? null, sofaCustomId: null, stats: null,
       };

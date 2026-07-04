@@ -10,6 +10,12 @@ export type MatchStatus =
 export const isInProgress = (status: MatchStatus): boolean =>
   status === "live" || status === "suspended";
 
+/** The not-yet-played statuses: a match with a known slot ("scheduled") or one still fed by
+ *  placeholders ("notstarted"). The single source of truth for the order-of-play surfaces —
+ *  scheduledInfo's display allowlist and normalize's coarse-stamp gate must never drift apart. */
+export const isUpcoming = (status: MatchStatus): boolean =>
+  status === "scheduled" || status === "notstarted";
+
 export interface SetScore { p1: number; p2: number; tb?: number; }
 
 export interface MatchStats {
@@ -73,12 +79,15 @@ export interface Match {
    *  across refreshes (carryForwardSuspended) so a finished-but-once-suspended match stays flagged even
    *  after SofaScore drops back to a plain code-100 "finished" with no stoppage marker. Absent = false. */
   wasSuspended?: boolean;
-  /** For a not-yet-played ("scheduled") match once the order of play is published: the SofaScore
-   *  scheduled start (Unix seconds) and the court/venue name. Order of play is released only ~a day
-   *  ahead, so these are present only for imminent matches and absent otherwise. The display layer
-   *  further gates them to a near-term trust window (beyond it SofaScore returns a nominal round-day
-   *  placeholder, not a real time) — see `scheduledInfo`. */
+  /** Order-of-play display fields, re-derived every refresh. `scheduledStart` (Unix seconds) is
+   *  stamped by normalizeCuptrees for EVERY not-yet-played match, all rounds to the Final, from the
+   *  cuptrees block's seriesStartDateTimestamp — a shared nominal round-day time on future rounds.
+   *  For the imminent scheduled matches whose per-event detail is fetched (both players real),
+   *  enrichMatch overrides it with the published per-event startTimestamp and sets
+   *  `scheduledPrecise` — only that tier may display a clock time (see `scheduledInfo`).
+   *  `scheduledCourt` is per-event too, so it exists only for the imminent tier. */
   scheduledStart?: number;
+  scheduledPrecise?: boolean;
   scheduledCourt?: string;
   sofaEventId: number | null;
   sofaCustomId: string | null;

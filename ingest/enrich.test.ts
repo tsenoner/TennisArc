@@ -130,14 +130,21 @@ describe("enrichMatch", () => {
     expect(m.wasSuspended).toBeFalsy();
   });
 
-  it("records a scheduled match's order-of-play start and court, and leaves it timeless", () => {
-    const m = enrichMatch(baseMatch({ status: "scheduled", winner: null, sofaEventId: 999 }), scheduledEventSample, null, players(), 0);
+  it("upgrades a scheduled match to the precise per-event time and court", () => {
+    const m = enrichMatch(baseMatch({ status: "scheduled", winner: null, sofaEventId: 999, scheduledStart: 1783000000 }), scheduledEventSample, null, players(), 0);
     expect(m.status).toBe("scheduled");
-    expect(m.scheduledStart).toBe(1782999600);
+    expect(m.scheduledStart).toBe(1782999600);   // ev.startTimestamp overrides the cuptrees stamp
+    expect(m.scheduledPrecise).toBe(true);
     expect(m.scheduledCourt).toBe("Court 2");
     expect(m.winner).toBeNull();
     expect(m.durationSec).toBeNull();
-    expect(m.wasSuspended).toBeFalsy();
+  });
+
+  it("keeps the cuptrees stamp (no precise flag) when the event carries no startTimestamp", () => {
+    const ev = { ...scheduledEventSample, startTimestamp: undefined };
+    const m = enrichMatch(baseMatch({ status: "scheduled", winner: null, scheduledStart: 1783000000 }), ev, null, players(), 0);
+    expect(m.scheduledStart).toBe(1783000000);
+    expect(m.scheduledPrecise).toBeFalsy();
   });
 
   it("falls back to the stadium name when the venue has no direct name", () => {
@@ -152,10 +159,13 @@ describe("enrichMatch", () => {
     expect(m.scheduledCourt).toBe("Centre Court");
   });
 
-  it("does NOT stamp scheduled fields onto a finished match", () => {
-    const m = enrichMatch(baseMatch(), eventSample, statsSample, players(), 0);
-    expect(m.scheduledStart).toBeUndefined();
-    expect(m.scheduledCourt).toBeUndefined();
+  it("passes normalize-set scheduled fields through untouched for a non-scheduled status", () => {
+    // A match that flipped to live/finished in event detail mid-refresh: enrich must not stamp
+    // undefined over the normalize-set coarse fields (the next refresh's normalize clears them).
+    const m = enrichMatch(baseMatch({ scheduledStart: 1783000000, scheduledPrecise: true }), eventSample, statsSample, players(), 0);
+    expect(m.status).toBe("finished");
+    expect(m.scheduledStart).toBe(1783000000);
+    expect(m.scheduledPrecise).toBe(true);
   });
 
   it("maps a retired match (status description) and still counts played time", () => {
