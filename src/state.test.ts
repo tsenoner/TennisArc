@@ -579,40 +579,40 @@ describe("scheduledInfo", () => {
   const DAY = 86400;
   const NOW = 20_000 * DAY + 12 * 3600; // noon UTC on an arbitrary day — pure arithmetic either way
 
-  it("precise: flagged + within 36h → start, court, precise:true", () => {
+  it("precise: flagged slot within 36h → start + court", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 3600, scheduledPrecise: true, scheduledCourt: "Court 2" }), NOW))
-      .toEqual({ start: NOW + 3600, court: "Court 2", precise: true });
+      .toEqual({ start: NOW + 3600, court: "Court 2" });
   });
 
-  it("coarse: an UNFLAGGED nominal stamp within 36h is NOT precise", () => {
+  it("nominal: an UNFLAGGED stamp within 36h still surfaces (hide rules differ, display does not)", () => {
     // The evening-before case: a nominal 11:00 round-day stamp sits inside any window — precision
     // must come from the data source (the per-event override), never clock distance alone.
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 20 * 3600 }), NOW))
-      .toEqual({ start: NOW + 20 * 3600, court: null, precise: false });
+      .toEqual({ start: NOW + 20 * 3600, court: null });
   });
 
-  it("precise: a flagged stamp keeps its time at ANY distance (provisional showpiece slots)", () => {
+  it("precise: a flagged stamp surfaces at ANY distance (provisional showpiece slots)", () => {
     // SofaScore publishes real provisional times for semis/finals a week out (scheduledPrecise
     // comes from the data source, not clock distance) — display them instead of degrading to a
     // date-only coarse tag. Nominal placeholders stay coarse because they are never flagged.
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 8 * DAY, scheduledPrecise: true }), NOW))
-      .toEqual({ start: NOW + 8 * DAY, court: null, precise: true });
+      .toEqual({ start: NOW + 8 * DAY, court: null });
   });
 
   it("far-future placeholder rounds are shown (coarse), not suppressed", () => {
     expect(scheduledInfo(schedMatch({ status: "notstarted", p1: null, p2: null, scheduledStart: NOW + 5 * DAY }), NOW))
-      .toEqual({ start: NOW + 5 * DAY, court: null, precise: false });
+      .toEqual({ start: NOW + 5 * DAY, court: null });
   });
 
   it("precise slot: just-overdue still shows; >6h past hides", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 1800, scheduledPrecise: true }), NOW))
-      .toEqual({ start: NOW - 1800, court: null, precise: true });
+      .toEqual({ start: NOW - 1800, court: null });
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 7 * 3600, scheduledPrecise: true }), NOW)).toBeNull();
   });
 
   it("coarse slot survives hours past its stamp but drops once its UTC day is over", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 11 * 3600 }), NOW))     // 01:00 today UTC — day not over
-      .toEqual({ start: NOW - 11 * 3600, court: null, precise: false });
+      .toEqual({ start: NOW - 11 * 3600, court: null });
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 13 * 3600 }), NOW)).toBeNull(); // 23:00 yesterday UTC
   });
 
@@ -636,13 +636,13 @@ describe("matchInsight — scheduled", () => {
     s.matches["0-0"] = { ...s.matches["0-0"], status: "scheduled", winner: null,
       scheduledStart: NOW + 2 * 3600, scheduledPrecise: true, scheduledCourt: "Centre Court" };
     expect(insight3(s, "0-0", toc3(s), NOW)!.scheduled)
-      .toEqual({ start: NOW + 2 * 3600, court: "Centre Court", precise: true });
+      .toEqual({ start: NOW + 2 * 3600, court: "Centre Court" });
   });
 
   it("surfaces a far-future placeholder date as coarse", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
     s.matches["0-0"] = { ...s.matches["0-0"], status: "scheduled", winner: null, scheduledStart: NOW + 5 * 86400 };
     expect(insight3(s, "0-0", toc3(s), NOW)!.scheduled)
-      .toEqual({ start: NOW + 5 * 86400, court: null, precise: false });
+      .toEqual({ start: NOW + 5 * 86400, court: null });
   });
 });

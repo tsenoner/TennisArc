@@ -373,7 +373,6 @@ export function formatDuration(sec: number): string {
 const SCHED_TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
 const SCHED_DAY = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
 const SCHED_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
-const SCHED_DATE_UTC = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 /** Local-midnight epoch ms for `d`, shifted by `dayOffset` calendar days. The Date constructor
  *  normalises the day overflow, so the result is DST-correct where naive ±86 400 000 arithmetic
@@ -397,28 +396,25 @@ function relativeDay(start: number, nowSec: number, full: boolean): string | nul
   return null;
 }
 
-export interface SchedFormatOpts { nowSec: number; precise: boolean; full?: boolean; }
+export interface SchedFormatOpts { nowSec: number; full?: boolean; }
 
-/** An order-of-play slot for a not-yet-played match. PRECISE (published per-event time): compact
- *  "Today 15:40" / "Tmrw 13:40" / "Sun 13:40"; full adds the calendar date — "Tomorrow 3 Jul, 13:40".
- *  COARSE (nominal round-day stamp): venue-day date only, "Tue 7 Jul", never a clock time or a
- *  relative word (cross-zone "Tomorrow" on a nominal date misleads). `nowSec` is the wall-clock
- *  reference. Returns plain text with the court unescaped — escape at the HTML boundary. */
+/** An order-of-play slot for a not-yet-played match — ONE format for every tier, chosen by
+ *  temporal distance alone (precise vs nominal stamps differ only in scheduledInfo's hide
+ *  rules, never in shape): compact "Today 15:40" / "Tmrw 13:40" / "Sun 13:40" within the
+ *  relative-word week, "12 Jul 17:00" beyond it; full adds the calendar date — "Tomorrow
+ *  3 Jul, 13:40". Everything renders in the VIEWER's zone: with a clock time always shown,
+ *  the whole tag is one coherent local timestamp (the old date-only coarse tier used a UTC
+ *  venue-day proxy instead — retired with it). Nominal times are SofaScore's round-day
+ *  defaults until the real order of play lands — provisional, but exactly what SofaScore
+ *  itself displays. `nowSec` is the wall-clock reference. Returns plain text with the court
+ *  unescaped — escape at the HTML boundary. */
 export function formatScheduled(start: number, court: string | null, opts: SchedFormatOpts): string {
   const date = new Date(start * 1000);
-  let when: string;
-  if (opts.precise) {
-    const word = relativeDay(start, opts.nowSec, opts.full ?? false);
-    const time = SCHED_TIME.format(date);
-    when = opts.full
-      ? `${word ? `${word} ` : ""}${SCHED_DATE.format(date)}, ${time}`
-      : `${word ?? SCHED_DATE.format(date)} ${time}`;
-  } else {
-    // Nominal round-day stamp: venue-day date (UTC proxy — see state.ts) plus its provisional
-    // clock time in the viewer's zone. The time is SofaScore's round-day default until the real
-    // order of play lands — provisional, but it is exactly what SofaScore itself displays.
-    when = `${SCHED_DATE_UTC.format(date)} ${SCHED_TIME.format(date)}`;
-  }
+  const word = relativeDay(start, opts.nowSec, opts.full ?? false);
+  const time = SCHED_TIME.format(date);
+  const when = opts.full
+    ? `${word ? `${word} ` : ""}${SCHED_DATE.format(date)}, ${time}`
+    : `${word ?? SCHED_DATE.format(date)} ${time}`;
   return court ? `${when} · ${court}` : when;
 }
 
@@ -705,7 +701,7 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
   // Upcoming match: a compact order-of-play tag in the caption — a precise "Today 15:40 · Court 2"
   // for the imminent tier, a coarse venue-day date ("Tue 7 Jul") for future rounds.
   const schedTag = ins.scheduled
-    ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec: opts.nowSec, precise: ins.scheduled.precise }))}</span>` : "";
+    ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec: opts.nowSec }))}</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
   // Only when the view already sits AT this match's own section does it flip to "Reset
   // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
@@ -748,7 +744,7 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
   const durTag = ins.durationProvisional ? (isInProgress(ins.status) ? " (live)" : " (est.)") : "";
   const dur = ins.durationSec != null ? `⏱ ${formatDuration(ins.durationSec)}${durTag}` : "";
   const sched = ins.scheduled
-    ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec, precise: ins.scheduled.precise, full: true }))}` +
+    ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec, full: true }))}` +
       ` <span class="mi-prov">· scheduled, subject to change</span></div>`
     : "";
   const link = sofaUrl

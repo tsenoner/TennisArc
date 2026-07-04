@@ -269,17 +269,17 @@ export function createApp(root: HTMLElement): () => void {
       : undefined;
     // Always-on order-of-play tags for upcoming arcs (matchId-keyed — anchors/text serve decided
     // arcs only). Court is strip/detail-only; arcs stay compact. Lens-independent by design.
-    // Memoised per pass: coarse rounds share one nominal stamp per round, so a pre-tournament
-    // 128 draw collapses ~127 format calls to one per unique (start, precise) pair.
+    // Memoised per pass: nominal rounds share one stamp per round, so a pre-tournament
+    // 128 draw collapses ~127 format calls to one per unique start.
     const schedFmt = new Map<string, string>();
     const schedLabel = (matchId: string): string | null => {
       const m = snap.matches[matchId];
       const info = m ? scheduledInfo(m, nowSec) : null;
       if (!info) return null;
-      const key = `${info.start}:${info.precise}`;
+      const key = String(info.start);
       let s = schedFmt.get(key);
       if (s === undefined) {
-        s = formatScheduled(info.start, null, { nowSec, precise: info.precise });
+        s = formatScheduled(info.start, null, { nowSec });
         schedFmt.set(key, s);
       }
       return s;

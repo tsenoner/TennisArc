@@ -347,38 +347,39 @@ describe("formatScheduled", () => {
   const at = (h: number) => NOW + h * 3600;
 
   it("precise same-day → 'Today HH:MM · court'", () => {
-    expect(formatScheduled(at(2), "Court 2", { nowSec: NOW, precise: true })).toBe("Today 15:40 · Court 2");
+    expect(formatScheduled(at(2), "Court 2", { nowSec: NOW })).toBe("Today 15:40 · Court 2");
   });
 
   it("precise next-day: compact 'Tmrw', full 'Tomorrow' + calendar date", () => {
-    expect(formatScheduled(at(24), null, { nowSec: NOW, precise: true })).toBe("Tmrw 13:40");
-    expect(formatScheduled(at(24), null, { nowSec: NOW, precise: true, full: true })).toBe("Tomorrow 3 Jul, 13:40");
+    expect(formatScheduled(at(24), null, { nowSec: NOW })).toBe("Tmrw 13:40");
+    expect(formatScheduled(at(24), null, { nowSec: NOW, full: true })).toBe("Tomorrow 3 Jul, 13:40");
   });
 
   it("precise 2-6 days out → weekday + time", () => {
-    expect(formatScheduled(at(3 * 24), null, { nowSec: NOW, precise: true })).toBe("Sun 13:40"); // 5 Jul 2026
+    expect(formatScheduled(at(3 * 24), null, { nowSec: NOW })).toBe("Sun 13:40"); // 5 Jul 2026
   });
 
   it("precise past-day falls through to the absolute date — never a bare weekday", () => {
-    expect(formatScheduled(at(-24), null, { nowSec: NOW, precise: true })).toBe("1 Jul 13:40");
+    expect(formatScheduled(at(-24), null, { nowSec: NOW })).toBe("1 Jul 13:40");
   });
 
-  it("coarse → venue-day date + the provisional clock time, no relative words", () => {
-    const s = formatScheduled(at(5 * 24), null, { nowSec: NOW, precise: false });
+  it("ONE shape at every distance — the relative-word week gets weekday + time, no date", () => {
+    // 5 days out: nominal and precise stamps format identically (tiers differ only in hide rules)
+    const s = formatScheduled(at(5 * 24), null, { nowSec: NOW });
     expect(s).toContain("Tue");
-    expect(s).toContain("7 Jul");
-    expect(s).toMatch(/\d{2}:\d{2}/);   // nominal stamps show their provisional time too
+    expect(s).toMatch(/\d{2}:\d{2}/);   // provisional times show on every tag
+    expect(s).not.toContain("Jul");      // within the word week the calendar date is redundant
     expect(s).not.toContain("Today");
   });
 
-  it("coarse renders in UTC so the venue date never shifts for far-zone viewers", () => {
-    // An AO-shaped nominal stamp at 00:00 UTC: viewer-local rendering west of UTC would say 9 Jul.
-    const s = formatScheduled(Date.UTC(2026, 6, 10) / 1000, null, { nowSec: NOW, precise: false });
-    expect(s).toContain("10 Jul");
+  it("beyond the relative-word week → calendar date + time", () => {
+    const s = formatScheduled(at(10 * 24), null, { nowSec: NOW });
+    expect(s).toMatch(/\d{1,2} \w{3} \d{2}:\d{2}/); // "12 Jul 13:40"
+    expect(s).not.toMatch(/Today|Tmrw/);
   });
 
   it("omits the court separator (and never prints 'null') when no court is known", () => {
-    const s = formatScheduled(at(2), null, { nowSec: NOW, precise: true });
+    const s = formatScheduled(at(2), null, { nowSec: NOW });
     expect(s).not.toContain("·");
     expect(s).not.toContain("null");
   });

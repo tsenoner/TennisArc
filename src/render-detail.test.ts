@@ -85,19 +85,19 @@ describe("renderMatchStrip", () => {
 
   it("shows a compact precise scheduled tag for an imminent match", () => {
     const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null,
-      scheduled: { start: NOW + 2 * 3600, court: "Centre Court", precise: true } };
+      scheduled: { start: NOW + 2 * 3600, court: "Centre Court" } };
     const html = renderMatchStrip(ins, "r.0", opts);
     expect(html).toContain("ms-sched");
     expect(html).toContain("Today 15:40");
     expect(html).toContain("Centre Court");
   });
 
-  it("shows a coarse venue-day date + provisional time for a far-future TBD match", () => {
+  it("shows weekday + provisional time for a far-future TBD match (uniform compact shape)", () => {
     const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null,
-      scheduled: { start: NOW + 5 * 86400, court: null, precise: false } };
+      scheduled: { start: NOW + 5 * 86400, court: null } };
     const html = renderMatchStrip(ins, "r.0", opts);
-    expect(html).toContain("7 Jul");
     expect(html).toMatch(/\d{2}:\d{2}/); // the nominal stamp's provisional time shows too
+    expect(html).not.toContain("7 Jul");  // compact strip: weekday word carries the day
   });
 });
 
@@ -140,7 +140,7 @@ describe("renderMatchDetail", () => {
 
   it("renders the full scheduled line, flagged provisional", () => {
     const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null, durationSec: null,
-      scheduled: { start: NOW + 24 * 3600, court: "Court 2", precise: true } };
+      scheduled: { start: NOW + 24 * 3600, court: "Court 2" } };
     const html = renderMatchDetail(ins, null, rounds, NOW);
     expect(html).toContain("mi-sched");
     expect(html).toContain("Tomorrow 3 Jul, 13:40");

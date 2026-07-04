@@ -45,5 +45,11 @@ export default defineConfig({
       },
     }),
   ],
-  test: { globals: true, environment: "node" },
+  test: {
+    globals: true,
+    environment: "node",
+    // parallel Claude sessions keep git worktrees under .claude/worktrees — without this
+    // exclude their checked-out test copies double the suite (and can fail it from outside)
+    exclude: ["**/node_modules/**", "**/dist/**", "**/.claude/**"],
+  },
 });
