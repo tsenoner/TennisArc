@@ -55,6 +55,9 @@ export default defineConfig(({ mode }) => {
       },
     }),
   ],
-  test: { globals: true, environment: "node", setupFiles: ["./vitest.setup.ts"] },
+  // Pin tests to UTC so date-formatting tests (formatScheduled) are deterministic regardless of the
+  // host zone or how vitest is launched (npm script, IDE, bare vitest, subagent) — env is applied
+  // per worker before test modules import, so render.ts's Intl formatters build in UTC.
+  test: { globals: true, environment: "node", env: { TZ: "UTC" } },
   };
 });
