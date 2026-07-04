@@ -1227,3 +1227,19 @@ describe("live polling", () => {
     expect(snapCalls()).toBe(before);
   });
 });
+
+describe("freshness chip", () => {
+  it("refetches the current snapshot when clicked", async () => {
+    const root = await mountApp();
+    const fetches = (globalThis.fetch as ReturnType<typeof vi.fn>).mock;
+    const count = () => fetches.calls.filter(([u]) => String(u).includes("roland-garros")).length;
+    const before = count();
+    click(root.querySelector('[data-action="refresh"]')!);
+    await vi.waitFor(() => {
+      if (count() <= before) throw new Error("no refetch yet");
+    }, { timeout: 2000 });
+    await vi.waitFor(() => {
+      if (!root.querySelector('[data-action="refresh"]')) throw new Error("chip missing after redraw");
+    }, { timeout: 2000 });
+  });
+});

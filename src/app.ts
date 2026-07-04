@@ -37,6 +37,7 @@ interface AppState {
   pinnedId: string | undefined; // tap/click-pinned player: path stays lit, readout names them
   helpOpen: boolean;        // the Help modal (sourced from docs/HELP.md) — global overlay
   loadFailed: boolean;      // nothing renderable AND the last fetch failed → draw() shows Retry, not a spinner
+  refreshing: boolean;      // a manual refresh is in flight — the status chip shows "updating…"
 }
 
 function staleLabel(generatedAt: string | undefined, nowMs: number): string {
@@ -66,7 +67,7 @@ export function createApp(root: HTMLElement): () => void {
     tour: initial.tour ?? "ATP", year: 0, slam: "", index: undefined, snapshots: {},
     colorDim: initial.view ?? "time", seedSort: initial.sub ?? "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
     openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined, helpOpen: false,
-    loadFailed: false,
+    loadFailed: false, refreshing: false,
   };
 
   // ---- Help overlay ----
@@ -392,7 +393,10 @@ export function createApp(root: HTMLElement): () => void {
         `<div class="side">${panel}</div>` +
       `</div>` +
       renderLegend(state.colorDim, state.seedSort, hasPending) +
-      `<div class="status">${snap.tournament.name}${(() => { const s = staleLabel(snap.generatedAt, Date.now()); return s ? ` · ${s}` : ""; })()}` +
+      `<div class="status">${snap.tournament.name}${(() => {
+        const s = state.refreshing ? "updating…" : staleLabel(snap.generatedAt, Date.now());
+        return ` · <button class="status-refresh" data-action="refresh" title="Refresh now">${s || "refresh"} <span aria-hidden="true">↻</span></button>`;
+      })()}` +
         // CC BY-NC-SA: historical durations + ELO + birthdates come from Jeff Sackmann's data
         ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener noreferrer">Tennis Abstract</a></span></div>`;
     // Help is NOT part of this innerHTML — it lives in helpHost (see setHelp) so this swap
@@ -610,6 +614,12 @@ export function createApp(root: HTMLElement): () => void {
       draw(); // back to the spinner while we refetch
       if (!state.year) void bootstrap();
       else void load(state.tour, state.year, state.slam);
+    } else if (a === "refresh") {
+      if (state.refreshing) return;
+      state.refreshing = true;
+      draw(); // show "updating…" immediately
+      void load(state.tour, state.year, state.slam)
+        .finally(() => { state.refreshing = false; draw(); });
     } else if (a === "tour" && el.dataset.tour) {
       selectForTour(el.dataset.tour as Tour);
     } else if (a === "slam" && el.dataset.slam) {
