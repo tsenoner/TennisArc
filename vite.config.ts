@@ -1,8 +1,24 @@
 /// <reference types="vitest" />
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv, type PluginOption } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // Single source of truth for the data host: api.ts reads VITE_DATA_BASE_URL at runtime, and
+  // the preconnect hint is derived from the same variable at build time. Unset (local dev /
+  // preview serve the same-origin seed) → no preconnect needed, none emitted.
+  const dataBase = process.env.VITE_DATA_BASE_URL ?? loadEnv(mode, process.cwd()).VITE_DATA_BASE_URL;
+  const preconnectDataHost: PluginOption = {
+    name: "preconnect-data-host",
+    transformIndexHtml: () =>
+      dataBase
+        ? [{
+            tag: "link",
+            attrs: { rel: "preconnect", href: new URL(dataBase).origin, crossorigin: true },
+            injectTo: "head" as const,
+          }]
+        : [],
+  };
+  return {
   build: {
     target: "es2020",
     // keep the bundled flag SVGs as individual files instead of base64 data-URIs
@@ -10,6 +26,7 @@ export default defineConfig({
     assetsInlineLimit: (filePath) => (filePath.includes("flag-icons") ? false : undefined),
   },
   plugins: [
+    preconnectDataHost,
     VitePWA({
       // OFFLINE-FIRST REMOVAL, phase 1 (kill switch): ship a self-destroying sw.js at the same
       // URL, which unregisters the old workbox SW and clears its caches on every installed
@@ -21,7 +38,6 @@ export default defineConfig({
       // public/sw.js kill switch indefinitely.
       selfDestroying: true,
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "apple-touch-icon-180x180.png", "logo.svg"],
       manifest: {
         name: "TennisArc",
         short_name: "TennisArc",
@@ -40,4 +56,5 @@ export default defineConfig({
     }),
   ],
   test: { globals: true, environment: "node" },
+  };
 });

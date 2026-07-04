@@ -57,15 +57,21 @@ beforeEach(() => {
   installFetchStub();
 });
 
-/** The standard network: manifest + the two synthetic slams. Tests that simulate outages
- *  overwrite globalThis.fetch and call this to bring the network back. */
-function installFetchStub(): void {
-  globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+/** The standard network: manifest + the two synthetic slams, overridable per test (a live
+ *  manifest, a snapshot body re-read per request). Tests that simulate outages overwrite
+ *  globalThis.fetch and call this to bring the network back. Returns a counter of
+ *  roland-garros snapshot fetches. */
+function installFetchStub(overrides: { index?: () => unknown; snap?: () => unknown } = {}): () => number {
+  const index = overrides.index ?? (() => INDEX);
+  const snap = overrides.snap ?? (() => SNAP);
+  const fn = vi.fn(async (url: string | URL | Request) => {
     const u = String(url);
-    const body = u.includes("index.json") ? INDEX
-      : u.includes("roland-garros") || u.includes("wimbledon") ? SNAP : null;
+    const body = u.includes("index.json") ? index()
+      : u.includes("roland-garros") || u.includes("wimbledon") ? snap() : null;
     return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
-  }) as typeof fetch;
+  });
+  globalThis.fetch = fn as unknown as typeof fetch;
+  return () => fn.mock.calls.filter(([u]) => String(u).includes("roland-garros")).length;
 }
 
 // Dispose every app mounted during a test (createApp returns a disposer that detaches its
@@ -1183,23 +1189,15 @@ describe("live polling", () => {
     ...INDEX,
     slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]],
   };
-
-  /** Fetch stub whose snapshot body is re-read per request; returns a roland-garros call counter. */
-  function installLiveFetchStub(snap: () => unknown): () => number {
-    const fn = vi.fn(async (url: string | URL | Request) => {
-      const u = String(url);
-      const body = u.includes("index.json") ? LIVE_INDEX
-        : u.includes("roland-garros") || u.includes("wimbledon") ? snap() : null;
-      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
-    });
-    globalThis.fetch = fn as unknown as typeof fetch;
-    return () => fn.mock.calls.filter(([u]) => String(u).includes("roland-garros")).length;
-  }
+  // Fake-timer base pinned to noon UTC: seeding from real-now would let the app's midnight
+  // timer land inside an advanced window when the suite runs within ~91s of 00:00 UTC, swapping
+  // the DOM mid-assertion — a daily flake window.
+  const NOON = new Date("2026-06-15T12:00:00.000Z");
 
   it("refetches the live slam every 90s and redraws only when generatedAt changes", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON });
     let served: unknown = SNAP;
-    const snapCalls = installLiveFetchStub(() => served);
+    const snapCalls = installFetchStub({ index: () => LIVE_INDEX, snap: () => served });
     const root = await mountApp();
     const before = snapCalls();
 
@@ -1218,25 +1216,49 @@ describe("live polling", () => {
   });
 
   it("does not poll while the tab is hidden", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const snapCalls = installLiveFetchStub(() => SNAP);
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON });
+    const snapCalls = installFetchStub({ index: () => LIVE_INDEX });
     await mountApp();
     Object.defineProperty(document, "hidden", { value: true, configurable: true });
     const before = snapCalls();
     await vi.advanceTimersByTimeAsync(90_000);
     expect(snapCalls()).toBe(before);
   });
+
+  it("refetches on tab return after the throttle window, not on a quick flip", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON });
+    const snapCalls = installFetchStub({ index: () => LIVE_INDEX });
+    await mountApp();
+    const before = snapCalls();
+    const flip = () => {
+      Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "hidden", { value: false, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+
+    // quick flip right after the mount-time fetch: throttled, no refetch
+    flip();
+    await vi.advanceTimersByTimeAsync(50); // drain the handler's async gate
+    expect(snapCalls()).toBe(before);
+
+    // return after half a poll interval (but before the 90s tick): the handler refetches
+    await vi.advanceTimersByTimeAsync(46_000);
+    flip();
+    await vi.waitFor(() => {
+      if (snapCalls() <= before) throw new Error("no refetch on tab return yet");
+    }, { timeout: 2000 });
+  });
 });
 
 describe("freshness chip", () => {
   it("refetches the current snapshot when clicked", async () => {
+    const snapCalls = installFetchStub(); // fresh counter over the standard network
     const root = await mountApp();
-    const fetches = (globalThis.fetch as ReturnType<typeof vi.fn>).mock;
-    const count = () => fetches.calls.filter(([u]) => String(u).includes("roland-garros")).length;
-    const before = count();
+    const before = snapCalls();
     click(root.querySelector('[data-action="refresh"]')!);
     await vi.waitFor(() => {
-      if (count() <= before) throw new Error("no refetch yet");
+      if (snapCalls() <= before) throw new Error("no refetch yet");
     }, { timeout: 2000 });
     await vi.waitFor(() => {
       if (!root.querySelector('[data-action="refresh"]')) throw new Error("chip missing after redraw");
