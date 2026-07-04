@@ -414,7 +414,10 @@ export function formatScheduled(start: number, court: string | null, opts: Sched
       ? `${word ? `${word} ` : ""}${SCHED_DATE.format(date)}, ${time}`
       : `${word ?? SCHED_DATE.format(date)} ${time}`;
   } else {
-    when = SCHED_DATE_UTC.format(date);
+    // Nominal round-day stamp: venue-day date (UTC proxy — see state.ts) plus its provisional
+    // clock time in the viewer's zone. The time is SofaScore's round-day default until the real
+    // order of play lands — provisional, but it is exactly what SofaScore itself displays.
+    when = `${SCHED_DATE_UTC.format(date)} ${SCHED_TIME.format(date)}`;
   }
   return court ? `${when} · ${court}` : when;
 }
@@ -634,12 +637,13 @@ export function renderCenterSection(title: string): string {
   return `<div class="center-id center-sec"><span>${escapeHtml(title)}</span></div>`;
 }
 
-/** Centre-disc order-of-play pill while the final is undecided: the champion slot is the one
+/** Centre-disc order-of-play tag while the final is undecided: the champion slot is the one
  *  arc that can't carry an on-arc sched tag (a full-circle textPath draws garbage), so the
- *  final's slot is named here instead — same pill chrome, teal like the .arc-sched tags. */
+ *  final's slot is dated here instead — verbatim schedLabel text with the exact treatment of
+ *  the on-arc .arc-sched tags (small teal, no pill chrome). */
 export function renderCenterSched(sched: string): string {
   if (!sched) return "";
-  return `<div class="center-id center-sched"><span>Final · ${escapeHtml(sched)}</span></div>`;
+  return `<div class="center-id center-sched"><span>${escapeHtml(sched)}</span></div>`;
 }
 
 function insightScore(ins: MatchInsight): string {

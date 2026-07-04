@@ -326,7 +326,7 @@ describe("renderCenterSched", () => {
   it("renders the final's order-of-play pill; empty sched renders nothing", () => {
     const html = renderCenterSched("Fri 10 Jul");
     expect(html).toContain('class="center-id center-sched"');
-    expect(html).toContain("Final · Fri 10 Jul");
+    expect(html).toContain(">Fri 10 Jul<");   // verbatim schedLabel text — same as the on-arc tags
     expect(renderCenterSched("")).toBe("");
   });
 });
@@ -363,11 +363,11 @@ describe("formatScheduled", () => {
     expect(formatScheduled(at(-24), null, { nowSec: NOW, precise: true })).toBe("1 Jul 13:40");
   });
 
-  it("coarse → venue-day date only, no clock time, no relative words", () => {
+  it("coarse → venue-day date + the provisional clock time, no relative words", () => {
     const s = formatScheduled(at(5 * 24), null, { nowSec: NOW, precise: false });
     expect(s).toContain("Tue");
     expect(s).toContain("7 Jul");
-    expect(s).not.toMatch(/\d{2}:\d{2}/);
+    expect(s).toMatch(/\d{2}:\d{2}/);   // nominal stamps show their provisional time too
     expect(s).not.toContain("Today");
   });
 

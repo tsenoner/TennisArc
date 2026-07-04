@@ -92,12 +92,12 @@ describe("renderMatchStrip", () => {
     expect(html).toContain("Centre Court");
   });
 
-  it("shows a coarse venue-day date for a far-future TBD match", () => {
+  it("shows a coarse venue-day date + provisional time for a far-future TBD match", () => {
     const ins: MatchInsight = { ...base, status: "scheduled", winner: null, score: null,
       scheduled: { start: NOW + 5 * 86400, court: null, precise: false } };
     const html = renderMatchStrip(ins, "r.0", opts);
     expect(html).toContain("7 Jul");
-    expect(html).not.toMatch(/\d{2}:\d{2}/); // no fake clock time on a nominal date
+    expect(html).toMatch(/\d{2}:\d{2}/); // the nominal stamp's provisional time shows too
   });
 });
 
