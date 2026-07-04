@@ -1,7 +1,7 @@
 {
   "name": "tennisarc",
   "version": "0.1.0",
-  "description": "Live radial-bracket PWA for Grand Slam tennis (ATP + WTA)",
+  "description": "Live radial-bracket web app for Grand Slam tennis (ATP + WTA)",
   "license": "MIT",
   "type": "module",
   "scripts": {

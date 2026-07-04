@@ -1,7 +1,7 @@
 // In-app Help, rendered from the single source of truth at docs/HELP.md.
 //
 // The doc is bundled at build time (Vite `?raw`), so the panel shows the exact bytes
-// committed to the repo — app and doc can never drift, and it works fully offline.
+// committed to the repo — app and doc can never drift.
 // Each top-level "## " heading in the doc becomes one collapsible accordion section.
 import { marked } from "marked";
 import helpMd from "../docs/HELP.md?raw";

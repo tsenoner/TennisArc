@@ -1,6 +1,6 @@
 # TennisArc
 
-A live, offline-first **radial bracket** PWA for tennis Grand Slams (ATP + WTA singles) — a zoomable sunburst of the draw, coloured by cumulative time on court, with seed projections, a time-on-court leaderboard, and tap-to-open match detail that deep-links to SofaScore.
+A live **radial bracket** web app for tennis Grand Slams (ATP + WTA singles) — a zoomable sunburst of the draw, coloured by cumulative time on court, with seed projections, a time-on-court leaderboard, and tap-to-open match detail that deep-links to SofaScore.
 
 Built with **Vite + TypeScript (vanilla DOM) + vite-plugin-pwa**; data ingested from SofaScore via headless Chromium. **Live: https://tennisarc.vercel.app**
 
@@ -12,10 +12,10 @@ pnpm dev          # http://localhost:5173  (serves the committed /data seed)
 pnpm test         # vitest (TZ=UTC pinned)
 pnpm typecheck    # tsc --noEmit
 pnpm build        # tsc --noEmit && vite build → dist/
-pnpm preview      # serve dist/ (exercises the service worker)
+pnpm preview      # serve dist/
 ```
 
-The app reads the committed seed under `public/data/` — `index.json` (manifest) plus one snapshot per slam at `slams/{year}/{tour}-{slam}.json` — and works fully offline once installed (service-worker precache + IndexedDB cache). A permanent rewrite in `vercel.json` maps the pre-reorg flat paths (`/data/{tour}-{year}-{slam}.json`) onto the nested layout so clients running a not-yet-updated service worker never 404.
+The app reads the committed seed under `public/data/` — `index.json` (manifest) plus one snapshot per slam at `slams/{year}/{tour}-{slam}.json` — and refetches it live (90 s polling while a slam is in play). A permanent rewrite in `vercel.json` maps the pre-reorg flat paths (`/data/{tour}-{year}-{slam}.json`) onto the nested layout so clients running the old (now self-destroying) service worker never 404.
 
 ## Data ingestion
 
@@ -50,7 +50,7 @@ The live scheduler setup (launchd label, snapshot path, logs), its failure modes
 
 ## Deploy (Vercel)
 
-**Live:** https://tennisarc.vercel.app — Vercel (Vite preset, output `dist/`), serving the committed real Roland Garros 2026 data, installable + offline-capable. Redeploy after changes with `vercel deploy --prod`.
+**Live:** https://tennisarc.vercel.app — Vercel (Vite preset, output `dist/`), serving the committed real Roland Garros 2026 data, installable (the offline layer was removed 2026-07; a self-destroying service worker cleans up old installs). Redeploy after changes with `vercel deploy --prod`.
 
 Optional follow-ups:
 
@@ -61,7 +61,7 @@ Optional follow-ups:
 
 ## Architecture
 
-`model.ts` (types) → `state.ts` (bracket tree, time-on-court, projections) → `layout.ts` (d3 radial partition) → `color.ts` (swappable scales) → `render.ts` (SVG/HTML strings) → `app.ts` (offline-first loop). `store.ts` (idb-keyval) + `api.ts` (fetch) feed the loop; `ingest/` produces the data. Design docs in `docs/superpowers/`.
+`model.ts` (types) → `state.ts` (bracket tree, time-on-court, projections) → `layout.ts` (d3 radial partition) → `color.ts` (swappable scales) → `render.ts` (SVG/HTML strings) → `app.ts` (live-first loop). `api.ts` (fetch) feeds the loop; `ingest/` produces the data. Design docs in `docs/superpowers/`.
 
 ## Data source & licence
 
