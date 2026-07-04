@@ -30,7 +30,7 @@
 **Interfaces:**
 - Produces: `statusFor(index: SlamIndex | undefined, tour: Tour, year: number, slam: string): SlamStatus | undefined` — later tasks use it as the "is the current view live?" predicate.
 
-- [ ] **Step 1: Write the failing test** — append to `src/slams.test.ts`:
+- [x] **Step 1: Write the failing test** — append to `src/slams.test.ts`:
 
 ```ts
 describe("statusFor", () => {
@@ -48,9 +48,9 @@ describe("statusFor", () => {
 
 (Import `statusFor` alongside the existing imports from `./slams`, and `SlamIndex` from `./model` if not already imported.)
 
-- [ ] **Step 2: Run test to verify it fails** — `pnpm exec vitest run src/slams.test.ts` → FAIL (`statusFor` not exported).
+- [x] **Step 2: Run test to verify it fails** — `pnpm exec vitest run src/slams.test.ts` → FAIL (`statusFor` not exported).
 
-- [ ] **Step 3: Implement** — append to `src/slams.ts`:
+- [x] **Step 3: Implement** — append to `src/slams.ts`:
 
 ```ts
 /** Manifest status for one tour/year/slam, or undefined when the entry is absent. */
@@ -63,9 +63,9 @@ export function statusFor(
 
 Add `SlamStatus` to the type import from `./model` at the top of `src/slams.ts`.
 
-- [ ] **Step 4: Run test to verify it passes** — `pnpm exec vitest run src/slams.test.ts` → PASS.
+- [x] **Step 4: Run test to verify it passes** — `pnpm exec vitest run src/slams.test.ts` → PASS.
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(slams): statusFor manifest helper"`
+- [x] **Step 5: Commit** — `git add -A && git commit -m "feat(slams): statusFor manifest helper"`
 
 ---
 
@@ -80,9 +80,9 @@ Add `SlamStatus` to the type import from `./model` at the top of `src/slams.ts`.
 **Interfaces:**
 - Produces: `load(tour, year, slam)` is now fetch-only; bootstrap reads `state.index = (await fetchIndex()) ?? undefined`. Later tasks modify `load()` further.
 
-- [ ] **Step 1: Delete files** — `git rm src/store.ts src/store.test.ts`
+- [x] **Step 1: Delete files** — `git rm src/store.ts src/store.test.ts`
 
-- [ ] **Step 2: Excise store from app.ts** —
+- [x] **Step 2: Excise store from app.ts** —
   - Delete line 11: `import { createStore, type Store } from "./store";`
   - Delete line 70: `let store: Store | undefined;`
   - Replace `load()` (lines 406–418) with:
@@ -112,13 +112,13 @@ Add `SlamStatus` to the type import from `./model` at the top of `src/slams.ts`.
     state.index = (await fetchIndex()) ?? undefined;
 ```
 
-- [ ] **Step 3: Remove the store mock from app.test.ts** — delete the whole `vi.mock("./store", () => ({ … }))` block (lines 6–18) and its explanatory comment (line 6). Keep the `import { createApp } from "./app";` that follows.
+- [x] **Step 3: Remove the store mock from app.test.ts** — delete the whole `vi.mock("./store", () => ({ … }))` block (lines 6–18) and its explanatory comment (line 6). Keep the `import { createApp } from "./app";` that follows.
 
-- [ ] **Step 4: Drop the dep** — remove `"idb-keyval": "^6.2.5",` from package.json dependencies; run `pnpm install`.
+- [x] **Step 4: Drop the dep** — remove `"idb-keyval": "^6.2.5",` from package.json dependencies; run `pnpm install`.
 
-- [ ] **Step 5: Verify** — `pnpm test && pnpm typecheck` → all pass, and `grep -r "idb-keyval\|./store" src/ index.html` → no hits.
+- [x] **Step 5: Verify** — `pnpm test && pnpm typecheck` → all pass, and `grep -r "idb-keyval\|./store" src/ index.html` → no hits.
 
-- [ ] **Step 6: Commit** — `git add -A && git commit -m "feat(app)!: remove IndexedDB offline cache — load() is fetch-only"`
+- [x] **Step 6: Commit** — `git add -A && git commit -m "feat(app)!: remove IndexedDB offline cache — load() is fetch-only"`
 
 ---
 
@@ -132,7 +132,7 @@ Add `SlamStatus` to the type import from `./model` at the top of `src/slams.ts`.
 **Interfaces:**
 - Produces: `pnpm build` emits a self-destroying `dist/sw.js` at the same URL as the old workbox SW. Manifest + icons still emitted/injected by the plugin (installability unchanged this release).
 
-- [ ] **Step 1: Rewrite the VitePWA block** in `vite.config.ts` — replace the whole `VitePWA({ … })` argument (lines 13–46) with:
+- [x] **Step 1: Rewrite the VitePWA block** in `vite.config.ts` — replace the whole `VitePWA({ … })` argument (lines 13–46) with:
 
 ```ts
     VitePWA({
@@ -167,18 +167,18 @@ Add `SlamStatus` to the type import from `./model` at the top of `src/slams.ts`.
 
 (The `workbox:` block is gone — precache config is dead under `selfDestroying`.)
 
-- [ ] **Step 2: Fix the stale comment** on `assetsInlineLimit` (lines 8–9) — replace with:
+- [x] **Step 2: Fix the stale comment** on `assetsInlineLimit` (lines 8–9) — replace with:
 
 ```ts
     // keep the bundled flag SVGs as individual files instead of base64 data-URIs
     // bloating the JS bundle (most are tiny and would otherwise inline)
 ```
 
-- [ ] **Step 3: Delete asset-generator tooling** — `git rm pwa-assets.config.ts`; remove the `"generate-pwa-assets": "pwa-assets-generator",` script and the `"@vite-pwa/assets-generator": "^0.2.6",` devDep from package.json; `pnpm install`. (The generated icons are committed in `public/` and stay.)
+- [x] **Step 3: Delete asset-generator tooling** — `git rm pwa-assets.config.ts`; remove the `"generate-pwa-assets": "pwa-assets-generator",` script and the `"@vite-pwa/assets-generator": "^0.2.6",` devDep from package.json; `pnpm install`. (The generated icons are committed in `public/` and stay.)
 
-- [ ] **Step 4: Verify the kill switch builds** — `pnpm build` then `grep -c "unregister" dist/sw.js` → ≥ 1, and `grep -c "manifest.webmanifest" dist/index.html` → ≥ 1 (manifest still injected).
+- [x] **Step 4: Verify the kill switch builds** — `pnpm build` then `grep -c "unregister" dist/sw.js` → ≥ 1, and `grep -c "manifest.webmanifest" dist/index.html` → ≥ 1 (manifest still injected).
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(pwa)!: self-destroying service worker (offline-first removal, phase 1)"`
+- [x] **Step 5: Commit** — `git add -A && git commit -m "feat(pwa)!: self-destroying service worker (offline-first removal, phase 1)"`
 
 ---
 
@@ -193,7 +193,7 @@ Add `SlamStatus` to the type import from `./model` at the top of `src/slams.ts`.
 - Consumes: fetch-only `load()` from Task 2.
 - Produces: `state.loadFailed: boolean`; `bootstrap(): Promise<void>` (extracted, re-runnable); click action `data-action="retry"`. Task 5's `load()` rewrite must keep the `loadFailed` semantics shown here.
 
-- [ ] **Step 1: Write the failing test** — append to `src/app.test.ts`:
+- [x] **Step 1: Write the failing test** — append to `src/app.test.ts`:
 
 ```ts
 describe("load failure", () => {
@@ -242,9 +242,9 @@ async function until(cond: () => boolean, ms = 2000): Promise<void> {
 
 (If `mountApp` already contains an equivalent wait loop, extract/reuse it instead of duplicating.)
 
-- [ ] **Step 2: Run test to verify it fails** — `pnpm exec vitest run src/app.test.ts -t "load failure"` → FAIL (no `.load-error` ever renders).
+- [x] **Step 2: Run test to verify it fails** — `pnpm exec vitest run src/app.test.ts -t "load failure"` → FAIL (no `.load-error` ever renders).
 
-- [ ] **Step 3: Implement** in `src/app.ts`:
+- [x] **Step 3: Implement** in `src/app.ts`:
   - State: add `loadFailed: boolean;` to the `AppState` interface (after `helpOpen`) with comment `// nothing renderable AND the last fetch failed → draw() shows Retry instead of a spinner`, and `loadFailed: false,` to the initial state literal.
   - `draw()` loading branch — replace lines 233–238 with:
 
@@ -319,7 +319,7 @@ async function until(cond: () => boolean, ms = 2000): Promise<void> {
       else void load(state.tour, state.year, state.slam);
 ```
 
-- [ ] **Step 4: Style it** — append to `src/app.css` (after the `.loading` rule at line 244):
+- [x] **Step 4: Style it** — append to `src/app.css` (after the `.loading` rule at line 244):
 
 ```css
 .load-error { flex-direction: column; gap: 12px; text-align: center; padding: 0 24px; }
@@ -331,9 +331,9 @@ async function until(cond: () => boolean, ms = 2000): Promise<void> {
 .load-error .retry:hover { border-color: var(--accent); }
 ```
 
-- [ ] **Step 5: Run test to verify it passes** — `pnpm exec vitest run src/app.test.ts` → PASS (whole file, not just the new test).
+- [x] **Step 5: Run test to verify it passes** — `pnpm exec vitest run src/app.test.ts` → PASS (whole file, not just the new test).
 
-- [ ] **Step 6: Commit** — `git add -A && git commit -m "feat(app): explicit load-failure state with Retry"`
+- [x] **Step 6: Commit** — `git add -A && git commit -m "feat(app): explicit load-failure state with Retry"`
 
 ---
 
@@ -347,7 +347,7 @@ async function until(cond: () => boolean, ms = 2000): Promise<void> {
 - Consumes: `statusFor` (Task 1), `load()`/`loadFailed` (Task 4).
 - Produces: `LIVE_POLL_MS = 90_000`; `isLiveView(): boolean`; `lastLoadMs: number` module-level tracking. `load()` now skips `draw()` when `generatedAt` is unchanged — Task 6's refresh chip relies on that (it draws explicitly around the call).
 
-- [ ] **Step 1: Write the failing test** — append to `src/app.test.ts`:
+- [x] **Step 1: Write the failing test** — append to `src/app.test.ts`:
 
 ```ts
 describe("live polling", () => {
@@ -403,9 +403,9 @@ describe("live polling", () => {
 
 (If `document.hidden` is already stubbed elsewhere in the file, reuse that pattern. `afterEach` must restore `document.hidden` to false — add the `Object.defineProperty(document, "hidden", { value: false, configurable: true });` line there.)
 
-- [ ] **Step 2: Run test to verify it fails** — `pnpm exec vitest run src/app.test.ts -t "live polling"` → FAIL (no refetch happens).
+- [x] **Step 2: Run test to verify it fails** — `pnpm exec vitest run src/app.test.ts -t "live polling"` → FAIL (no refetch happens).
 
-- [ ] **Step 3: Implement** in `src/app.ts`:
+- [x] **Step 3: Implement** in `src/app.ts`:
   - Import: add `statusFor` to the existing `./slams` import.
   - `load()` — add change detection + `lastLoadMs` (full replacement):
 
@@ -463,9 +463,9 @@ describe("live polling", () => {
   signal.addEventListener("abort", () => clearInterval(pollTimer));
 ```
 
-- [ ] **Step 4: Run tests to verify they pass** — `pnpm exec vitest run src/app.test.ts` → PASS (all — the redraw-skip must not break the existing mount/interaction tests).
+- [x] **Step 4: Run tests to verify they pass** — `pnpm exec vitest run src/app.test.ts` → PASS (all — the redraw-skip must not break the existing mount/interaction tests).
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat(app): live-gated 90s polling + visibility refetch with generatedAt change detection"`
+- [x] **Step 5: Commit** — `git add -A && git commit -m "feat(app): live-gated 90s polling + visibility refetch with generatedAt change detection"`
 
 ---
 
@@ -480,7 +480,7 @@ describe("live polling", () => {
 - Consumes: change-detecting `load()` from Task 5 (which is why refresh draws explicitly itself).
 - Produces: click action `data-action="refresh"`; `state.refreshing: boolean`.
 
-- [ ] **Step 1: Write the failing test** — append to `src/app.test.ts`:
+- [x] **Step 1: Write the failing test** — append to `src/app.test.ts`:
 
 ```ts
 describe("freshness chip", () => {
@@ -496,9 +496,9 @@ describe("freshness chip", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails** — `pnpm exec vitest run src/app.test.ts -t "freshness chip"` → FAIL (no `[data-action="refresh"]` in the DOM).
+- [x] **Step 2: Run test to verify it fails** — `pnpm exec vitest run src/app.test.ts -t "freshness chip"` → FAIL (no `[data-action="refresh"]` in the DOM).
 
-- [ ] **Step 3: Implement** in `src/app.ts`:
+- [x] **Step 3: Implement** in `src/app.ts`:
   - State: add `refreshing: boolean;` to `AppState` (comment: `// a manual refresh is in flight — the chip shows "updating…"`) and `refreshing: false,` to the initial literal.
   - Status line — replace the `staleLabel` IIFE segment in `draw()` (line 392) so the label becomes a button:
 
@@ -520,7 +520,7 @@ describe("freshness chip", () => {
         .finally(() => { state.refreshing = false; draw(); });
 ```
 
-- [ ] **Step 4: Style it** — append to `src/app.css`:
+- [x] **Step 4: Style it** — append to `src/app.css`:
 
 ```css
 .status-refresh {
@@ -530,9 +530,9 @@ describe("freshness chip", () => {
 .status-refresh:hover { color: var(--text); text-decoration-color: var(--dim); }
 ```
 
-- [ ] **Step 5: Run tests** — `pnpm exec vitest run src/app.test.ts` → PASS.
+- [x] **Step 5: Run tests** — `pnpm exec vitest run src/app.test.ts` → PASS.
 
-- [ ] **Step 6: Commit** — `git add -A && git commit -m "feat(app): freshness label is a tap-to-refresh control"`
+- [x] **Step 6: Commit** — `git add -A && git commit -m "feat(app): freshness label is a tap-to-refresh control"`
 
 ---
 
@@ -541,28 +541,28 @@ describe("freshness chip", () => {
 **Files:**
 - Modify: `index.html`, `README.md`, `src/help.ts:4`, `package.json:4`
 
-- [ ] **Step 1: Preconnect** — in `index.html`, add inside `<head>` (after the existing meta tags):
+- [x] **Step 1: Preconnect** — in `index.html`, add inside `<head>` (after the existing meta tags):
 
 ```html
     <link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin />
 ```
 
-- [ ] **Step 2: README** — four edits:
+- [x] **Step 2: README** — four edits:
   - Line 3: replace `A live, offline-first **radial bracket** PWA` with `A live **radial bracket** web app` (rest of the sentence unchanged).
   - Line 18: replace the sentence `…and works fully offline once installed (service-worker precache + IndexedDB cache).` with `…and refetches it live (90 s polling while a slam is in play).` Keep the flat-path-rewrite sentence, but change its justification to `so clients running the old (now self-destroying) service worker never 404`.
   - Line 53: replace `installable + offline-capable` with `installable (the offline layer was removed 2026-07; a self-destroying service worker cleans up old installs)`.
   - Line 64: replace `` `app.ts` (offline-first loop). `store.ts` (idb-keyval) + `api.ts` (fetch) feed the loop `` with `` `app.ts` (live-first loop). `api.ts` (fetch) feeds the loop ``.
 
-- [ ] **Step 3: help.ts comment** — line 3–4: drop `, and it works fully offline` from the comment.
+- [x] **Step 3: help.ts comment** — line 3–4: drop `, and it works fully offline` from the comment.
 
-- [ ] **Step 4: package.json description** — line 4: `"Live radial-bracket web app for Grand Slam tennis (ATP + WTA)"`.
+- [x] **Step 4: package.json description** — line 4: `"Live radial-bracket web app for Grand Slam tennis (ATP + WTA)"`.
 
-- [ ] **Step 5: Verify + commit** — `pnpm test && pnpm typecheck`, then `git add -A && git commit -m "docs: live-first copy — retire offline-first claims; preconnect to data host"`
+- [x] **Step 5: Verify + commit** — `pnpm test && pnpm typecheck`, then `git add -A && git commit -m "docs: live-first copy — retire offline-first claims; preconnect to data host"`
 
 ---
 
 ### Task 8: End-to-end verification
 
-- [ ] **Step 1: Full suite** — `pnpm test` → all green. `pnpm build` → succeeds; `grep -c unregister dist/sw.js` ≥ 1.
-- [ ] **Step 2: Live run** — `pnpm preview`, open the served URL: bracket loads; status line shows the `↻` chip; clicking it flips to "updating…" and back; DevTools → Application → Service Workers on a previously-visited origin shows the SW unregistering. Simulate failure (DevTools offline, hard reload) → "Couldn't load the draw" + Retry; going online + Retry recovers.
-- [ ] **Step 3: Push + PR** — `git push -u origin feat/live-first-client`, open PR titled `feat: live-first client — offline layer removal (phase 1) + live polling`.
+- [x] **Step 1: Full suite** — `pnpm test` → all green. `pnpm build` → succeeds; `grep -c unregister dist/sw.js` ≥ 1.
+- [x] **Step 2: Live run** — `pnpm preview`, open the served URL: bracket loads; status line shows the `↻` chip; clicking it flips to "updating…" and back; DevTools → Application → Service Workers on a previously-visited origin shows the SW unregistering. Simulate failure (DevTools offline, hard reload) → "Couldn't load the draw" + Retry; going online + Retry recovers.
+- [x] **Step 3: Push + PR** — `git push -u origin feat/live-first-client`, open PR titled `feat: live-first client — offline layer removal (phase 1) + live polling`.
