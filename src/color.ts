@@ -19,18 +19,15 @@ const HEAT = interpolateRgbBasis(["#2f6f8f", "#d9a441", "#e0683c"]);
 // brightest pale lilac = the top 1–4 band, deepest indigo = the 17–32 band.
 const SEED_TIER_MAX = [4, 8, 16, 32] as const;                                  // inclusive upper rank of each band
 const SEED_TIER_STOPS = ["#e2cdff", "#a36bff", "#6d3fd4", "#352170"] as const;  // bands 1-4 → 17-32 (pale → deep)
-/** The seeding-band colour for a 1..32 rank (seed# or ELO position); null once past the top 32. */
-export function seedTierColor(rank: number): string | null {
+/** The seeding-band colour for a 1..32 rank (seed# or ELO position); null when the rank is
+ *  absent (unseeded / no ELO) or past the top 32. */
+export function seedTierColor(rank: number | null | undefined): string | null {
+  if (rank == null) return null;
   for (let i = 0; i < SEED_TIER_MAX.length; i++) if (rank <= SEED_TIER_MAX[i]) return SEED_TIER_STOPS[i];
   return null;
 }
 const COUNTRY_MUTED = { dark: "#2c3744", light: "#e2ded4" } as const;
 const COUNTRY_HL = { dark: "#4ea1ff", light: "#1b63b4" } as const;   // keep in sync with --country in app.css
-
-// Legend swatches (left → right) mirroring each scale's domain order; kept in sync with the CSS.
-// HEAT is a continuous ramp; SEED is now four hard bands (17–32 → 1-4, deep → pale).
-export const HEAT_STOPS = ["#2f6f8f", "#d9a441", "#e0683c"];
-export const SEED_STOPS = ["#352170", "#6d3fd4", "#a36bff", "#e2cdff"];
 
 /** The per-arc inputs a colour function reads: who occupies the arc, which ring (depth) it is,
  *  and whether the arc is a projection (no decided result feeding it yet). */
@@ -79,15 +76,9 @@ export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string,
     if (seedSort === "elo") {
       // ELO sort: the wheel lights the top 32 by surface ELO, keyed by their ELO rank.
       const rank = eloRank(s);
-      return ({ occupant }) => {
-        const r = occupant ? rank.get(occupant) : undefined;
-        return (r != null ? seedTierColor(r) : null) ?? NEUTRAL[theme];   // outside the top 32 → neutral
-      };
+      return ({ occupant }) => seedTierColor(occupant ? rank.get(occupant) : null) ?? NEUTRAL[theme];   // outside top 32 → neutral
     }
-    return ({ occupant }) => {
-      const seed = occupant ? s.players[occupant]?.seed : null;
-      return (seed != null ? seedTierColor(seed) : null) ?? NEUTRAL[theme];   // unseeded / beyond-32 → neutral
-    };
+    return ({ occupant }) => seedTierColor(occupant ? s.players[occupant]?.seed : null) ?? NEUTRAL[theme];   // unseeded / beyond-32 → neutral
   }
   // country — neutral wheel; the selected nation lights up (flags carry identity)
   return ({ occupant }) => {
