@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
-import { colorScale, COLOR_DIMS, type ArcColorInput } from "./color";
+import { colorScale, seedTierColor, COLOR_DIMS, type ArcColorInput } from "./color";
 
 const arc = (occupant: string | null, depth = 1, projected = false, live = false, suspended = false): ArcColorInput => ({ occupant, depth, projected, live, suspended });
+// Seed/neutral colours are all hex ("#rrggbb"); pull out [r, g, b] for channel assertions.
+const rgbOf = (c: string): number[] => { const h = c.replace("#", ""); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
 
 describe("colorScale", () => {
   it("exposes the supported dimensions", () => {
@@ -29,29 +31,34 @@ describe("colorScale", () => {
     expect(red(scale(arc(champ, 1)))).toBeGreaterThan(red(scale(arc(champ, numRounds))));
   });
 
-  it("colours the seed lens by seed number with a violet ramp, distinct from the time heat ramp", () => {
+  it("colours the seed lens in four discrete seeding bands (1–4, 5–8, 9–16, 17–32), same violet family", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     const scale = colorScale("seed", s);
-    // top seed (1) and a lower seed get different colours
-    expect(scale(arc("p0"))).not.toBe(scale(arc("p7")));
+    // p0..p7 hold seeds 1..8 → p0-p3 in the 1-4 band, p4-p7 in the 5-8 band
+    expect(scale(arc("p0"))).toBe(scale(arc("p3")));       // seeds 1 and 4 share the top band
+    expect(scale(arc("p3"))).not.toBe(scale(arc("p4")));   // seed 4 (band 1-4) ≠ seed 5 (band 5-8)
     // violet ⇒ blue channel exceeds green (the warm time ramp is the opposite)
-    const [, g, b] = scale(arc("p0")).match(/\d+/g)!.map(Number);
+    const [, g, b] = rgbOf(scale(arc("p0")));
     expect(b).toBeGreaterThan(g);
-    // unseeded → neutral fallback
+    // unseeded → the neutral fallback, i.e. the exact colour of a null occupant (not a seed band)
     s.players["p3"] = { ...s.players["p3"], seed: null };
-    expect(colorScale("seed", s)(arc("p3"))).toMatch(/^(#|rgb)/);
+    const unseeded = colorScale("seed", s);
+    expect(unseeded(arc("p3"))).toBe(unseeded(arc(null)));
   });
 
-  it("ELO sort colours the top 32 by surface ELO with the same ramp; players with no ELO go neutral", () => {
+  it("ELO sort bands the top 32 by surface ELO with the same tiers; players with no ELO go neutral", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
-    // give two players a clay ELO; the rest keep elo:null (outside the top 32 → neutral)
-    s.players["p0"] = { ...s.players["p0"], elo: { overall: 2200, hard: 2200, clay: 2200, grass: 2200 } };
-    s.players["p1"] = { ...s.players["p1"], elo: { overall: 1900, hard: 1900, clay: 1900, grass: 1900 } };
+    // give six players a descending clay ELO → ELO ranks 1..6 (p0 strongest); p6,p7 stay elo:null → neutral
+    Object.keys(s.players).slice(0, 6).forEach((id, i) => {
+      const e = 2200 - i * 50;
+      s.players[id] = { ...s.players[id], elo: { overall: e, hard: e, clay: e, grass: e } };
+    });
     const scale = colorScale("seed", s, undefined, "elo");
-    expect(scale(arc("p0"))).not.toBe(scale(arc("p1")));   // strongest ≠ second by ELO
-    expect(scale(arc("p7"))).toBe(scale(arc(null)));        // no ELO → neutral, same as the null fallback
-    const [, g, b] = scale(arc("p0")).match(/\d+/g)!.map(Number);
-    expect(b).toBeGreaterThan(g);                           // still the violet ramp
+    expect(scale(arc("p0"))).toBe(scale(arc("p3")));       // ELO ranks 1 and 4 share the top band
+    expect(scale(arc("p3"))).not.toBe(scale(arc("p4")));   // rank 4 (band 1-4) ≠ rank 5 (band 5-8)
+    expect(scale(arc("p7"))).toBe(scale(arc(null)));       // no ELO → neutral, same as the null fallback
+    const [, g, b] = rgbOf(scale(arc("p0")));
+    expect(b).toBeGreaterThan(g);                          // still the violet family
   });
 
   it("returns a colour for null in every dimension (neutral fallback)", () => {
@@ -59,6 +66,25 @@ describe("colorScale", () => {
     for (const dim of COLOR_DIMS) {
       expect(colorScale(dim, s)(arc(null))).toMatch(/^(#|rgb)/);
     }
+  });
+});
+
+describe("seedTierColor — discrete seeding bands", () => {
+  it("groups ranks into 1–4, 5–8, 9–16, 17–32 (same colour within a band, different across)", () => {
+    expect(seedTierColor(1)).toBe(seedTierColor(4));       // band 1-4
+    expect(seedTierColor(4)).not.toBe(seedTierColor(5));   // 1-4 vs 5-8
+    expect(seedTierColor(5)).toBe(seedTierColor(8));       // band 5-8
+    expect(seedTierColor(8)).not.toBe(seedTierColor(9));   // 5-8 vs 9-16
+    expect(seedTierColor(9)).toBe(seedTierColor(16));      // band 9-16
+    expect(seedTierColor(16)).not.toBe(seedTierColor(17)); // 9-16 vs 17-32
+    expect(seedTierColor(17)).toBe(seedTierColor(32));     // band 17-32
+  });
+  it("returns null once past the top 32", () => {
+    expect(seedTierColor(32)).not.toBeNull();
+    expect(seedTierColor(33)).toBeNull();
+  });
+  it("gives all four bands distinct colours", () => {
+    expect(new Set([1, 5, 9, 17].map(seedTierColor)).size).toBe(4);
   });
 });
 
