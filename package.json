@@ -1,7 +1,7 @@
 {
   "name": "tennisarc",
   "version": "0.1.0",
-  "description": "Live radial-bracket PWA for Grand Slam tennis (ATP + WTA)",
+  "description": "Live radial-bracket web app for Grand Slam tennis (ATP + WTA)",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -9,10 +9,9 @@
     "dev:host": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "TZ=UTC vitest run",
-    "test:watch": "TZ=UTC vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "generate-pwa-assets": "pwa-assets-generator",
     "ingest": "tsx ingest/index.ts",
     "reindex": "tsx ingest/reindex.ts",
     "backfill-durations": "tsx ingest/backfill-durations.ts",
@@ -29,7 +28,6 @@
     "d3-scale": "^4.0.2",
     "d3-shape": "^3.2.0",
     "flag-icons": "^7.5.0",
-    "idb-keyval": "^6.2.5",
     "marked": "^18.0.5"
   },
   "devDependencies": {
@@ -38,7 +36,6 @@
     "@types/d3-scale": "^4.0.8",
     "@types/d3-shape": "^3.1.6",
     "@types/node": "^25.9.2",
-    "@vite-pwa/assets-generator": "^0.2.6",
     "jsdom": "^29.1.1",
     "playwright": "^1.60.0",
     "tsx": "^4.22.4",

@@ -13,16 +13,21 @@ export const COLOR_DIMS: ColorDim[] = ["time", "seed", "country"];
 const NEUTRAL = { dark: "#3a4350", light: "#cfcbc1" } as const;
 // time: cool → gold → clay
 const HEAT = interpolateRgbBasis(["#2f6f8f", "#d9a441", "#e0683c"]);
-// seed: recessive → vivid violet — a deliberately different hue family from HEAT so the
-// Seed lens never reads like the Time lens. Top seed = bright lilac; lowest seed = deep indigo.
-// Wide lightness sweep (deep → pale) + 4 perceptually-spaced stops so adjacent ranks separate.
-const SEED = interpolateRgbBasis(["#352170", "#6d3fd4", "#a36bff", "#e2cdff"]);
+// seed: four DISCRETE seeding bands (1–4, 5–8, 9–16, 17–32) rather than a continuous rank ramp —
+// each classic seed tier reads as one solid block on the wheel. Same violet family as before
+// (a deliberately different hue from HEAT so the Seed lens never reads like the Time lens):
+// brightest pale lilac = the top 1–4 band, deepest indigo = the 17–32 band.
+const SEED_TIER_MAX = [4, 8, 16, 32] as const;                                  // inclusive upper rank of each band
+const SEED_TIER_STOPS = ["#e2cdff", "#a36bff", "#6d3fd4", "#352170"] as const;  // bands 1-4 → 17-32 (pale → deep)
+/** The seeding-band colour for a 1..32 rank (seed# or ELO position); null when the rank is
+ *  absent (unseeded / no ELO) or past the top 32. */
+export function seedTierColor(rank: number | null | undefined): string | null {
+  if (rank == null) return null;
+  for (let i = 0; i < SEED_TIER_MAX.length; i++) if (rank <= SEED_TIER_MAX[i]) return SEED_TIER_STOPS[i];
+  return null;
+}
 const COUNTRY_MUTED = { dark: "#2c3744", light: "#e2ded4" } as const;
 const COUNTRY_HL = { dark: "#4ea1ff", light: "#1b63b4" } as const;   // keep in sync with --country in app.css
-
-// Legend gradients (left → right) mirroring each scale's domain order; kept in sync with the CSS.
-export const HEAT_STOPS = ["#2f6f8f", "#d9a441", "#e0683c"];
-export const SEED_STOPS = ["#352170", "#6d3fd4", "#a36bff", "#e2cdff"];
 
 /** The per-arc inputs a colour function reads: who occupies the arc, which ring (depth) it is,
  *  and whether the arc is a projection (no decided result feeding it yet). */
@@ -75,21 +80,14 @@ export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string,
   const withPending = (paint: (a: ArcColorInput) => string): ColorFn =>
     Object.assign((a: ArcColorInput) => (pending(a) ? NEUTRAL[theme] : paint(a)), { pending });
   if (dim === "seed") {
-    // Same violet ramp in both sub-modes — only the meaning changes (top seed ↔ strongest by ELO),
-    // and both are top-32 rankings, so the 1→32 domain maps cleanly either way.
-    const t = scaleLinear<number>().domain([1, 32]).range([1, 0]).clamp(true);
+    // Both sub-modes read a 1..32 ranking — tournament seed, or strongest-by-surface-ELO — and
+    // paint it in the four seeding bands (seedTierColor); anything past the top 32 goes neutral.
     if (seedSort === "elo") {
       // ELO sort: the wheel lights the top 32 by surface ELO, keyed by their ELO rank.
       const rank = eloRank(s);
-      return withPending((a) => {
-        const r = rank.get(a.occupant!);
-        return r != null && r <= 32 ? SEED(t(r)) : NEUTRAL[theme];   // outside the top 32 → neutral
-      });
+      return withPending((a) => seedTierColor(rank.get(a.occupant!)) ?? NEUTRAL[theme]);   // outside top 32 → neutral
     }
-    return withPending((a) => {
-      const seed = s.players[a.occupant!]?.seed;
-      return seed != null && seed <= 32 ? SEED(t(seed)) : NEUTRAL[theme];   // unseeded / beyond-32 → neutral (mirrors the ELO branch)
-    });
+    return withPending((a) => seedTierColor(s.players[a.occupant!]?.seed) ?? NEUTRAL[theme]);   // unseeded / beyond-32 → neutral
   }
   // country — neutral wheel; the selected nation lights up (flags carry identity)
   return withPending((a) => {

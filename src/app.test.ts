@@ -3,20 +3,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
 import type { SlamIndex } from "./model";
 
-// In-memory store so the bootstrap never touches IndexedDB (absent in jsdom).
-vi.mock("./store", () => ({
-  createStore: async () => {
-    let index: SlamIndex | null = null;
-    const snaps = new Map<string, unknown>();
-    return {
-      getSnapshot: async (t: string, y: number, s: string) => snaps.get(`${t}:${y}:${s}`) ?? null,
-      setSnapshot: async (t: string, y: number, s: string, v: unknown) => { snaps.set(`${t}:${y}:${s}`, v); },
-      getIndex: async () => index,
-      setIndex: async (i: SlamIndex) => { index = i; },
-    };
-  },
-}));
-
 import { createApp } from "./app";
 
 const SNAP = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3 });
@@ -34,16 +20,6 @@ const INDEX: SlamIndex = {
     surface: "Grass", status: "upcoming", generatedAt: "2026-06-07T00:00:00.000Z", drawSize: 8,
   }],
 };
-
-/** Route the app's two fetches to fixtures: index.json → INDEX, any slam snapshot URL → `snap`. */
-function mockSnapFetch(snap: unknown): void {
-  globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-    const u = String(url);
-    const body = u.includes("index.json") ? INDEX
-      : u.includes("roland-garros") || u.includes("wimbledon") ? snap : null;
-    return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
-  }) as typeof fetch;
-}
 
 /** This jsdom build exposes no localStorage (Node's experimental global shadows it); theme.ts
  *  reads it at mount, so install a fresh in-memory Storage shim on every test. */
@@ -78,13 +54,32 @@ beforeEach(() => {
   if (typeof document.elementFromPoint !== "function") {
     (document as unknown as { elementFromPoint: () => Element | null }).elementFromPoint = () => null;
   }
-  mockSnapFetch(SNAP);
+  installFetchStub();
 });
+
+/** The standard network: manifest + the two synthetic slams, overridable per test (a live
+ *  manifest, a snapshot body re-read per request). Tests that simulate outages overwrite
+ *  globalThis.fetch and call this to bring the network back. Returns a counter of
+ *  roland-garros snapshot fetches. */
+function installFetchStub(overrides: { index?: () => unknown; snap?: () => unknown } = {}): () => number {
+  const index = overrides.index ?? (() => INDEX);
+  const snap = overrides.snap ?? (() => SNAP);
+  const fn = vi.fn(async (url: string | URL | Request) => {
+    const u = String(url);
+    const body = u.includes("index.json") ? index()
+      : u.includes("roland-garros") || u.includes("wimbledon") ? snap() : null;
+    return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+  });
+  globalThis.fetch = fn as unknown as typeof fetch;
+  return () => fn.mock.calls.filter(([u]) => String(u).includes("roland-garros")).length;
+}
 
 // Dispose every app mounted during a test (createApp returns a disposer that detaches its
 // window/document/root listeners), so no handler leaks across mounts; then reset shared globals.
 const mounted: Array<() => void> = [];
 afterEach(async () => {
+  vi.useRealTimers();                       // a failed fake-timer test must not starve the drain below
+  Object.defineProperty(document, "hidden", { value: false, configurable: true }); // polling gate reset
   for (const dispose of mounted) dispose();
   mounted.length = 0;
   // A prior test's REAL history.back() fires popstate on a later macrotask; dispose has already
@@ -455,7 +450,7 @@ describe("finalist pill + corner readout", () => {
     const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
     const final = Object.values(live.matches).find((m) => !m.nextMatchId)!;
     final.scheduledStart = Math.floor(Date.now() / 1000) + 3 * 86400; // 3 days out: unflagged nominal stamp
-    mockSnapFetch(live);
+    installFetchStub({ snap: () => live });
     const root = await mountApp();
     for (const dim of ["time", "seed", "country"]) {
       setLens(root, dim);
@@ -476,14 +471,14 @@ describe("finalist pill + corner readout", () => {
     // SofaScore's provisional showpiece slots arrive flagged like this; display no longer depends
     // on the flag (it governs hide rules only — the trust-at-any-distance rule is state.test.ts's).
     final.scheduledPrecise = true;
-    mockSnapFetch(live);
+    installFetchStub({ snap: () => live });
     const root = await mountApp();
     expect(root.querySelector("text.arc-center")!.textContent).toMatch(/\d{2}:\d{2}$/);
   });
 
   it("keeps the centre empty while the final is undecided AND unscheduled", async () => {
     const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
-    mockSnapFetch(live);
+    installFetchStub({ snap: () => live });
     const root = await mountApp();
     for (const dim of ["time", "seed", "country"]) {
       setLens(root, dim);
@@ -700,7 +695,7 @@ describe("focus crumbs", () => {
     // the default 8-draw only reaches depth 2 (one ancestor chip); a 32-draw lets us focus a
     // depth-3 section so the trail-building slice(1,-1) must emit BOTH ancestor chips
     const deep = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 3 });
-    mockSnapFetch(deep);
+    installFetchStub({ snap: () => deep });
     const root = await mountApp();
     mockBack();
     const arc = () => root.querySelector<HTMLElement>('path.arc[data-id="r.0.0.0"]')!; // depth-3 node WITH children
@@ -1027,7 +1022,7 @@ describe("centre pill while focused", () => {
     const tbd = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 0 });
     tbd.matches["0-0"].p1 = null;
     tbd.matches["0-0"].p2 = null;
-    mockSnapFetch(tbd);
+    installFetchStub({ snap: () => tbd });
     const root = await mountApp();
     setLens(root, "seed");                                               // the all-TBD section-title fallback is Seed-only
     click(root.querySelector<HTMLElement>('.q-owner[data-id="r.0.0"]')!); // caption-only, still tappable
@@ -1059,7 +1054,7 @@ describe("centre pill while focused", () => {
     // nothing played → the focused quarter (r.0.0) has a projected-favourite occupant, not a decided
     // one. Predictions are gone from the pill: Seed falls back to the section title instead.
     const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 0 });
-    mockSnapFetch(live);
+    installFetchStub({ snap: () => live });
     const root = await mountApp();
     mockBack();
     click(qArc(root)); click(qArc(root));                            // focus the unplayed (projected) quarter
@@ -1181,5 +1176,109 @@ describe("Help modal (sourced from docs/HELP.md)", () => {
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // Escape closes Help (no second rung needed)
     expect(sheet()).toBeNull();
+  });
+});
+
+describe("load failure", () => {
+  it("shows an error with Retry when nothing can be fetched, and recovers on retry", async () => {
+    // every fetch fails → the bootstrap can get neither manifest nor snapshot
+    globalThis.fetch = vi.fn(async () => ({ ok: false, status: 500, json: async () => null } as Response)) as typeof fetch;
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.getElementById("app")!;
+    mounted.push(createApp(root));
+    await vi.waitFor(() => {
+      if (!root.querySelector(".load-error")) throw new Error("error state not rendered yet");
+    }, { timeout: 2000 });
+    expect(root.querySelector('.load-error [data-action="retry"]')).toBeTruthy();
+
+    // the network comes back → Retry re-runs the bootstrap and renders the bracket
+    installFetchStub();
+    click(root.querySelector('[data-action="retry"]')!);
+    await vi.waitFor(() => {
+      if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not rendered yet");
+    }, { timeout: 2000 });
+    expect(root.querySelector(".load-error")).toBeNull();
+  });
+});
+
+describe("live polling", () => {
+  const LIVE_INDEX: SlamIndex = {
+    ...INDEX,
+    slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]],
+  };
+  // Fake-timer base pinned to noon UTC: seeding from real-now would let the app's midnight
+  // timer land inside an advanced window when the suite runs within ~91s of 00:00 UTC, swapping
+  // the DOM mid-assertion — a daily flake window.
+  const NOON = new Date("2026-06-15T12:00:00.000Z");
+
+  it("refetches the live slam every 90s and redraws only when generatedAt changes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON });
+    let served: unknown = SNAP;
+    const snapCalls = installFetchStub({ index: () => LIVE_INDEX, snap: () => served });
+    const root = await mountApp();
+    const before = snapCalls();
+
+    // unchanged data: the tick fetches but must not rebuild the DOM
+    const marker = root.querySelector(".chart")!;
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(snapCalls()).toBeGreaterThan(before);
+    expect(root.querySelector(".chart")).toBe(marker); // same node → no innerHTML swap
+
+    // changed data: the next tick redraws
+    served = { ...SNAP, generatedAt: new Date(Date.now() + 60_000).toISOString() };
+    await vi.advanceTimersByTimeAsync(90_000);
+    await vi.waitFor(() => {
+      if (root.querySelector(".chart") === marker) throw new Error("not redrawn yet");
+    }, { timeout: 2000 });
+  });
+
+  it("does not poll while the tab is hidden", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON });
+    const snapCalls = installFetchStub({ index: () => LIVE_INDEX });
+    await mountApp();
+    Object.defineProperty(document, "hidden", { value: true, configurable: true });
+    const before = snapCalls();
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(snapCalls()).toBe(before);
+  });
+
+  it("refetches on tab return after the throttle window, not on a quick flip", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON });
+    const snapCalls = installFetchStub({ index: () => LIVE_INDEX });
+    await mountApp();
+    const before = snapCalls();
+    const flip = () => {
+      Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "hidden", { value: false, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+
+    // quick flip right after the mount-time fetch: throttled, no refetch
+    flip();
+    await vi.advanceTimersByTimeAsync(50); // drain the handler's async gate
+    expect(snapCalls()).toBe(before);
+
+    // return after half a poll interval (but before the 90s tick): the handler refetches
+    await vi.advanceTimersByTimeAsync(46_000);
+    flip();
+    await vi.waitFor(() => {
+      if (snapCalls() <= before) throw new Error("no refetch on tab return yet");
+    }, { timeout: 2000 });
+  });
+});
+
+describe("freshness chip", () => {
+  it("refetches the current snapshot when clicked", async () => {
+    const snapCalls = installFetchStub(); // fresh counter over the standard network
+    const root = await mountApp();
+    const before = snapCalls();
+    click(root.querySelector('[data-action="refresh"]')!);
+    await vi.waitFor(() => {
+      if (snapCalls() <= before) throw new Error("no refetch yet");
+    }, { timeout: 2000 });
+    await vi.waitFor(() => {
+      if (!root.querySelector('[data-action="refresh"]')) throw new Error("chip missing after redraw");
+    }, { timeout: 2000 });
   });
 });
