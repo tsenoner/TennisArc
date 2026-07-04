@@ -3,8 +3,8 @@ import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
-  renderCenterSection, renderCenterSched, renderCrumbs, renderQuarterFocusButtons,
-  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduled, startOfLocalDay, type ReadoutInfo,
+  renderCenterSection, renderCrumbs, renderQuarterFocusButtons,
+  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduledArc, startOfLocalDay, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -271,15 +271,15 @@ export function createApp(root: HTMLElement): () => void {
     // arcs only). Court is strip/detail-only; arcs stay compact. Lens-independent by design.
     // Memoised per pass: nominal rounds share one stamp per round, so a pre-tournament
     // 128 draw collapses ~127 format calls to one per unique start.
-    const schedFmt = new Map<string, string>();
-    const schedLabel = (matchId: string): string | null => {
+    const schedFmt = new Map<string, { base: string; full: string }>();
+    const schedLabel = (matchId: string): { base: string; full: string } | null => {
       const m = snap.matches[matchId];
       const info = m ? scheduledInfo(m, nowSec) : null;
       if (!info) return null;
       const key = String(info.start);
       let s = schedFmt.get(key);
       if (s === undefined) {
-        s = formatScheduled(info.start, null, { nowSec });
+        s = formatScheduledArc(info.start, nowSec);
         schedFmt.set(key, s);
       }
       return s;
@@ -362,9 +362,9 @@ export function createApp(root: HTMLElement): () => void {
     } else if (tree.occupant && !tree.projected) {
       const champ = snap.players[tree.occupant];
       centerId = champ ? renderCenterId(champ.country, surname(champ.name)) : "";
-    } else {
-      centerId = renderCenterSched(schedLabel(tree.matchId) ?? "");
     }
+    // While the final is undecided its order-of-play tag is drawn INSIDE the svg by
+    // renderSunburst (the root disc's sched label), so it scales with the chart.
     const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
 
     // Focus crumbs — the zoom's primary exit on every input: "‹ Full draw", a tappable chip

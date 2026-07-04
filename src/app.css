@@ -366,11 +366,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   font-size: 12px; font-weight: 700; pointer-events: none; }
-/* the final's order-of-play tag (undecided final): the exact treatment of the on-arc
-   .arc-sched tags — small teal text, none of the identity pill's chrome */
-.center-id.center-sched { padding: 0; border: 0; border-radius: 0; background: none;
-  -webkit-backdrop-filter: none; backdrop-filter: none; font-size: 11px; font-weight: 600; }
-.center-id.center-sched span { color: var(--teal-text); }
 /* focused-section fallback pill (no occupant known yet): quieter than a player identity */
 .center-id.center-sec span { color: var(--dim); }
 

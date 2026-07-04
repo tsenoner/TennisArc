@@ -460,7 +460,7 @@ describe("finalist pill + corner readout", () => {
     for (const dim of ["time", "seed", "country"]) {
       setLens(root, dim);
       expect(root.querySelector(".center-id.projected"), `no projected pill on ${dim}`).toBeNull();
-      const sched = root.querySelector(".center-id.center-sched");
+      const sched = root.querySelector("text.arc-center");
       expect(sched, `final sched tag on ${dim}`).not.toBeNull();
       expect(sched!.textContent, `dates the final on ${dim}`).toMatch(/\d/);
     }
@@ -478,7 +478,7 @@ describe("finalist pill + corner readout", () => {
       return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
     }) as typeof fetch;
     const root = await mountApp();
-    expect(root.querySelector(".center-id.center-sched")!.textContent).toMatch(/\d{2}:\d{2}$/);
+    expect(root.querySelector("text.arc-center")!.textContent).toMatch(/\d{2}:\d{2}$/);
   });
 
   it("keeps the centre empty while the final is undecided AND unscheduled", async () => {
@@ -493,6 +493,7 @@ describe("finalist pill + corner readout", () => {
     for (const dim of ["time", "seed", "country"]) {
       setLens(root, dim);
       expect(root.querySelector(".center-id"), `clean centre on ${dim}`).toBeNull();
+      expect(root.querySelector("text.arc-center"), `no sched tag on ${dim}`).toBeNull();
     }
   });
 

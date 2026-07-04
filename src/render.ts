@@ -40,9 +40,11 @@ export interface SunburstLabels {
    *  textPath, and Windows has no flag emoji at all (#6). Null falls back to text. */
   image?: (occupant: string) => string | null;
   /** Always-on order-of-play tag for an UPCOMING match's arc, keyed by matchId (the anchors/text
-   *  channel is occupant-keyed and only serves decided arcs). Null = no label. Mutually exclusive
-   *  with the name label by construction: names need !projected, sched needs projected. */
-  sched?: (matchId: string) => string | null;
+   *  channel is occupant-keyed and only serves decided arcs). Returns the space-adaptive pair —
+   *  `base` compact ("Mon 12:00"), `full` with the calendar date ("Mon 6 Jul 12:00") — or null
+   *  for no label. Mutually exclusive with the name label by construction: names need
+   *  !projected, sched needs projected. */
+  sched?: (matchId: string) => { base: string; full: string } | null;
 }
 
 /** Inline flag <img> from the bundled flag-icons set (identical on every platform);
@@ -283,18 +285,60 @@ export function renderSunburst(
         const label = labels.text(a.occupant);
         if (label) emitFitted(a, label);
         } // end image/text branch
-      } else if (labels?.sched && a.projected && !a.live && !a.suspended && a.y0 > 0) {
+      } else if (labels?.sched && a.projected && !a.live && !a.suspended) {
         // Upcoming match: the always-on order-of-play tag, in the same label slot a winner's surname
-        // will occupy once decided. The centre disc — root or focused hub — is the one arc with
-        // y0 === 0; its pill/strip already carries the info, and a full-circle textPath draws garbage.
-        // splitTwo splits "Tmrw 14:30" into day/time rows on two-column rings; the shortForm keeps
-        // a clean day part where even that doesn't fit: drop the trailing clock time ("1 Jul 13:40"
-        // → "1 Jul" — first-word alone would leave a meaningless bare digit), and for the time-less
-        // coarse shape fall back to the leading day word ("Tue 7 Jul" → "Tue").
-        const stxt = labels.sched(a.matchId);
-        if (stxt) {
-          const sansTime = stxt.replace(/ \d{2}:\d{2}$/, "");
-          emitFitted(a, stxt, " arc-sched", sansTime === stxt ? stxt.split(" ")[0] : sansTime);
+        // will occupy once decided. Space-adaptive richness: the full form (day + date + time) when
+        // it fits the ring's one-line budget at the preferred font, the compact base otherwise; then
+        // emitFitted's shared ladder (two lines → shrink → shortForm). The shortForm drops the clock
+        // time ("1 Jul 13:40" → "1 Jul") or falls to the day word ("Mon 12:00" → "Mon") — never a
+        // meaningless bare digit.
+        const st = labels.sched(a.matchId);
+        if (st && a.y0 === 0) {
+          // The centre disc is the one arc a curved tag can't serve (a full-circle textPath draws
+          // garbage): the unfocused ROOT — the final's slot — gets a straight horizontal label
+          // sized to the disc instead, so it scales with the chart like every other tag. A
+          // focused hub (y0===0 under zoom, id ≠ "r") keeps its centre pill and crumbs.
+          if (a.id === "r") {
+            const w = 2 * a.y1 * 0.88;                       // usable width across the disc
+            const fit = (txt: string) => Math.min(12, w / (txt.length * 0.58));
+            const tail = (txt: string): [string, string] => { // date/day line + time line
+              const i = txt.lastIndexOf(" ");
+              return [txt.slice(0, i), txt.slice(i + 1)];
+            };
+            const f1 = fit(st.full);
+            if (f1 >= 8.5) {
+              texts.push(`<text class="arc-label arc-sched arc-center" x="0" y="${(f1 * 0.35).toFixed(1)}" text-anchor="middle" font-size="${f1.toFixed(1)}">${escapeHtml(st.full)}</text>`);
+            } else {
+              let emitted = false;
+              for (const txt of [st.full, st.base]) {
+                const [l1, l2] = tail(txt);
+                const f2 = Math.min(12, w / (Math.max(l1.length, l2.length) * 0.58));
+                if (f2 >= 7.5) {
+                  texts.push(
+                    `<text class="arc-label arc-sched arc-center" text-anchor="middle" font-size="${f2.toFixed(1)}">` +
+                    `<tspan x="0" y="${(-f2 * 0.25).toFixed(1)}">${escapeHtml(l1)}</tspan>` +
+                    `<tspan x="0" y="${(f2 * 0.95).toFixed(1)}">${escapeHtml(l2)}</tspan></text>`,
+                  );
+                  emitted = true; break;
+                }
+              }
+              if (!emitted) {
+                const short = tail(st.base)[0];              // a tiny hub: day/date alone beats a smudge
+                const f3 = fit(short);
+                if (f3 >= 7.5) texts.push(`<text class="arc-label arc-sched arc-center" x="0" y="${(f3 * 0.35).toFixed(1)}" text-anchor="middle" font-size="${f3.toFixed(1)}">${escapeHtml(short)}</text>`);
+              }
+            }
+          }
+        } else if (st) {
+          const rcS = (a.y0 + a.y1) / 2, spanS = a.x1 - a.x0, radialS = a.y1 - a.y0;
+          const isRadial = radialS > rcS * spanS;            // mirrors emitFitted's orientation pick
+          const pf = isRadial ? Math.min(11, Math.max(7.5, radialS * 0.24)) : Math.min(13, Math.max(8, radialS * 0.42));
+          const cap = isRadial
+            ? (radialS - 4) / (pf * 0.6)
+            : (rcS * (spanS - 2 * Math.min(0.03, spanS * 0.12))) / (pf * 0.58);
+          const use = st.full.length <= cap ? st.full : st.base;
+          const sansTime = st.base.replace(/ \d{2}:\d{2}$/, "");
+          emitFitted(a, use, " arc-sched", sansTime === st.base ? st.base.split(" ")[0] : sansTime);
         }
       }
       const path = `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
@@ -408,6 +452,19 @@ export interface SchedFormatOpts { nowSec: number; full?: boolean; }
  *  defaults until the real order of play lands — provisional, but exactly what SofaScore
  *  itself displays. `nowSec` is the wall-clock reference. Returns plain text with the court
  *  unescaped — escape at the HTML boundary. */
+/** The arc-tag pair for one slot: `base` = the compact shape ("Mon 12:00" / "12 Jul 17:00"),
+ *  `full` = the richer shape with the calendar date for arcs with room ("Mon 6 Jul 12:00" /
+ *  "Sun 12 Jul 17:00"). Same viewer-local, distance-based rendering as formatScheduled. */
+export function formatScheduledArc(start: number, nowSec: number): { base: string; full: string } {
+  const date = new Date(start * 1000);
+  const time = SCHED_TIME.format(date);
+  const word = relativeDay(start, nowSec, false);
+  return {
+    base: `${word ?? SCHED_DATE.format(date)} ${time}`,
+    full: `${word ?? SCHED_DAY.format(date)} ${SCHED_DATE.format(date)} ${time}`,
+  };
+}
+
 export function formatScheduled(start: number, court: string | null, opts: SchedFormatOpts): string {
   const date = new Date(start * 1000);
   const word = relativeDay(start, opts.nowSec, opts.full ?? false);
@@ -633,14 +690,6 @@ export function renderCenterSection(title: string): string {
   return `<div class="center-id center-sec"><span>${escapeHtml(title)}</span></div>`;
 }
 
-/** Centre-disc order-of-play tag while the final is undecided: the champion slot is the one
- *  arc that can't carry an on-arc sched tag (a full-circle textPath draws garbage), so the
- *  final's slot is dated here instead — verbatim schedLabel text with the exact treatment of
- *  the on-arc .arc-sched tags (small teal, no pill chrome). */
-export function renderCenterSched(sched: string): string {
-  if (!sched) return "";
-  return `<div class="center-id center-sched"><span>${escapeHtml(sched)}</span></div>`;
-}
 
 function insightScore(ins: MatchInsight): string {
   if (!ins.score || !ins.score.length)
