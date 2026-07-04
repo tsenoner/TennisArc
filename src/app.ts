@@ -8,7 +8,6 @@ import {
 } from "./render";
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
-import { createStore, type Store } from "./store";
 import { fetchSnapshot, fetchIndex } from "./api";
 import { pickDefaultSlam, availableYears, slamsForYear } from "./slams";
 import type { Player, SlamIndex, Snapshot, Tour } from "./model";
@@ -67,7 +66,6 @@ export function createApp(root: HTMLElement): () => void {
     colorDim: initial.view ?? "time", seedSort: initial.sub ?? "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
     openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined, helpOpen: false,
   };
-  let store: Store | undefined;
 
   // ---- Help overlay ----
   // Help is a TRUE global overlay, so it lives in its own host node OUTSIDE root.innerHTML.
@@ -405,14 +403,9 @@ export function createApp(root: HTMLElement): () => void {
 
   const load = async (tour: Tour, year: number, slam: string) => {
     const k = snapKey(tour, year, slam);
-    if (store && !state.snapshots[k]) {
-      const cached = await store.getSnapshot(tour, year, slam);
-      if (cached) { state.snapshots[k] = cached; if (snapKey(state.tour, state.year, state.slam) === k) draw(); }
-    }
     const fresh = await fetchSnapshot(tour, year, slam);
     if (fresh) {
       state.snapshots[k] = fresh;
-      void store?.setSnapshot(tour, year, slam, fresh);
       if (snapKey(state.tour, state.year, state.slam) === k) draw();
     }
   };
@@ -840,9 +833,7 @@ export function createApp(root: HTMLElement): () => void {
 
   draw(); // initial loading state
   void (async () => {
-    store = await createStore();
-    state.index = (await fetchIndex()) ?? (await store.getIndex()) ?? undefined;
-    if (state.index) void store.setIndex(state.index);
+    state.index = (await fetchIndex()) ?? undefined;
     if (state.index) {
       // Resolve the URL's candidate view against the manifest (stale/partial/"/" → default),
       // then canonicalize the URL in place so it honestly names the resolved view and a

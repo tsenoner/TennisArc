@@ -23,9 +23,6 @@ importers:
       flag-icons:
         specifier: ^7.5.0
         version: 7.5.0
-      idb-keyval:
-        specifier: ^6.2.5
-        version: 6.2.5
       marked:
         specifier: ^18.0.5
         version: 18.0.5
@@ -1764,9 +1761,6 @@ packages:
 
   ico-endec@0.1.6:
     resolution: {integrity: sha512-ZdLU38ZoED3g1j3iEyzcQj+wAkY2xfWNkymszfJPoxucIUhK7NayQ+/C4Kv0nDFMIsbtbEHldv3V8PU494/ueQ==}
-
-  idb-keyval@6.2.5:
-    resolution: {integrity: sha512-eKQkTnS0relYsSOYomx8ozIbmdsQCKUdhyuIaQ2DZgKuaxtyQQMkyD/wlnQN32pO3yutN1b1L8uqwcDKaJd7/Q==}
 
   idb@7.1.1:
     resolution: {integrity: sha512-gchesWBzyvGHRO9W8tzUWFDycow5gwjvFKfyV9FF32Y7F50yZMp7mP+T2mJIWFx49zicqyC4uefHM17o6xKIVQ==}
@@ -4396,8 +4390,6 @@ snapshots:
       - '@noble/hashes'
 
   ico-endec@0.1.6: {}
-
-  idb-keyval@6.2.5: {}
 
   idb@7.1.1: {}
 

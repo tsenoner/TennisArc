@@ -3,20 +3,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
 import type { SlamIndex } from "./model";
 
-// In-memory store so the bootstrap never touches IndexedDB (absent in jsdom).
-vi.mock("./store", () => ({
-  createStore: async () => {
-    let index: SlamIndex | null = null;
-    const snaps = new Map<string, unknown>();
-    return {
-      getSnapshot: async (t: string, y: number, s: string) => snaps.get(`${t}:${y}:${s}`) ?? null,
-      setSnapshot: async (t: string, y: number, s: string, v: unknown) => { snaps.set(`${t}:${y}:${s}`, v); },
-      getIndex: async () => index,
-      setIndex: async (i: SlamIndex) => { index = i; },
-    };
-  },
-}));
-
 import { createApp } from "./app";
 
 const SNAP = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3 });
