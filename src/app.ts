@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -289,7 +289,7 @@ export function createApp(root: HTMLElement): () => void {
     const schedFmt = new Map<number, ArcSched>();
     const schedLabel = (matchId: string): ArcSched | null => {
       const m = snap.matches[matchId];
-      const info = m ? scheduledInfo(m, nowSec) : null;
+      const info = m ? scheduledInfo(m, nowSec, snap.tournament.slam) : null;
       if (!info) return null;
       let s = schedFmt.get(info.start);
       if (s === undefined) {
@@ -896,9 +896,10 @@ export function createApp(root: HTMLElement): () => void {
   // Scheduled-time staleness policy: all scheduled display runs on wall-clock "now" captured per
   // draw(), so a long-lived tab must redraw when (a) it becomes visible again — the overnight-open
   // tab — and (b) a day boundary passes: the viewer's LOCAL midnight rolls "Today"/"Tmrw" over,
-  // while UTC midnight flips the coarse tier's hide gate and venue dates (scheduledInfo /
-  // SCHED_DATE_UTC) — the timer ticks at whichever comes first, and draws even while hidden (one
-  // rebuild a day is free, and it keeps the tab honest the moment it is next seen). That standing
+  // while the VENUE's midnight flips the nominal tier's hide gate (scheduledInfo; UTC midnight is
+  // its fallback for an unknown slam) — the timer ticks at whichever comes first, and draws even
+  // while hidden (one rebuild a day is free, and it keeps the tab honest the moment it is next
+  // seen). That standing
   // freshness is what lets the visibility redraw be debounced: a quick tab flip must not wipe
   // scroll/selection/focus over a display that only moves in minutes. draw() self-guards while no
   // snapshot is loaded.
@@ -941,7 +942,8 @@ export function createApp(root: HTMLElement): () => void {
     const now = new Date();
     const msToTick = Math.min(
       startOfLocalDay(now, 1) - now.getTime(),                                     // next local midnight
-      (Math.floor(now.getTime() / 86_400_000) + 1) * 86_400_000 - now.getTime(),   // next UTC midnight
+      msToVenueMidnight(now.getTime(), state.slam)                                 // next venue midnight (hide-gate flip)
+        ?? (Math.floor(now.getTime() / 86_400_000) + 1) * 86_400_000 - now.getTime(), // unknown slam: UTC fallback
     );
     midnightTimer = window.setTimeout(() => { draw(); armMidnight(); }, msToTick + 1000);
   };

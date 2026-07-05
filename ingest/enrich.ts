@@ -140,11 +140,16 @@ export function enrichMatch(
 
   // Precise order-of-play tier: the per-event startTimestamp is the published per-match slot (and
   // the freshest value under intra-day reshuffles) — it overrides normalize's coarse cuptrees stamp
-  // and flags the time precise. Every other status passes the normalize-set fields through
+  // and flags the time precise. An event that merely ECHOES normalize's nominal stamp carries no
+  // new information and must NOT be promoted: scheduledInfo trusts the flag at any distance, so an
+  // echoed placeholder would silently adopt the precise >6h-stale hide rule. (A real slot that
+  // happens to equal the nominal round-day time stays coarse — harmless: display is uniform and
+  // only the hide rule differs.) Every other status passes the normalize-set fields through
   // untouched; the next refresh's normalize drops them once the match is no longer upcoming.
   const scheduled = status === "scheduled";
   const scheduledStart = scheduled ? (ev.startTimestamp ?? m.scheduledStart) : m.scheduledStart;
-  const scheduledPrecise = scheduled && ev.startTimestamp != null ? true : m.scheduledPrecise;
+  const scheduledPrecise =
+    scheduled && ev.startTimestamp != null && ev.startTimestamp !== m.scheduledStart ? true : m.scheduledPrecise;
   // `||` not `??`: a blank venue name ("") should fall through to the stadium name, not stand as an
   // empty court that renders no court at all (formatScheduled drops a falsy court).
   const scheduledCourt = scheduled ? (ev.venue?.name || ev.venue?.stadium?.name) : m.scheduledCourt;

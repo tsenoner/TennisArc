@@ -566,7 +566,7 @@ describe("suspended-match handling", () => {
   });
 });
 
-import { scheduledInfo } from "./state";
+import { scheduledInfo, msToVenueMidnight } from "./state";
 import type { Match as SchedMatch } from "./model";
 
 const schedMatch = (o: Partial<SchedMatch> = {}): SchedMatch => ({
@@ -610,10 +610,34 @@ describe("scheduledInfo", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 7 * 3600, scheduledPrecise: true }), NOW)).toBeNull();
   });
 
-  it("coarse slot survives hours past its stamp but drops once its UTC day is over", () => {
+  it("coarse slot survives hours past its stamp but drops once its day is over (no slam: UTC fallback)", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 11 * 3600 }), NOW))     // 01:00 today UTC — day not over
       .toEqual({ start: NOW - 11 * 3600, court: null });
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 13 * 3600 }), NOW)).toBeNull(); // 23:00 yesterday UTC
+  });
+
+  it("nominal hide gate runs on the VENUE day when the slam is known — far-west venue (US Open)", () => {
+    // Nominal 11:00 New York = 15:00 UTC. The stamp's UTC day ends at 20:00 NY the same evening —
+    // the venue rule must keep the tag through the venue evening and drop it at venue midnight.
+    const start = Date.UTC(2026, 8, 1, 15) / 1000;               // 1 Sep 2026 11:00 EDT
+    const utcEve = Date.UTC(2026, 8, 2, 1) / 1000;               // 21:00 EDT 1 Sep — UTC day already over
+    const pastMidnight = Date.UTC(2026, 8, 2, 5) / 1000;         // 01:00 EDT 2 Sep — venue day over
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), utcEve, "us-open"))
+      .toEqual({ start, court: null });
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), utcEve)).toBeNull(); // UTC proxy hides early
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), pastMidnight, "us-open")).toBeNull();
+  });
+
+  it("nominal hide gate runs on the VENUE day when the slam is known — far-east venue (AO)", () => {
+    // Nominal 11:00 Melbourne (AEDT, UTC+11) = 00:00 UTC. The venue day ends at 13:00 UTC —
+    // the UTC proxy would keep the tag lingering ~11h into the next venue morning.
+    const start = Date.UTC(2027, 0, 20, 0) / 1000;               // 20 Jan 2027 11:00 AEDT
+    const nextVenueMorning = Date.UTC(2027, 0, 20, 14) / 1000;   // 01:00 AEDT 21 Jan — venue day over
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), nextVenueMorning, "australian-open")).toBeNull();
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), nextVenueMorning)) // UTC proxy lingers
+      .toEqual({ start, court: null });
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), Date.UTC(2027, 0, 20, 12) / 1000, "australian-open"))
+      .toEqual({ start, court: null });                          // 23:00 AEDT — venue day not over yet
   });
 
   it("allowlist: no other status leaks a time, even with stray fields", () => {
@@ -624,6 +648,12 @@ describe("scheduledInfo", () => {
 
   it("returns null when the match carries no scheduledStart", () => {
     expect(scheduledInfo(schedMatch(), NOW)).toBeNull();
+  });
+
+  it("msToVenueMidnight ticks at the venue's next midnight; null for an unknown slam", () => {
+    const nowMs = Date.UTC(2026, 8, 1, 15);                       // 11:00 EDT 1 Sep
+    expect(msToVenueMidnight(nowMs, "us-open")).toBe(Date.UTC(2026, 8, 2, 4) - nowMs); // 00:00 EDT = 04:00 UTC
+    expect(msToVenueMidnight(nowMs, "not-a-slam")).toBeNull();
   });
 });
 

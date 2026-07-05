@@ -85,7 +85,7 @@ export interface Match {
    *  For the scheduled matches whose per-event detail is fetched, enrichMatch overrides it with
    *  the published per-event startTimestamp and sets `scheduledPrecise`. Display is uniform —
    *  every tier shows a date + provisional time; the flag governs HIDE RULES only (a precise slot
-   *  hides >6h past, a nominal one survives until its UTC day ends — see `scheduledInfo`).
+   *  hides >6h past, a nominal one survives until its VENUE day ends — see `scheduledInfo`).
    *  `scheduledCourt` is per-event too, so it exists only where detail was fetched. */
   scheduledStart?: number;
   scheduledPrecise?: boolean;
