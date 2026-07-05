@@ -503,35 +503,72 @@ export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limi
     .slice(0, limit);
 }
 
-export interface ScheduledInfo { start: number; court: string | null; precise: boolean; }
+export interface ScheduledInfo { start: number; court: string | null; }
 
-// Two-tier order-of-play display. PRECISE = the per-event startTimestamp override (scheduledPrecise,
-// set at ingest) within a ~36h backstop — only that tier shows a clock time; an event-sourced stamp
-// for a round 2+ days out can itself still be a nominal placeholder. Everything else upcoming is
-// COARSE: a date-only nominal round-day stamp. Hide rules differ: a precise slot >6h past is stale
-// (the match surely started); a coarse slot survives until its UTC calendar day is fully over, so a
-// rain-slipped round keeps its date while the feed catches up. The UTC day is a PROXY for the venue
-// day: exact for the nominal ~11:00-local stamps this tier is built for (they land mid-UTC-day at
-// every slam), but a real evening slot that leaks into the coarse tier can cross UTC midnight, so
-// the flip can run hours early (far-west venues) or late (far-east). render.ts's SCHED_DATE_UTC
-// formatter encodes the same UTC≈venue-day assumption — change one, change both (the honest fix for
-// either is a venue time zone per slam threaded through both).
-const SCHED_PRECISE_AHEAD_SEC = 36 * 3600;
+// The precise/nominal split governs HIDE RULES ONLY — display is uniform (render.ts
+// formatScheduled shows date + provisional time for every tier, viewer-local). PRECISE = the
+// per-event startTimestamp override (scheduledPrecise, set at ingest): a real published slot,
+// trusted at any distance — SofaScore publishes provisional showpiece slots (semis/final) a week
+// out, and nominal placeholders are never flagged (enrich.ts refuses echoes of the nominal
+// stamp). A precise slot >6h past is stale (the match surely started) and hides. A nominal
+// round-day stamp instead survives until its VENUE calendar day (SLAM_TZ) is fully over — a
+// rain-slipped round keeps its tag while the feed catches up; an unknown slam falls back to the
+// old UTC-day proxy.
 const SCHED_STALE_BEHIND_SEC = 6 * 3600;
+
+/** Venue time zone per slam — the nominal tier's hide rule runs on the VENUE calendar day.
+ *  Display stays viewer-local by design (see render.ts formatScheduled): a converted instant is
+ *  always correct; only "is this round's day over" is a venue question. */
+const SLAM_TZ: Record<string, string> = {
+  "australian-open": "Australia/Melbourne",
+  "roland-garros": "Europe/Paris",
+  "wimbledon": "Europe/London",
+  "us-open": "America/New_York",
+};
+
+/** `zone`'s UTC offset (seconds) at epoch-seconds `sec`, via Intl — DST resolves per date. */
+function zoneOffsetSec(sec: number, zone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone, hourCycle: "h23",
+    year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric",
+  }).formatToParts(new Date(sec * 1000));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+  return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second")) / 1000 - sec;
+}
+
+/** Epoch seconds of the venue-local midnight FOLLOWING `sec` — when `sec`'s venue day ends. The
+ *  second offset query corrects for a DST transition between `sec` and that midnight (none falls
+ *  inside a slam fortnight at the four venues today, but the maths shouldn't rely on it). */
+function venueDayEnd(sec: number, zone: string): number {
+  const off = zoneOffsetSec(sec, zone);
+  const nextLocalMidnight = (Math.floor((sec + off) / 86400) + 1) * 86400; // venue wall-clock as pseudo-UTC
+  return nextLocalMidnight - zoneOffsetSec(nextLocalMidnight - off, zone);
+}
+
+/** Ms from `nowMs` to the venue's next midnight — the nominal hide-gate flip app.ts's day-boundary
+ *  redraw timer must tick on — or null when the slam has no zone entry (UTC fallback applies). */
+export function msToVenueMidnight(nowMs: number, slam: string): number | null {
+  const zone = SLAM_TZ[slam];
+  return zone ? venueDayEnd(Math.floor(nowMs / 1000), zone) * 1000 - nowMs : null;
+}
 
 /** The order-of-play info to display for a not-yet-played match, or null when there is nothing
  *  trustworthy to show. `nowSec` is the WALL-CLOCK reference (Unix seconds) — never derive it from
- *  the snapshot's generatedAt, which can lag hours when the refresh wedges. */
-export function scheduledInfo(m: Match, nowSec: number): ScheduledInfo | null {
+ *  the snapshot's generatedAt, which can lag hours when the refresh wedges. `slam` (the snapshot's
+ *  slam key) selects the venue zone for the nominal tier's day-end; omitted/unknown → UTC proxy. */
+export function scheduledInfo(m: Match, nowSec: number, slam?: string): ScheduledInfo | null {
   if (!isUpcoming(m.status) || m.scheduledStart == null) return null; // allowlist: walkover/retired never leak a time
   const dt = m.scheduledStart - nowSec;
-  const precise = m.scheduledPrecise === true && dt <= SCHED_PRECISE_AHEAD_SEC;
+  const precise = m.scheduledPrecise === true;
   if (precise) {
     if (dt < -SCHED_STALE_BEHIND_SEC) return null;
-  } else if (nowSec >= (Math.floor(m.scheduledStart / 86400) + 1) * 86400) {
-    return null; // coarse: its UTC day is over
+  } else {
+    const zone = slam ? SLAM_TZ[slam] : undefined;
+    const dayEnd = zone ? venueDayEnd(m.scheduledStart, zone)
+      : (Math.floor(m.scheduledStart / 86400) + 1) * 86400;
+    if (nowSec >= dayEnd) return null; // nominal: its venue day is over
   }
-  return { start: m.scheduledStart, court: m.scheduledCourt ?? null, precise };
+  return { start: m.scheduledStart, court: m.scheduledCourt ?? null };
 }
 
 export interface InsightSide {
@@ -614,6 +651,6 @@ export function matchInsight(
     durationSec: m.durationSec, durationProvisional: m.durationProvisional,
     p1, p2, badges, upset, eloLine,
     aces: m.stats?.aces ?? null, doubleFaults: m.stats?.doubleFaults ?? null,
-    scheduled: scheduledInfo(m, nowSec),
+    scheduled: scheduledInfo(m, nowSec, s.tournament.slam),
   };
 }

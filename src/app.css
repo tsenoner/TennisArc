@@ -106,9 +106,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    deep → pale (left = 17–32, right = top 1–4) to read with the "unseeded → top seed" caption. */
 .legend-grad.seed { background: linear-gradient(90deg,
   #352170 0 25%, #6d3fd4 25% 50%, #a36bff 50% 75%, #e2cdff 75% 100%); }
-/* "not played yet" key — the NEUTRAL pending swatch from color.ts (dark #3a4350 / light #cfcbc1) */
+/* "not played yet" key — the NEUTRAL pending swatch from color.ts (dark #3a4350 / light #cfcbc1),
+   dashed like .arc.projected so the key points at the dashed scaffold arcs specifically: the same
+   NEUTRAL fill also paints DECIDED unseeded / unknown-country arcs, which render solid */
 .legend-key { display: inline-flex; align-items: center; gap: 5px; }
-.legend-pending { width: 11px; height: 8px; border-radius: 2px; border: 1px solid var(--line); background: #3a4350; }
+.legend-pending { width: 11px; height: 8px; border-radius: 2px; border: 1px dashed var(--dim); background: #3a4350; }
 :root[data-theme="light"] .legend-pending { background: #cfcbc1; }
 
 /* match context strip — slim, frosted, in-flow at the top of the wheel column on EVERY
@@ -381,12 +383,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   font-size: 12px; font-weight: 700; pointer-events: none; }
-/* a projected champion is a guess, not a result: quiet it down (smaller, dim, no pill chrome,
-   italic) so the centre anchors the view without claiming a winner. A decided champion keeps the
-   full-weight pill above. */
-.center-id.projected { font-size: 10.5px; font-weight: 600; opacity: .6;
-  border-color: transparent; background: color-mix(in srgb, var(--bg) 50%, transparent); }
-.center-id.projected span { font-style: italic; }
 /* focused-section fallback pill (no occupant known yet): quieter than a player identity */
 .center-id.center-sec span { color: var(--dim); }
 

@@ -1,10 +1,10 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
   renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
   renderCenterSection, renderCrumbs, renderQuarterFocusButtons,
-  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduled, startOfLocalDay, type ReadoutInfo,
+  renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduledArc, startOfLocalDay, type ArcSched, type ReadoutInfo,
 } from "./render";
 import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
@@ -284,18 +284,17 @@ export function createApp(root: HTMLElement): () => void {
       : undefined;
     // Always-on order-of-play tags for upcoming arcs (matchId-keyed — anchors/text serve decided
     // arcs only). Court is strip/detail-only; arcs stay compact. Lens-independent by design.
-    // Memoised per pass: coarse rounds share one nominal stamp per round, so a pre-tournament
-    // 128 draw collapses ~127 format calls to one per unique (start, precise) pair.
-    const schedFmt = new Map<string, string>();
-    const schedLabel = (matchId: string): string | null => {
+    // Memoised per pass: nominal rounds share one stamp per round, so a pre-tournament
+    // 128 draw collapses ~127 format calls to one per unique start.
+    const schedFmt = new Map<number, ArcSched>();
+    const schedLabel = (matchId: string): ArcSched | null => {
       const m = snap.matches[matchId];
-      const info = m ? scheduledInfo(m, nowSec) : null;
+      const info = m ? scheduledInfo(m, nowSec, snap.tournament.slam) : null;
       if (!info) return null;
-      const key = `${info.start}:${info.precise}`;
-      let s = schedFmt.get(key);
+      let s = schedFmt.get(info.start);
       if (s === undefined) {
-        s = formatScheduled(info.start, null, { nowSec, precise: info.precise });
-        schedFmt.set(key, s);
+        s = formatScheduledArc(info.start, nowSec);
+        schedFmt.set(info.start, s);
       }
       return s;
     };
@@ -361,22 +360,25 @@ export function createApp(root: HTMLElement): () => void {
     const floatIdle = !pinned;
     roCurrent = defaultId; roIdle = floatIdle; // the markup below renders the float readout for defaultId
 
-    // The centre pill: a DECIDED result is a fact, shown on every lens — a finished slam's champion
-    // (flag + surname) anchors the Time and Country wheels too, not just Seed. A PROJECTION is a
-    // guess, so it stays on the Seed lens only (quiet + italic) and the Time/Country centres stay
-    // clean while a slam is live. The same split governs a focused section: a decided occupant
-    // shows everywhere; a projected one — or the all-TBD section-title fallback — is Seed-only.
+    // The centre pill shows FACTS only: a DECIDED result (flag + surname) anchors every lens —
+    // a projection is a guess and never appears here (removed 2026-07; it used to show on Seed).
+    // While the final is undecided the centre instead names the final's order-of-play slot (the
+    // champion disc is the one arc that can't carry an on-arc sched tag — see renderCenterSched).
+    // A focused section follows the same rule: decided occupant everywhere; otherwise Seed falls
+    // back to the section title and Time/Country stay clean.
     const onSeed = state.colorDim === "seed";
     let centerId = "";
     if (state.focusId) {
       const fp = focusOcc ? snap.players[focusOcc] : undefined;
       const projected = focusArc?.projected ?? false;
-      if (fp && (!projected || onSeed)) centerId = renderCenterId(fp.country, surname(fp.name), projected);
-      else if (!fp && onSeed) centerId = renderCenterSection(sectionTitle(snap, tree, state.focusId));
-    } else if (tree.occupant && (!tree.projected || onSeed)) {
+      if (fp && !projected) centerId = renderCenterId(fp.country, surname(fp.name));
+      else if (onSeed) centerId = renderCenterSection(sectionTitle(snap, tree, state.focusId));
+    } else if (tree.occupant && !tree.projected) {
       const champ = snap.players[tree.occupant];
-      centerId = champ ? renderCenterId(champ.country, surname(champ.name), tree.projected) : "";
+      centerId = champ ? renderCenterId(champ.country, surname(champ.name)) : "";
     }
+    // While the final is undecided its order-of-play tag is drawn INSIDE the svg by
+    // renderSunburst (the root disc's sched label), so it scales with the chart.
     const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
 
     // Focus crumbs — the zoom's primary exit on every input: "‹ Full draw", a tappable chip
@@ -894,9 +896,10 @@ export function createApp(root: HTMLElement): () => void {
   // Scheduled-time staleness policy: all scheduled display runs on wall-clock "now" captured per
   // draw(), so a long-lived tab must redraw when (a) it becomes visible again — the overnight-open
   // tab — and (b) a day boundary passes: the viewer's LOCAL midnight rolls "Today"/"Tmrw" over,
-  // while UTC midnight flips the coarse tier's hide gate and venue dates (scheduledInfo /
-  // SCHED_DATE_UTC) — the timer ticks at whichever comes first, and draws even while hidden (one
-  // rebuild a day is free, and it keeps the tab honest the moment it is next seen). That standing
+  // while the VENUE's midnight flips the nominal tier's hide gate (scheduledInfo; UTC midnight is
+  // its fallback for an unknown slam) — the timer ticks at whichever comes first, and draws even
+  // while hidden (one rebuild a day is free, and it keeps the tab honest the moment it is next
+  // seen). That standing
   // freshness is what lets the visibility redraw be debounced: a quick tab flip must not wipe
   // scroll/selection/focus over a display that only moves in minutes. draw() self-guards while no
   // snapshot is loaded.
@@ -939,7 +942,8 @@ export function createApp(root: HTMLElement): () => void {
     const now = new Date();
     const msToTick = Math.min(
       startOfLocalDay(now, 1) - now.getTime(),                                     // next local midnight
-      (Math.floor(now.getTime() / 86_400_000) + 1) * 86_400_000 - now.getTime(),   // next UTC midnight
+      msToVenueMidnight(now.getTime(), state.slam)                                 // next venue midnight (hide-gate flip)
+        ?? (Math.floor(now.getTime() / 86_400_000) + 1) * 86_400_000 - now.getTime(), // unknown slam: UTC fallback
     );
     midnightTimer = window.setTimeout(() => { draw(); armMidnight(); }, msToTick + 1000);
   };

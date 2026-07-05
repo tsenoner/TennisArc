@@ -566,7 +566,7 @@ describe("suspended-match handling", () => {
   });
 });
 
-import { scheduledInfo } from "./state";
+import { scheduledInfo, msToVenueMidnight } from "./state";
 import type { Match as SchedMatch } from "./model";
 
 const schedMatch = (o: Partial<SchedMatch> = {}): SchedMatch => ({
@@ -579,38 +579,65 @@ describe("scheduledInfo", () => {
   const DAY = 86400;
   const NOW = 20_000 * DAY + 12 * 3600; // noon UTC on an arbitrary day — pure arithmetic either way
 
-  it("precise: flagged + within 36h → start, court, precise:true", () => {
+  it("precise: flagged slot within 36h → start + court", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 3600, scheduledPrecise: true, scheduledCourt: "Court 2" }), NOW))
-      .toEqual({ start: NOW + 3600, court: "Court 2", precise: true });
+      .toEqual({ start: NOW + 3600, court: "Court 2" });
   });
 
-  it("coarse: an UNFLAGGED nominal stamp within 36h is NOT precise", () => {
+  it("nominal: an UNFLAGGED stamp within 36h still surfaces (hide rules differ, display does not)", () => {
     // The evening-before case: a nominal 11:00 round-day stamp sits inside any window — precision
     // must come from the data source (the per-event override), never clock distance alone.
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 20 * 3600 }), NOW))
-      .toEqual({ start: NOW + 20 * 3600, court: null, precise: false });
+      .toEqual({ start: NOW + 20 * 3600, court: null });
   });
 
-  it("coarse: a flagged stamp beyond 36h degrades to coarse (backstop)", () => {
-    expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 48 * 3600, scheduledPrecise: true }), NOW))
-      .toEqual({ start: NOW + 48 * 3600, court: null, precise: false });
+  it("precise: a flagged stamp surfaces at ANY distance (provisional showpiece slots)", () => {
+    // SofaScore publishes real provisional times for semis/finals a week out (scheduledPrecise
+    // comes from the data source, not clock distance) — display them instead of degrading to a
+    // date-only coarse tag. Nominal placeholders stay coarse because they are never flagged.
+    expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 8 * DAY, scheduledPrecise: true }), NOW))
+      .toEqual({ start: NOW + 8 * DAY, court: null });
   });
 
   it("far-future placeholder rounds are shown (coarse), not suppressed", () => {
     expect(scheduledInfo(schedMatch({ status: "notstarted", p1: null, p2: null, scheduledStart: NOW + 5 * DAY }), NOW))
-      .toEqual({ start: NOW + 5 * DAY, court: null, precise: false });
+      .toEqual({ start: NOW + 5 * DAY, court: null });
   });
 
   it("precise slot: just-overdue still shows; >6h past hides", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 1800, scheduledPrecise: true }), NOW))
-      .toEqual({ start: NOW - 1800, court: null, precise: true });
+      .toEqual({ start: NOW - 1800, court: null });
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 7 * 3600, scheduledPrecise: true }), NOW)).toBeNull();
   });
 
-  it("coarse slot survives hours past its stamp but drops once its UTC day is over", () => {
+  it("coarse slot survives hours past its stamp but drops once its day is over (no slam: UTC fallback)", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 11 * 3600 }), NOW))     // 01:00 today UTC — day not over
-      .toEqual({ start: NOW - 11 * 3600, court: null, precise: false });
+      .toEqual({ start: NOW - 11 * 3600, court: null });
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW - 13 * 3600 }), NOW)).toBeNull(); // 23:00 yesterday UTC
+  });
+
+  it("nominal hide gate runs on the VENUE day when the slam is known — far-west venue (US Open)", () => {
+    // Nominal 11:00 New York = 15:00 UTC. The stamp's UTC day ends at 20:00 NY the same evening —
+    // the venue rule must keep the tag through the venue evening and drop it at venue midnight.
+    const start = Date.UTC(2026, 8, 1, 15) / 1000;               // 1 Sep 2026 11:00 EDT
+    const utcEve = Date.UTC(2026, 8, 2, 1) / 1000;               // 21:00 EDT 1 Sep — UTC day already over
+    const pastMidnight = Date.UTC(2026, 8, 2, 5) / 1000;         // 01:00 EDT 2 Sep — venue day over
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), utcEve, "us-open"))
+      .toEqual({ start, court: null });
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), utcEve)).toBeNull(); // UTC proxy hides early
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), pastMidnight, "us-open")).toBeNull();
+  });
+
+  it("nominal hide gate runs on the VENUE day when the slam is known — far-east venue (AO)", () => {
+    // Nominal 11:00 Melbourne (AEDT, UTC+11) = 00:00 UTC. The venue day ends at 13:00 UTC —
+    // the UTC proxy would keep the tag lingering ~11h into the next venue morning.
+    const start = Date.UTC(2027, 0, 20, 0) / 1000;               // 20 Jan 2027 11:00 AEDT
+    const nextVenueMorning = Date.UTC(2027, 0, 20, 14) / 1000;   // 01:00 AEDT 21 Jan — venue day over
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), nextVenueMorning, "australian-open")).toBeNull();
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), nextVenueMorning)) // UTC proxy lingers
+      .toEqual({ start, court: null });
+    expect(scheduledInfo(schedMatch({ scheduledStart: start }), Date.UTC(2027, 0, 20, 12) / 1000, "australian-open"))
+      .toEqual({ start, court: null });                          // 23:00 AEDT — venue day not over yet
   });
 
   it("allowlist: no other status leaks a time, even with stray fields", () => {
@@ -621,6 +648,12 @@ describe("scheduledInfo", () => {
 
   it("returns null when the match carries no scheduledStart", () => {
     expect(scheduledInfo(schedMatch(), NOW)).toBeNull();
+  });
+
+  it("msToVenueMidnight ticks at the venue's next midnight; null for an unknown slam", () => {
+    const nowMs = Date.UTC(2026, 8, 1, 15);                       // 11:00 EDT 1 Sep
+    expect(msToVenueMidnight(nowMs, "us-open")).toBe(Date.UTC(2026, 8, 2, 4) - nowMs); // 00:00 EDT = 04:00 UTC
+    expect(msToVenueMidnight(nowMs, "not-a-slam")).toBeNull();
   });
 });
 
@@ -633,13 +666,13 @@ describe("matchInsight — scheduled", () => {
     s.matches["0-0"] = { ...s.matches["0-0"], status: "scheduled", winner: null,
       scheduledStart: NOW + 2 * 3600, scheduledPrecise: true, scheduledCourt: "Centre Court" };
     expect(insight3(s, "0-0", toc3(s), NOW)!.scheduled)
-      .toEqual({ start: NOW + 2 * 3600, court: "Centre Court", precise: true });
+      .toEqual({ start: NOW + 2 * 3600, court: "Centre Court" });
   });
 
   it("surfaces a far-future placeholder date as coarse", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
     s.matches["0-0"] = { ...s.matches["0-0"], status: "scheduled", winner: null, scheduledStart: NOW + 5 * 86400 };
     expect(insight3(s, "0-0", toc3(s), NOW)!.scheduled)
-      .toEqual({ start: NOW + 5 * 86400, court: null, precise: false });
+      .toEqual({ start: NOW + 5 * 86400, court: null });
   });
 });

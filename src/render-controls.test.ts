@@ -131,10 +131,13 @@ describe("renderLegend", () => {
     expect(renderLegend("seed", "seed")).toContain("unseeded → top seed");
     expect(renderLegend("seed", "elo")).toContain("weaker → stronger (ELO)");
   });
-  it("adds a 'not played yet' key to the time legend only when pending arcs exist", () => {
+  it("adds a 'not played yet' key to every lens's legend when pending arcs exist", () => {
     expect(renderLegend("time", "seed", true)).toMatch(/not played/i);
     expect(renderLegend("time", "seed", false)).not.toMatch(/not played/i);
-    expect(renderLegend("seed", "seed", true)).not.toMatch(/not played/i); // not the seed lens
+    // projections carry no hue on any lens now, so the scaffold key travels with them
+    expect(renderLegend("seed", "seed", true)).toMatch(/not played/i);
+    expect(renderLegend("country", "seed", true)).toMatch(/not played/i);
+    expect(renderLegend("country", "seed", false)).not.toMatch(/not played/i);
   });
 });
 

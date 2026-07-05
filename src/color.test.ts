@@ -174,10 +174,10 @@ describe("colorScale time lens — pending vs played", () => {
     expect(scale(arc("p0", s.rounds.length, true, false))).toMatch(PENDING);
   });
 
-  it("seed and country lenses expose no `pending` predicate (projections keep their hue)", () => {
+  it("every lens exposes the `pending` predicate (projections are scaffold everywhere)", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
-    expect(colorScale("seed", s).pending).toBeUndefined();
-    expect(colorScale("country", s).pending).toBeUndefined();
+    expect(colorScale("seed", s).pending).toBeTypeOf("function");
+    expect(colorScale("country", s).pending).toBeTypeOf("function");
   });
 });
 
@@ -191,5 +191,34 @@ describe("colorScale country lens", () => {
     const none = colorScale("country", s);
     expect(sel(arc(ids[0]))).not.toBe(sel(arc(ids[1]))); // ESP highlighted, FRA muted
     expect(none(arc(ids[0]))).toBe(none(arc(ids[1])));   // no selection → both muted (same colour)
+  });
+});
+
+describe("no projection wash (seed / country lenses)", () => {
+  // every fill is hex since the seed bands landed, so "neutral" is asserted by identity with an
+  // unknown-occupant arc's fill (always NEUTRAL) rather than by a #-vs-rgb prefix split
+  it("seed lens: a projected arc is neutral — the favourite's band never forward-fills", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    const scale = colorScale("seed", s);
+    const neutral = scale(arc(null));
+    expect(scale(arc("p0", s.rounds.length, false)), "decided band").toBe(seedTierColor(1)); // p0 = seed 1
+    expect(scale(arc("p0", 1, true)), "projected neutral").toBe(neutral);
+    expect(scale(arc("p0", 1, true, true)), "live keeps its band").toBe(seedTierColor(1));
+    expect(scale.pending!(arc("p0", 1, true)), "pending flags projection").toBe(true);
+    expect(scale.pending!(arc("p0", s.rounds.length, false)), "decided not pending").toBe(false);
+    // the ELO sub-mode shares the same pending rule (synthetic players carry no ELO, so no band here)
+    const elo = colorScale("seed", s, undefined, "elo");
+    expect(elo(arc("p0", 1, true)), "projected neutral (elo)").toBe(neutral);
+    expect(elo.pending!(arc("p0", 1, true)), "pending flags projection (elo)").toBe(true);
+  });
+
+  it("country lens: a projected arc never lights for the selected nation", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1, completedRounds: 0 });
+    const nat = s.players["p0"].country;
+    const scale = colorScale("country", s, nat);
+    const lit = scale(arc("p0", s.rounds.length, false));            // decided arc lights up
+    expect(scale(arc("p0", 1, true))).not.toBe(lit);                 // projected stays neutral…
+    expect(scale(arc("p0", 1, true))).toBe(scale(arc(null)));
+    expect(scale.pending!(arc("p0", 1, true))).toBe(true);           // …and joins the pending scaffold
   });
 });

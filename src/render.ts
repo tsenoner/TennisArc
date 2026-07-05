@@ -42,8 +42,14 @@ export interface SunburstLabels {
   /** Always-on order-of-play tag for an UPCOMING match's arc, keyed by matchId (the anchors/text
    *  channel is occupant-keyed and only serves decided arcs). Null = no label. Mutually exclusive
    *  with the name label by construction: names need !projected, sched needs projected. */
-  sched?: (matchId: string) => string | null;
+  sched?: (matchId: string) => ArcSched | null;
 }
+
+/** The space-adaptive forms of one order-of-play tag, richest to shortest: `full` carries the
+ *  calendar date ("Mon 6 Jul 12:00"), `base` is the compact shape ("Mon 12:00" / "12 Jul 17:00"),
+ *  `short` the day/date alone ("Mon" / "12 Jul") — the fit ladder's last resort. Built by
+ *  formatScheduledArc so renderers never parse tag strings back apart. */
+export interface ArcSched { base: string; full: string; short: string; }
 
 /** Inline flag <img> from the bundled flag-icons set (identical on every platform);
  *  falls back to the emoji pair for codes outside the asset set. flag-icons are 4:3.
@@ -170,8 +176,10 @@ export function renderSunburst(
 
   /** Fit `label` onto arc `a` through the curved/radial cascade and emit it into defs/texts.
    *  `extra` suffixes the class (e.g. " arc-sched"); `shortForm`, when given, replaces the
-   *  truncate-last-resort (a chopped "Tmrw 14…" is worse than a clean "Tmrw"). */
-  const emitFitted = (a: LayoutArc, label: string, extra = "", shortForm?: string) => {
+   *  truncate-last-resort (a chopped "Tmrw 14…" is worse than a clean "Tmrw"); `fullForm`,
+   *  when given, upgrades the label to its richer variant if that fits the one-line budget
+   *  at the preferred font — judged HERE, against the same budget the ladder below uses. */
+  const emitFitted = (a: LayoutArc, label: string, extra = "", shortForm?: string, fullForm?: string) => {
     const rc = (a.y0 + a.y1) / 2;
     const span = a.x1 - a.x0;
     const mid = (a.x0 + a.x1) / 2;
@@ -205,13 +213,14 @@ export function renderSunburst(
         `<textPath href="#${id}" startOffset="50%" text-anchor="middle">${escapeHtml(txt)}</textPath></text>`,
       );
     };
-    const [l1, l2] = splitTwo(label);
     if (radial > rc * span) {
       // RADIAL — text runs OUTWARDS along the ring depth (R128, R64). A ring wide enough for two
       // columns (R64) gets a SECOND radial row so long names show in full without rotating to a
       // curve; the thinnest ring (R128) keeps a single spoke.
       const rf = Math.min(11, Math.max(7.5, radial * 0.24));
       const rbudget = Math.max(2, Math.floor((radial - 4) / (rf * 0.6)));
+      if (fullForm && fullForm.length <= rbudget) label = fullForm;
+      const [l1, l2] = splitTwo(label);
       const colW = rf * 1.05;
       if (rc * span >= 2 * colW && label.length > rbudget) {
         const off = (colW * 0.5) / rc;            // angular offset for two side-by-side columns
@@ -226,6 +235,8 @@ export function renderSunburst(
       // CURVED — text follows the ring (R32 inward): one line → two lines (≥3 chars) → truncate.
       const fs = Math.min(13, Math.max(8, radial * 0.42));
       const budget = Math.floor(chord / (fs * 0.58));
+      if (fullForm && fullForm.length <= budget) label = fullForm;
+      const [l1, l2] = splitTwo(label);
       const f2 = Math.min(fs, 10);                // slightly smaller so two lines fit narrow rings
       const budget2 = Math.floor(chord / (f2 * 0.58));
       const fitFs = chord / (label.length * 0.58); // font size at which the whole name fills one line
@@ -244,6 +255,7 @@ export function renderSunburst(
     }
   };
 
+  let centerSched = "";   // the root disc's sched tag, surfaced to AT through the aria-label below
   const paths = arcs
     .map((a) => {
       const d = arcGen(a) ?? "";
@@ -283,18 +295,23 @@ export function renderSunburst(
         const label = labels.text(a.occupant);
         if (label) emitFitted(a, label);
         } // end image/text branch
-      } else if (labels?.sched && a.projected && !a.live && !a.suspended && a.y0 > 0) {
+      } else if (labels?.sched && a.projected && !a.live && !a.suspended) {
         // Upcoming match: the always-on order-of-play tag, in the same label slot a winner's surname
-        // will occupy once decided. The centre disc — root or focused hub — is the one arc with
-        // y0 === 0; its pill/strip already carries the info, and a full-circle textPath draws garbage.
-        // splitTwo splits "Tmrw 14:30" into day/time rows on two-column rings; the shortForm keeps
-        // a clean day part where even that doesn't fit: drop the trailing clock time ("1 Jul 13:40"
-        // → "1 Jul" — first-word alone would leave a meaningless bare digit), and for the time-less
-        // coarse shape fall back to the leading day word ("Tue 7 Jul" → "Tue").
-        const stxt = labels.sched(a.matchId);
-        if (stxt) {
-          const sansTime = stxt.replace(/ \d{2}:\d{2}$/, "");
-          emitFitted(a, stxt, " arc-sched", sansTime === stxt ? stxt.split(" ")[0] : sansTime);
+        // will occupy once decided. Space-adaptive richness: emitFitted upgrades to the full form
+        // (day + date + time) when it fits the ring's one-line budget at the preferred font, then
+        // runs its shared ladder (two lines → shrink → shortForm — day/date alone, never a
+        // meaningless bare digit).
+        const st = labels.sched(a.matchId);
+        if (st) {
+          if (a.y0 > 0) {
+            emitFitted(a, st.base, " arc-sched", st.short, st.full);
+          } else if (a.depth === 0) {
+            // The unfocused ROOT — the final's slot. A focused hub (y0 === 0 under zoom,
+            // original depth > 0) keeps its centre pill and crumbs instead.
+            const tag = renderCenterSched(a, st);
+            if (tag) texts.push(tag);
+            centerSched = st.full;   // AT-visible via the svg aria-label even when the tag can't fit
+          }
         }
       }
       const path = `<path class="${cls}" d="${d}" fill="${color(a)}" ` +
@@ -317,12 +334,43 @@ export function renderSunburst(
   // wears the static amber outline rather than the live hatch above.
   const inProgressCount = liveCount + arcs.filter((a) => a.suspended).length;
   const liveNote = inProgressCount ? ` — ${inProgressCount} ${inProgressCount === 1 ? "match" : "matches"} in progress` : "";
+  // The final's slot reaches screen readers the same way live-ness does: as accessible-name text
+  // (SVG <text> inside role="img" is presentational to AT).
+  const schedNote = centerSched ? ` — final ${centerSched}` : "";
   return (
     `<svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet" ` +
-    `role="img" aria-label="Tournament bracket sunburst${liveNote}">` +
+    `role="img" aria-label="Tournament bracket sunburst${liveNote}${schedNote}">` +
     `<g transform="translate(${c},${c})">` +
     `<defs>${defs.join("")}</defs>${paths}${texts.join("")}${ringTexts}${corners}</g></svg>`
   );
+}
+
+/** The unfocused root disc's order-of-play tag — the final's slot. The centre disc is the one
+ *  arc a curved tag can't serve (a full-circle textPath draws garbage), so it gets a straight
+ *  horizontal label sized to the disc, scaling with the chart like every other tag: the full
+ *  form on one line, else day/date over time on two, else the short form alone. Returns ""
+ *  when even that can't fit legibly. */
+function renderCenterSched(a: LayoutArc, st: ArcSched): string {
+  const w = 2 * a.y1 * 0.88;                       // usable width across the disc
+  const fit = (txt: string) => Math.min(12, w / (txt.length * 0.58));
+  // .arc-label sets dominant-baseline: central, so a vertically-centred single line sits at y=0
+  const line = (txt: string, f: number) =>
+    `<text class="arc-label arc-sched arc-center" x="0" y="0" text-anchor="middle" font-size="${f.toFixed(1)}">${escapeHtml(txt)}</text>`;
+  const f1 = fit(st.full);
+  if (f1 >= 8.5) return line(st.full, f1);
+  for (const txt of [st.full, st.base]) {          // two lines: day/date over time
+    const i = txt.lastIndexOf(" ");
+    if (i < 0) continue;                           // no time part to split off
+    const [l1, l2] = [txt.slice(0, i), txt.slice(i + 1)];
+    const f2 = Math.min(fit(l1), fit(l2));
+    if (f2 >= 7.5) {
+      return `<text class="arc-label arc-sched arc-center" text-anchor="middle" font-size="${f2.toFixed(1)}">` +
+        `<tspan x="0" y="${(-f2 * 0.6).toFixed(1)}">${escapeHtml(l1)}</tspan>` +
+        `<tspan x="0" y="${(f2 * 0.6).toFixed(1)}">${escapeHtml(l2)}</tspan></text>`;
+    }
+  }
+  const f3 = fit(st.short);                        // a tiny hub: day/date alone beats a smudge
+  return f3 >= 7.5 ? line(st.short, f3) : "";
 }
 
 /** Truncate a label to a character budget with an ellipsis (never empty). */
@@ -366,14 +414,11 @@ export function formatDuration(sec: number): string {
 
 // Order-of-play formatters, built once at module load (Intl.DateTimeFormat construction is costly;
 // the zone is fixed per session, and each date's UTC offset — incl. DST — is still resolved at
-// format() time). Viewer-local for PRECISE slots (converting the clock is the point); UTC for
-// COARSE date-only slots so the VENUE calendar day never shifts — every slam's nominal ~11:00-local
-// stamp stays inside the same UTC day, where viewer-local rendering would show e.g. the Australian
-// Open a day early in the Americas.
+// format() time). All viewer-local: see formatScheduled for the one-coherent-local-timestamp
+// rationale (the date-only UTC venue-day tier was retired with PR #52).
 const SCHED_TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
 const SCHED_DAY = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
 const SCHED_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
-const SCHED_DATE_UTC = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
 /** Local-midnight epoch ms for `d`, shifted by `dayOffset` calendar days. The Date constructor
  *  normalises the day overflow, so the result is DST-correct where naive ±86 400 000 arithmetic
@@ -397,25 +442,39 @@ function relativeDay(start: number, nowSec: number, full: boolean): string | nul
   return null;
 }
 
-export interface SchedFormatOpts { nowSec: number; precise: boolean; full?: boolean; }
+export interface SchedFormatOpts { nowSec: number; full?: boolean; }
 
-/** An order-of-play slot for a not-yet-played match. PRECISE (published per-event time): compact
- *  "Today 15:40" / "Tmrw 13:40" / "Sun 13:40"; full adds the calendar date — "Tomorrow 3 Jul, 13:40".
- *  COARSE (nominal round-day stamp): venue-day date only, "Tue 7 Jul", never a clock time or a
- *  relative word (cross-zone "Tomorrow" on a nominal date misleads). `nowSec` is the wall-clock
- *  reference. Returns plain text with the court unescaped — escape at the HTML boundary. */
+/** The arc-tag forms for one slot (see ArcSched): `base` IS formatScheduled's compact shape —
+ *  delegated so the arc tags and the strip/detail tags can never drift apart — with `full`
+ *  adding the calendar date and `short` keeping the day/date word alone. */
+export function formatScheduledArc(start: number, nowSec: number): ArcSched {
+  const date = new Date(start * 1000);
+  const word = relativeDay(start, nowSec, false);
+  const dateStr = SCHED_DATE.format(date);
+  return {
+    base: formatScheduled(start, null, { nowSec }),
+    full: `${word ?? SCHED_DAY.format(date)} ${dateStr} ${SCHED_TIME.format(date)}`,
+    short: word ?? dateStr,
+  };
+}
+
+/** An order-of-play slot for a not-yet-played match — ONE format for every tier, chosen by
+ *  temporal distance alone (precise vs nominal stamps differ only in scheduledInfo's hide
+ *  rules, never in shape): compact "Today 15:40" / "Tmrw 13:40" / "Sun 13:40" within the
+ *  relative-word week, "12 Jul 17:00" beyond it; full adds the calendar date — "Tomorrow
+ *  3 Jul, 13:40". Everything renders in the VIEWER's zone: with a clock time always shown,
+ *  the whole tag is one coherent local timestamp (the old date-only coarse tier used a UTC
+ *  venue-day proxy instead — retired with it). Nominal times are SofaScore's round-day
+ *  defaults until the real order of play lands — provisional, but exactly what SofaScore
+ *  itself displays. `nowSec` is the wall-clock reference. Returns plain text with the court
+ *  unescaped — escape at the HTML boundary. */
 export function formatScheduled(start: number, court: string | null, opts: SchedFormatOpts): string {
   const date = new Date(start * 1000);
-  let when: string;
-  if (opts.precise) {
-    const word = relativeDay(start, opts.nowSec, opts.full ?? false);
-    const time = SCHED_TIME.format(date);
-    when = opts.full
-      ? `${word ? `${word} ` : ""}${SCHED_DATE.format(date)}, ${time}`
-      : `${word ?? SCHED_DATE.format(date)} ${time}`;
-  } else {
-    when = SCHED_DATE_UTC.format(date);
-  }
+  const word = relativeDay(start, opts.nowSec, opts.full ?? false);
+  const time = SCHED_TIME.format(date);
+  const when = opts.full
+    ? `${word ? `${word} ` : ""}${SCHED_DATE.format(date)}, ${time}`
+    : `${word ?? SCHED_DATE.format(date)} ${time}`;
   return court ? `${when} · ${court}` : when;
 }
 
@@ -507,15 +566,15 @@ export function renderPanelFab(dim: ColorDim, seedSort: SeedSort = "seed"): stri
 }
 
 export function renderLegend(dim: ColorDim, seedSort: SeedSort = "seed", hasPending = false): string {
-  if (dim === "country") return `<div class="legend">Colour: nationality</div>`;
+  // Early in a slam the wheel is mostly "not yet played" grey — name it so the scaffold doesn't
+  // read as a gap. Every lens has the pending tier now: projections carry no hue anywhere.
+  const pendingKey = hasPending
+    ? `<span class="legend-key"><i class="legend-pending" aria-hidden="true"></i>not played yet</span>` : "";
+  if (dim === "country") return `<div class="legend">Colour: nationality${pendingKey}</div>`;
   const label = dim === "time" ? "fresh → most court time"
     : dim === "seed" && seedSort === "elo" ? "weaker → stronger (ELO)"
     : "unseeded → top seed";
   const grad = dim === "seed" ? "legend-grad seed" : "legend-grad";
-  // Early in a slam the Time wheel is mostly "not yet played" grey — name it so the scaffold
-  // doesn't read as a gap. Only the Time lens has a pending tier; other lenses colour projections.
-  const pendingKey = dim === "time" && hasPending
-    ? `<span class="legend-key"><i class="legend-pending" aria-hidden="true"></i>not played yet</span>` : "";
   return `<div class="legend"><span class="${grad}" aria-hidden="true"></span><span>${label}</span>${pendingKey}</div>`;
 }
 
@@ -607,10 +666,9 @@ export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
  *  — the constant anchor while the float readout names whoever is hovered/pinned (and the
  *  champion's only name when the readout idles or shows someone else, so it stays in the
  *  accessibility tree). Pointer-events pass through to the centre disc beneath. */
-export function renderCenterId(iso3: string, name: string, projected: boolean): string {
+export function renderCenterId(iso3: string, name: string): string {
   if (!name) return "";
-  return `<div class="center-id${projected ? " projected" : ""}">` +
-    `${flagImg(iso3, 12)}<span>${escapeHtml(name)}</span></div>`;
+  return `<div class="center-id">${flagImg(iso3, 12)}<span>${escapeHtml(name)}</span></div>`;
 }
 
 /** Breadcrumb chips for a focused section: "‹ Full draw" (data-id="" on purpose — the
@@ -691,10 +749,10 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
     ? ` · <span class="ms-live"><span class="ms-dot" aria-hidden="true"></span>live</span>`
     : ins.status === "suspended"
     ? ` · <span class="ms-susp"><span class="ms-pause" aria-hidden="true"></span>suspended</span>` : "";
-  // Upcoming match: a compact order-of-play tag in the caption — a precise "Today 15:40 · Court 2"
-  // for the imminent tier, a coarse venue-day date ("Tue 7 Jul") for future rounds.
+  // Upcoming match: a compact order-of-play tag in the caption — "Today 15:40 · Court 2" when
+  // imminent, weekday/date + provisional time for future rounds (uniform shape, every tier).
   const schedTag = ins.scheduled
-    ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec: opts.nowSec, precise: ins.scheduled.precise }))}</span>` : "";
+    ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec: opts.nowSec }))}</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).
   // Only when the view already sits AT this match's own section does it flip to "Reset
   // zoom" — an empty data-id routed through the same focus branch (setFocus(undefined)),
@@ -737,7 +795,7 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
   const durTag = ins.durationProvisional ? (isInProgress(ins.status) ? " (live)" : " (est.)") : "";
   const dur = ins.durationSec != null ? `⏱ ${formatDuration(ins.durationSec)}${durTag}` : "";
   const sched = ins.scheduled
-    ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec, precise: ins.scheduled.precise, full: true }))}` +
+    ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec, full: true }))}` +
       ` <span class="mi-prov">· scheduled, subject to change</span></div>`
     : "";
   const link = sofaUrl

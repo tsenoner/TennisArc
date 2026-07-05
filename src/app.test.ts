@@ -444,21 +444,47 @@ describe("finalist pill + corner readout", () => {
     }
   });
 
-  it("keeps a projected champion's pill to the Seed lens only while the slam is in progress", async () => {
-    // final unplayed → the champion is a projection, which must stay quiet on Time/Country
+  it("shows the final's schedule in the centre — never a predicted champion — while the slam is in progress", async () => {
+    // final unplayed → no champion yet; the centre names the final's slot on EVERY lens,
+    // never a projected favourite (predictions were removed from the pill entirely)
     const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
-    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-      const u = String(url);
-      const body = u.includes("index.json") ? INDEX
-        : u.includes("roland-garros") || u.includes("wimbledon") ? live : null;
-      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
-    }) as typeof fetch;
+    const final = Object.values(live.matches).find((m) => !m.nextMatchId)!;
+    final.scheduledStart = Math.floor(Date.now() / 1000) + 3 * 86400; // 3 days out: unflagged nominal stamp
+    installFetchStub({ snap: () => live });
     const root = await mountApp();
-    expect(root.querySelector(".center-id")).toBeNull();              // Time lens: projected champ hidden
-    setLens(root, "seed");
-    expect(root.querySelector(".center-id.projected")).not.toBeNull(); // Seed lens: quiet projected pill
-    setLens(root, "country");
-    expect(root.querySelector(".center-id")).toBeNull();              // Country lens: hidden again
+    for (const dim of ["time", "seed", "country"]) {
+      setLens(root, dim);
+      expect(root.querySelector(".center-id.projected"), `no projected pill on ${dim}`).toBeNull();
+      const sched = root.querySelector("text.arc-center");
+      expect(sched, `final sched tag on ${dim}`).not.toBeNull();
+      expect(sched!.textContent, `dates + times the final on ${dim}`).toMatch(/\d{2}:\d{2}/);
+    }
+    // SVG <text> inside role="img" is presentational to AT — the slot must also reach the
+    // chart's accessible name.
+    expect(root.querySelector('svg[role="img"]')!.getAttribute("aria-label")).toMatch(/final .*\d{2}:\d{2}/);
+  });
+
+  it("includes the provisional time in the centre tag for a far-future (8-day) slot", async () => {
+    const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
+    const final = Object.values(live.matches).find((m) => !m.nextMatchId)!;
+    final.scheduledStart = Math.floor(Date.now() / 1000) + 8 * 86400;
+    // SofaScore's provisional showpiece slots arrive flagged like this; display no longer depends
+    // on the flag (it governs hide rules only — the trust-at-any-distance rule is state.test.ts's).
+    final.scheduledPrecise = true;
+    installFetchStub({ snap: () => live });
+    const root = await mountApp();
+    expect(root.querySelector("text.arc-center")!.textContent).toMatch(/\d{2}:\d{2}$/);
+  });
+
+  it("keeps the centre empty while the final is undecided AND unscheduled", async () => {
+    const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
+    installFetchStub({ snap: () => live });
+    const root = await mountApp();
+    for (const dim of ["time", "seed", "country"]) {
+      setLens(root, dim);
+      expect(root.querySelector(".center-id"), `clean centre on ${dim}`).toBeNull();
+      expect(root.querySelector("text.arc-center"), `no sched tag on ${dim}`).toBeNull();
+    }
   });
 
   it("keeps naming the finalist in the centre while another player is pinned", async () => {
@@ -669,12 +695,7 @@ describe("focus crumbs", () => {
     // the default 8-draw only reaches depth 2 (one ancestor chip); a 32-draw lets us focus a
     // depth-3 section so the trail-building slice(1,-1) must emit BOTH ancestor chips
     const deep = makeSyntheticSnapshot({ tour: "ATP", drawSize: 32, seed: 3 });
-    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-      const u = String(url);
-      const body = u.includes("index.json") ? INDEX
-        : u.includes("roland-garros") || u.includes("wimbledon") ? deep : null;
-      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
-    }) as typeof fetch;
+    installFetchStub({ snap: () => deep });
     const root = await mountApp();
     mockBack();
     const arc = () => root.querySelector<HTMLElement>('path.arc[data-id="r.0.0.0"]')!; // depth-3 node WITH children
@@ -1001,11 +1022,7 @@ describe("centre pill while focused", () => {
     const tbd = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 0 });
     tbd.matches["0-0"].p1 = null;
     tbd.matches["0-0"].p2 = null;
-    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-      const u = String(url);
-      const body = u.includes("index.json") ? INDEX : u.includes("roland-garros") ? tbd : null;
-      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
-    }) as typeof fetch;
+    installFetchStub({ snap: () => tbd });
     const root = await mountApp();
     setLens(root, "seed");                                               // the all-TBD section-title fallback is Seed-only
     click(root.querySelector<HTMLElement>('.q-owner[data-id="r.0.0"]')!); // caption-only, still tappable
@@ -1033,22 +1050,22 @@ describe("centre pill while focused", () => {
     }
   });
 
-  it("keeps a PROJECTED focused occupant's pill to the Seed lens only (slam in progress)", async () => {
-    // nothing played → the focused quarter (r.0.0) has a projected-favourite occupant, not a decided one
+  it("names the SECTION — not a projected favourite — when a focused occupant is undecided (Seed only)", async () => {
+    // nothing played → the focused quarter (r.0.0) has a projected-favourite occupant, not a decided
+    // one. Predictions are gone from the pill: Seed falls back to the section title instead.
     const live = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 0 });
-    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-      const u = String(url);
-      const body = u.includes("index.json") ? INDEX : u.includes("roland-garros") ? live : null;
-      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
-    }) as typeof fetch;
+    installFetchStub({ snap: () => live });
     const root = await mountApp();
     mockBack();
     click(qArc(root)); click(qArc(root));                            // focus the unplayed (projected) quarter
     setLens(root, "seed");
-    expect(root.querySelector(".center-id.projected")).not.toBeNull(); // quiet projected pill on Seed
+    expect(root.querySelector(".center-id.projected")).toBeNull();     // no predicted player, ever
+    const pill = root.querySelector(".center-id.center-sec");
+    expect(pill).not.toBeNull();                                       // section title instead
+    expect(pill!.textContent!.trim()).not.toBe("");
     for (const dim of ["time", "country"]) {
       setLens(root, dim);
-      expect(root.querySelector(".center-id"), `projected pill hidden on ${dim}`).toBeNull();
+      expect(root.querySelector(".center-id"), `centre stays clean on ${dim}`).toBeNull();
     }
   });
 });

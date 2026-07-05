@@ -1,5 +1,6 @@
 /// <reference types="vitest" />
 import { defineConfig, loadEnv, type PluginOption } from "vite";
+import { configDefaults } from "vitest/config";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig(({ mode }) => {
@@ -55,9 +56,17 @@ export default defineConfig(({ mode }) => {
       },
     }),
   ],
-  // Pin tests to UTC so date-formatting tests (formatScheduled) are deterministic regardless of the
-  // host zone or how vitest is launched (npm script, IDE, bare vitest, subagent) — env is applied
-  // per worker before test modules import, so render.ts's Intl formatters build in UTC.
-  test: { globals: true, environment: "node", env: { TZ: "UTC" } },
+  test: {
+    globals: true,
+    environment: "node",
+    // Pin tests to UTC so date-formatting tests (formatScheduled) are deterministic regardless of
+    // the host zone or how vitest is launched (npm script, IDE, bare vitest, subagent) — env is
+    // applied per worker before test modules import, so render.ts's Intl formatters build in UTC.
+    env: { TZ: "UTC" },
+    // parallel Claude sessions keep git worktrees under .claude/worktrees — without this
+    // exclude their checked-out test copies double the suite (and can fail it from outside).
+    // Extend (never replace) vitest's defaults, which already cover node_modules/dist/.git etc.
+    exclude: [...configDefaults.exclude, "**/.claude/**"],
+  },
   };
 });
