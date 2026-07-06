@@ -118,6 +118,13 @@ describe("renderMatchDetail", () => {
     expect(html).toContain('href="https://www.sofascore.com/tennis/match/x/abc"');
   });
 
+  it("escapes the SofaScore URL in the link href (#11)", () => {
+    const url = 'https://www.sofascore.com/tennis/match/a-b/x"><script>alert(1)</script>';
+    const html = renderMatchDetail(base, url, rounds, NOW);
+    expect(html).not.toContain('x"><script>');
+    expect(html).toContain("x&quot;&gt;&lt;script&gt;");
+  });
+
   it("carries the bottom-sheet chrome, all collapsing only the tier (detail-expand)", () => {
     const html = renderMatchDetail(base, null, rounds, NOW);
     // a disclosure REGION, not a (false) modal dialog — desktop renders it in-flow and the

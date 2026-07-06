@@ -799,7 +799,7 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
       ` <span class="mi-prov">· scheduled, subject to change</span></div>`
     : "";
   const link = sofaUrl
-    ? `<a class="mi-link" href="${sofaUrl}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";
+    ? `<a class="mi-link" href="${escapeHtml(sofaUrl)}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";
   return (
     // Scrim is inert on desktop; on phones it dims the bracket behind the bottom sheet
     // and tapping it collapses the detail tier (the strip and selection survive).

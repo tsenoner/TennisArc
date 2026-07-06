@@ -623,9 +623,10 @@ export function matchInsight(
   if (p1.elo != null && p2.elo != null) {
     const favSide = p1.elo >= p2.elo ? "p1" : "p2";
     const fav = favSide === "p1" ? p1 : p2;
-    const oth = favSide === "p1" ? p2 : p1;
-    const pct = Math.round(winProbability(fav.elo!, oth.elo!) * 100);
-    const diff = Math.round(fav.elo! - oth.elo!);
+    const favElo = Math.max(p1.elo, p2.elo);
+    const othElo = Math.min(p1.elo, p2.elo);
+    const pct = Math.round(winProbability(favElo, othElo) * 100);
+    const diff = Math.round(favElo - othElo);
     eloLine = `${surface}-ELO favoured ${fav.name} ${pct}% (+${diff})`;
     if (m.winner && m.winner !== favSide) { upset = true; badges.push("Upset"); }
   }
