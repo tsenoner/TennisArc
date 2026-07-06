@@ -3,7 +3,7 @@ import { parseSeedsCsv, applySeeds, distinctSeedCount } from "./seeds";
 import type { Player } from "../src/model";
 
 const player = (id: string, name: string, seed: number | null = null): Player => ({
-  id, name, country: "", seed, entry: null, ranking: null, ageYears: null,
+  id, name, country: "", seed, entry: null, ranking: null,
   sofaSlug: null, elo: null, birthdate: null,
 });
 
@@ -217,7 +217,7 @@ describe("applySeeds", () => {
     const map = parseSeedsCsv(csv, "wimbledon");
     const p: Player = {
       id: "x", name: "Novak Djokovic", country: "SRB", seed: null, entry: "WC",
-      ranking: 4, ageYears: 38.1, sofaSlug: "djokovic-novak",
+      ranking: 4, sofaSlug: "djokovic-novak",
       elo: { overall: 2100, hard: 2150, clay: 2000, grass: 2050 }, birthdate: "1987-05-22",
     };
     const players = { x: p };
@@ -226,7 +226,6 @@ describe("applySeeds", () => {
     // every other field untouched
     expect(players.x.entry).toBe("WC");
     expect(players.x.ranking).toBe(4);
-    expect(players.x.ageYears).toBe(38.1);
     expect(players.x.sofaSlug).toBe("djokovic-novak");
     expect(players.x.elo).toEqual({ overall: 2100, hard: 2150, clay: 2000, grass: 2050 });
     expect(players.x.birthdate).toBe("1987-05-22");

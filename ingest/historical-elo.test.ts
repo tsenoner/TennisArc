@@ -24,7 +24,7 @@ const csv = readFileSync(resolve(__dirname, "fixtures/elo-matches-sample.csv"), 
 const rows = parseEloMatchesCsv(csv);
 
 const player = (id: string, name: string): Player => ({
-  id, name, country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+  id, name, country: "", seed: null, entry: null, ranking: null, sofaSlug: null, elo: null, birthdate: null,
 });
 
 const row = (over: Partial<EloMatchRow>): EloMatchRow => ({

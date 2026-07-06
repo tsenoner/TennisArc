@@ -34,7 +34,7 @@ export function makeSyntheticSnapshot(opts: SyntheticOpts): Snapshot {
     players[id] = {
       id, name: `Player ${i}`, country: COUNTRIES[i % COUNTRIES.length],
       seed: i < 32 ? i + 1 : null, entry: null,
-      ranking: i + 1, ageYears: 18 + Math.floor(rand() * 18),
+      ranking: i + 1,
       sofaSlug: `player-${i}`, elo: null, birthdate: null,
     };
   }

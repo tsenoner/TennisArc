@@ -16,7 +16,6 @@ export function normalizeName(name: string): string {
 
 export interface EloEntry {
   name: string;
-  ageYears: number | null;
   elo: PlayerElo;
 }
 
@@ -37,7 +36,6 @@ export function parseEloTable(html: string): Map<string, EloEntry> {
     if (!name) continue;
     out.set(normalizeName(name), {
       name,
-      ageYears: numOrNull(cells[2]),
       elo: {
         overall: numOrNull(cells[3]),
         hard: numOrNull(cells[6]),
@@ -50,7 +48,7 @@ export function parseEloTable(html: string): Map<string, EloEntry> {
 }
 
 /**
- * Mutate `players`: attach ELO and back-fill age from `elo` by normalized name.
+ * Mutate `players`: attach ELO from `elo` by normalized name.
  * `aliases` maps a normalized player name → the normalized ELO-table key for known mismatches.
  * Unmatched players get `elo: null`. Returns match stats for logging/curation.
  */
@@ -66,7 +64,6 @@ export function applyElo(
     const entry = elo.get(aliases[norm] ?? norm);
     if (entry) {
       p.elo = entry.elo;
-      if (p.ageYears == null && entry.ageYears != null) p.ageYears = entry.ageYears;
       matched++;
     } else {
       p.elo = null;

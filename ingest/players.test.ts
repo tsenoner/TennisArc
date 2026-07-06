@@ -6,7 +6,7 @@ import type { Player } from "../src/model";
 
 const csv = readFileSync(resolve(__dirname, "fixtures/players-sample.csv"), "utf8");
 const player = (name: string): Player => ({
-  id: name, name, country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+  id: name, name, country: "", seed: null, entry: null, ranking: null, sofaSlug: null, elo: null, birthdate: null,
 });
 
 describe("parsePlayersCsv", () => {

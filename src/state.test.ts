@@ -5,7 +5,7 @@ import { surfaceElo, projectFavorite, winProbability } from "./state";
 import type { Player } from "./model";
 
 const mkPlayer = (o: Partial<Player>): Player => ({
-  id: "x", name: "X", country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, birthdate: null, ...o,
+  id: "x", name: "X", country: "", seed: null, entry: null, ranking: null, sofaSlug: null, elo: null, birthdate: null, ...o,
 });
 
 describe("buildSunburst", () => {
@@ -172,10 +172,12 @@ describe("timeLeaderboard", () => {
   it("excludes players with zero court time (e.g. a walkover loser)", () => {
     const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
     const wo = s.matches["0-0"];
-    // walkover with no duration: the loser played only this match → 0 counted time
-    s.matches["0-0"] = { ...wo, status: "walkover", durationSec: null, winner: "p1" };
+    // walkover with no duration: the loser played only this match → 0 counted time. The
+    // walkover must go to the fixture's ORIGINAL winner — the original loser is the one
+    // player guaranteed to have no later-round court time to leak into the assertion.
+    s.matches["0-0"] = { ...wo, status: "walkover", durationSec: null, winner: wo.winner };
     const time = timeOnCourt(s);
-    const loser = wo.p2!;
+    const loser = wo.winner === "p1" ? wo.p2! : wo.p1!;
     expect(time.get(loser)!.sec).toBe(0);
     const rows = timeLeaderboard(s, time, 50);
     expect(rows.some((r) => r.playerId === loser)).toBe(false);
@@ -346,7 +348,7 @@ describe("countryBreakdown", () => {
     // exactly the "R16P1"/"Qf1" teams SofaScore seeds for the unresolved bracket.
     s.players["ph-r16p1"] = {
       id: "ph-r16p1", name: "R16P1", country: "", seed: null, entry: null,
-      ranking: null, ageYears: null, sofaSlug: "r16p1", elo: null, birthdate: null,
+      ranking: null, sofaSlug: "r16p1", elo: null, birthdate: null,
     };
 
     const rows = countryBreakdown(s);
@@ -363,7 +365,7 @@ describe("countryBreakdown", () => {
     // ranking, so they must still be counted — never silently dropped from the Nations panel.
     s.players["fed"] = {
       id: "fed", name: "Roger Federer", country: "CHE", seed: 4, entry: null,
-      ranking: 4, ageYears: null, sofaSlug: "federer-roger", elo: null, birthdate: null,
+      ranking: 4, sofaSlug: "federer-roger", elo: null, birthdate: null,
     };
 
     const rows = countryBreakdown(s);
@@ -380,7 +382,7 @@ describe("countryBreakdown", () => {
     // first-round fingerprint alone would let it through — only the placeholder check excludes it.
     s.players["ph-r64p1"] = {
       id: "ph-r64p1", name: "R64P1", country: "", seed: null, entry: null,
-      ranking: null, ageYears: null, sofaSlug: "r64p1", elo: null, birthdate: null,
+      ranking: null, sofaSlug: "r64p1", elo: null, birthdate: null,
     };
     s.matches["0-0"] = { ...s.matches["0-0"], p2: "ph-r64p1" };
 

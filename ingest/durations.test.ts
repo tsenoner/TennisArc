@@ -10,7 +10,7 @@ import type { Match, Player } from "../src/model";
 const csv = readFileSync(resolve(__dirname, "fixtures/matches-sample.csv"), "utf8");
 
 const player = (id: string, name: string): Player => ({
-  id, name, country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+  id, name, country: "", seed: null, entry: null, ranking: null, sofaSlug: null, elo: null, birthdate: null,
 });
 const match = (roundIndex: number, p1: string, p2: string, durationSec: number | null): Match => ({
   id: `${roundIndex}-0`, roundIndex, slot: 0, nextMatchId: null, p1, p2,
