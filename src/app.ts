@@ -398,6 +398,7 @@ export function createApp(root: HTMLElement): () => void {
     // strip's ✕ removes the element that held it (never tab-reachable, no visible ring).
     // The sr-only quarter buttons are the keyboard/SR twins of the SVG corner handles —
     // the svg is role="img", so nothing inside it is reachable or announced.
+    document.title = `${snap.tournament.name} — TennisArc`;
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +

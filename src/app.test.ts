@@ -129,6 +129,11 @@ describe("click handler — pin vs nested action precedence", () => {
     expect(status.textContent).toContain("Tennis Abstract");
   });
 
+  it("names the current tournament in document.title", async () => {
+    await mountApp();
+    expect(document.title).toBe(`${SNAP.tournament.name} — TennisArc`);
+  });
+
   it("lets a [data-action] nested inside a pin row win over pinning", async () => {
     const root = await mountApp();
     expect(document.documentElement.dataset.theme).toBe("dark");
