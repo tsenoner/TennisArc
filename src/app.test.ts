@@ -390,6 +390,20 @@ describe("country lens — nation select vs player pin", () => {
     expect(pinnedRows(root).length).toBeGreaterThan(0);
     expect(litArcs(root).length).toBeGreaterThan(0);
   });
+
+  it("a selected nation owns the float readout with its summary card (#7)", async () => {
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>('[data-action="colordim"][data-dim="country"]')!);
+
+    click(root.querySelector<HTMLElement>(".country-panel .ct-row")!);
+    const card = root.querySelector(".readout.ro-float")!;
+    expect(card.classList.contains("ro-nation")).toBe(true);
+    expect(card.textContent).toMatch(/\d+ of \d+ still in|all \d+ out/);
+
+    // deselecting the nation hands the slot back to the player card
+    click(root.querySelector<HTMLElement>(".country-panel .ct-row.on")!);
+    expect(root.querySelector(".readout.ro-float.ro-nation")).toBeNull();
+  });
 });
 
 describe("country lens — ARC tap grammar (branch order: hub zoom-out before nation toggle)", () => {

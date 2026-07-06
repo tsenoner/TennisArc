@@ -662,6 +662,22 @@ export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
   );
 }
 
+/** Nation-summary variant of the readout card: owns the float slot while a nation is
+ *  selected on the Country lens (#7) — flag + ISO3 code and the still-in count. Same
+ *  .readout chrome so the CSS and updateReadout's outerHTML swap treat both cards alike. */
+export function renderNationReadout(
+  info: { country: string; entrants: number; stillIn: number }, cls = "",
+): string {
+  const c = cls ? ` ${cls}` : "";
+  const line = info.stillIn > 0 ? `${info.stillIn} of ${info.entrants} still in` : `all ${info.entrants} out`;
+  return (
+    `<div class="readout filled ro-nation${c}">` +
+    `<div class="ro-ctry">${flagImg(info.country, 11)} ${escapeHtml(info.country)}</div>` +
+    `<div class="ro-name">${escapeHtml(line)}</div>` +
+    `</div>`
+  );
+}
+
 /** Minimal finalist identity (flag + surname) holding the chart centre on every viewport
  *  — the constant anchor while the float readout names whoever is hovered/pinned (and the
  *  champion's only name when the readout idles or shows someone else, so it stays in the
