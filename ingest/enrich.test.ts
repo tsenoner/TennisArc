@@ -147,13 +147,14 @@ describe("enrichMatch", () => {
     expect(m.scheduledPrecise).toBeFalsy();
   });
 
-  it("refuses the precise flag when the event merely ECHOES the nominal cuptrees stamp", () => {
-    // scheduledInfo trusts the flag at any distance, so an echoed placeholder must stay coarse —
-    // equality with normalize's stamp is the tell that the event carries no new information
+  it("still flags precise when the event timestamp EQUALS the cuptrees stamp (the normal case)", () => {
+    // Once the order of play is out, cuptrees' seriesStartDateTimestamp syncs to the real
+    // per-match time, so event == cuptrees is how genuine slots usually arrive. An equality
+    // "echo guard" here stripped the flag from every imminent match (live regression, 2026-07-06).
     const ev = { ...scheduledEventSample, startTimestamp: 1783000000 };
     const m = enrichMatch(baseMatch({ status: "scheduled", winner: null, scheduledStart: 1783000000 }), ev, null, players(), 0);
     expect(m.scheduledStart).toBe(1783000000);
-    expect(m.scheduledPrecise).toBeFalsy();
+    expect(m.scheduledPrecise).toBe(true);
   });
 
   it("falls back to the stadium name when the venue has no direct name", () => {

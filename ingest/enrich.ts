@@ -140,16 +140,17 @@ export function enrichMatch(
 
   // Precise order-of-play tier: the per-event startTimestamp is the published per-match slot (and
   // the freshest value under intra-day reshuffles) — it overrides normalize's coarse cuptrees stamp
-  // and flags the time precise. An event that merely ECHOES normalize's nominal stamp carries no
-  // new information and must NOT be promoted: scheduledInfo trusts the flag at any distance, so an
-  // echoed placeholder would silently adopt the precise >6h-stale hide rule. (A real slot that
-  // happens to equal the nominal round-day time stays coarse — harmless: display is uniform and
-  // only the hide rule differs.) Every other status passes the normalize-set fields through
-  // untouched; the next refresh's normalize drops them once the match is no longer upcoming.
+  // and flags the time precise. Do NOT try to demote an event whose timestamp EQUALS the cuptrees
+  // stamp: once the order of play is out, SofaScore syncs seriesStartDateTimestamp to the real
+  // per-match time (see normalize.ts), so equality is the NORMAL case for genuine slots — an
+  // equality guard strips the flag from every imminent match (verified live, 2026-07-06). What
+  // keeps nominal placeholders unflagged is that their events carry no fetched startTimestamp at
+  // all — a data-shape property of SofaScore, not a guard here. Every other status passes the
+  // normalize-set fields through untouched; the next refresh's normalize drops them once the
+  // match is no longer upcoming.
   const scheduled = status === "scheduled";
   const scheduledStart = scheduled ? (ev.startTimestamp ?? m.scheduledStart) : m.scheduledStart;
-  const scheduledPrecise =
-    scheduled && ev.startTimestamp != null && ev.startTimestamp !== m.scheduledStart ? true : m.scheduledPrecise;
+  const scheduledPrecise = scheduled && ev.startTimestamp != null ? true : m.scheduledPrecise;
   // `||` not `??`: a blank venue name ("") should fall through to the stadium name, not stand as an
   // empty court that renders no court at all (formatScheduled drops a falsy court).
   const scheduledCourt = scheduled ? (ev.venue?.name || ev.venue?.stadium?.name) : m.scheduledCourt;

@@ -509,8 +509,9 @@ export interface ScheduledInfo { start: number; court: string | null; }
 // formatScheduled shows date + provisional time for every tier, viewer-local). PRECISE = the
 // per-event startTimestamp override (scheduledPrecise, set at ingest): a real published slot,
 // trusted at any distance — SofaScore publishes provisional showpiece slots (semis/final) a week
-// out, and nominal placeholders are never flagged (enrich.ts refuses echoes of the nominal
-// stamp). A precise slot >6h past is stale (the match surely started) and hides. A nominal
+// out, and nominal placeholders are never flagged (their events carry no fetched startTimestamp —
+// a SofaScore data-shape property; see enrich.ts). A precise slot >6h past is stale (the match
+// surely started) and hides. A nominal
 // round-day stamp instead survives until its VENUE calendar day (SLAM_TZ) is fully over — a
 // rain-slipped round keeps its tag while the feed catches up; an unknown slam falls back to the
 // old UTC-day proxy.
