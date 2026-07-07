@@ -175,7 +175,7 @@ describe("timeLeaderboard", () => {
     // walkover with no duration: the loser played only this match → 0 counted time. The
     // walkover must go to the fixture's ORIGINAL winner — the original loser is the one
     // player guaranteed to have no later-round court time to leak into the assertion.
-    s.matches["0-0"] = { ...wo, status: "walkover", durationSec: null, winner: wo.winner };
+    s.matches["0-0"] = { ...wo, status: "walkover", durationSec: null };
     const time = timeOnCourt(s);
     const loser = wo.winner === "p1" ? wo.p2! : wo.p1!;
     expect(time.get(loser)!.sec).toBe(0);

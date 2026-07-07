@@ -171,7 +171,8 @@ export function createApp(root: HTMLElement): () => void {
   // "has-match" hides the readout while a match strip names both players (CSS); it lives
   // HERE, not in draw(), so updateReadout's outerHTML swaps re-emit it on every rewrite.
   const roCls = (idle: boolean) => "ro-float" + (idle ? " ro-idle" : "") + (ctx?.isMatch ? " has-match" : "");
-  let roCurrent: string | null = null; // who the readout currently shows — skips the 60-120Hz pointermove outerHTML churn
+  const nationKey = (n: NationRow) => `nation:${n.country}`; // roCurrent memo key while a nation owns the card
+  let roCurrent: string | null = null; // what the readout currently shows (a player id, or a nationKey) — skips the 60-120Hz pointermove outerHTML churn
   let roIdle = false;                  // …and whether it is blanked (same skip must see idle flips)
   const updateReadout = (playerId: string | null) => {
     if (!ctx) return;
@@ -183,7 +184,7 @@ export function createApp(root: HTMLElement): () => void {
     // A selected nation owns the idle card (#7): hover previews players as usual, but
     // leaving restores the nation summary rather than the default player card.
     if (!playerId && ctx.nation) {
-      const key = `nation:${ctx.nation.country}`;
+      const key = nationKey(ctx.nation);
       if (roCurrent === key) return;
       const el = root.querySelector(".readout.ro-float");
       if (!el) return;
@@ -321,8 +322,10 @@ export function createApp(root: HTMLElement): () => void {
           };
         });
     const isMatch = !!(state.selectedMatchId && snap.matches[state.selectedMatchId]);
+    // Computed once per draw: the Country lens panel AND the nation readout below share it.
+    const nations = state.colorDim === "country" ? countryBreakdown(snap) : null;
     const lens = state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap, state.seedSort), snap.rounds)
-      : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
+      : nations ? renderCountryPanel(nations, state.selectedCountry, snap.rounds)
       : renderLeaderboard(timeLeaderboard(snap, time));
     // The lens panel doubles as a mobile bottom drawer; `.open` (state.panelOpen) slides it in
     // at peek height, `.expanded` makes it tall. The scrim dims the bracket only when expanded —
@@ -366,16 +369,24 @@ export function createApp(root: HTMLElement): () => void {
     const pinned = state.pinnedId && snap.players[state.pinnedId] ? state.pinnedId : null;
     const defaultId = pinned ?? focusOcc ?? tree.occupant ?? null;
     // a selected nation on the Country lens owns the float card (#7) — unless a pin outranks it
-    const nation = !pinned && state.colorDim === "country" && state.selectedCountry
-      ? countryBreakdown(snap).find((r) => r.country === state.selectedCountry) ?? null
+    const nation = !pinned && state.selectedCountry
+      ? nations?.find((r) => r.country === state.selectedCountry) ?? null
       : null;
     ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, isMatch, nation };
     // idle = no pin (hover arrives later via updateReadout); the focused occupant is named
     // by the restored centre pill, so focus alone no longer wakes the card.
     const floatIdle = !pinned;
-    // the markup below renders the float readout for defaultId — or the nation summary
-    if (nation) { roCurrent = `nation:${nation.country}`; roIdle = false; }
-    else { roCurrent = defaultId; roIdle = floatIdle; }
+    // The float card — the nation summary when a nation owns it, else the player card for
+    // defaultId — with roCurrent/roIdle seeded to match, so updateReadout's memo agrees
+    // with the markup rendered below.
+    let roFloat: string;
+    if (nation) {
+      roCurrent = nationKey(nation); roIdle = false;
+      roFloat = renderNationReadout(nation, roCls(false));
+    } else {
+      roCurrent = defaultId; roIdle = floatIdle;
+      roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
+    }
 
     // The centre pill shows FACTS only: a DECIDED result (flag + surname) anchors every lens —
     // a projection is a guess and never appears here (removed 2026-07; it used to show on Seed).
@@ -396,9 +407,6 @@ export function createApp(root: HTMLElement): () => void {
     }
     // While the final is undecided its order-of-play tag is drawn INSIDE the svg by
     // renderSunburst (the root disc's sched label), so it scales with the chart.
-    const roFloat = nation
-      ? renderNationReadout(nation, roCls(false))
-      : renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
 
     // Focus crumbs — the zoom's primary exit on every input: "‹ Full draw", a tappable chip
     // per ancestor section, then the current section's name. In-flow at the top of the wheel
@@ -413,11 +421,11 @@ export function createApp(root: HTMLElement): () => void {
       crumbs = renderCrumbs(trail, sectionTitle(snap, tree, state.focusId));
     }
 
+    document.title = `${snap.tournament.name} — TennisArc`;
     // .chart carries tabindex="-1": a programmatic landing spot for keyboard focus after the
     // strip's ✕ removes the element that held it (never tab-reachable, no visible ring).
     // The sr-only quarter buttons are the keyboard/SR twins of the SVG corner handles —
     // the svg is role="img", so nothing inside it is reachable or announced.
-    document.title = `${snap.tournament.name} — TennisArc`;
     root.innerHTML =
       renderControls(controlsOpts()) +
       `<div class="stage">` +

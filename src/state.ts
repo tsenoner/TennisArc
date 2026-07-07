@@ -620,11 +620,12 @@ export function matchInsight(
   let upset = false;
   let eloLine = "";
 
-  if (p1.elo != null && p2.elo != null) {
-    const favSide = p1.elo >= p2.elo ? "p1" : "p2";
+  const e1 = p1.elo, e2 = p2.elo; // locals so the null check narrows through the fav/oth indirection
+  if (e1 != null && e2 != null) {
+    const favSide = e1 >= e2 ? "p1" : "p2"; // the ONE favourite decision — name and numbers derive from it
     const fav = favSide === "p1" ? p1 : p2;
-    const favElo = Math.max(p1.elo, p2.elo);
-    const othElo = Math.min(p1.elo, p2.elo);
+    const favElo = favSide === "p1" ? e1 : e2;
+    const othElo = favSide === "p1" ? e2 : e1;
     const pct = Math.round(winProbability(favElo, othElo) * 100);
     const diff = Math.round(favElo - othElo);
     eloLine = `${surface}-ELO favoured ${fav.name} ${pct}% (+${diff})`;

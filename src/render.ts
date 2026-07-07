@@ -666,7 +666,7 @@ export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
  *  selected on the Country lens (#7) — flag + ISO3 code and the still-in count. Same
  *  .readout chrome so the CSS and updateReadout's outerHTML swap treat both cards alike. */
 export function renderNationReadout(
-  info: { country: string; entrants: number; stillIn: number }, cls = "",
+  info: Pick<NationRow, "country" | "entrants" | "stillIn">, cls = "",
 ): string {
   const c = cls ? ` ${cls}` : "";
   const line = info.stillIn > 0 ? `${info.stillIn} of ${info.entrants} still in` : `all ${info.entrants} out`;
