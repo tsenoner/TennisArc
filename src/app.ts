@@ -10,9 +10,10 @@ import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { fetchSnapshot, fetchIndex } from "./api";
 import { pickDefaultSlam, availableYears, slamsForYear, statusFor } from "./slams";
-import type { Player, SlamIndex, Snapshot, Tour } from "./model";
+import type { Match, Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
+import { fetchLive, overlayLive, applyLivePatch } from "./live";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
@@ -23,6 +24,7 @@ interface AppState {
   slam: string;
   index: SlamIndex | undefined;
   snapshots: Record<string, Snapshot>;
+  livePatch: Record<string, Record<string, Partial<Match>>>; // snapKey → matchId → live overlay
   colorDim: ColorDim;
   seedSort: SeedSort;
   focusId: string | undefined;
@@ -66,7 +68,7 @@ export function createApp(root: HTMLElement): () => void {
   // is NOT read from the URL — it is session-only, and any cold-load hash is scrubbed below.
   const initial = parseRoute(location.pathname, location.search);
   const state: AppState = {
-    tour: initial.tour ?? "ATP", year: 0, slam: "", index: undefined, snapshots: {},
+    tour: initial.tour ?? "ATP", year: 0, slam: "", index: undefined, snapshots: {}, livePatch: {},
     colorDim: initial.view ?? "time", seedSort: initial.sub ?? "seed", focusId: undefined, selectedMatchId: undefined, selectedNodeId: undefined, detailExpanded: false, selectedCountry: undefined, theme,
     openMenu: undefined, panelOpen: false, panelExpanded: false, pinnedId: undefined, helpOpen: false,
     loadFailed: false, refreshing: undefined, refreshFailed: undefined,
@@ -257,7 +259,9 @@ export function createApp(root: HTMLElement): () => void {
   const draw = () => {
     if (!state.panelOpen) state.panelExpanded = false; // invariant: a closed drawer always reopens at peek
     hlNodes = []; hlCurrent = null; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
-    const snap = state.year ? state.snapshots[snapKey(state.tour, state.year, state.slam)] : undefined;
+    const k0 = snapKey(state.tour, state.year, state.slam);
+    const rawSnap = state.year ? state.snapshots[k0] : undefined;
+    const snap = rawSnap ? applyLivePatch(rawSnap, state.livePatch[k0]) : undefined;
     if (!snap) {
       if (document.title !== "TennisArc") document.title = "TennisArc"; // don't keep naming a tournament the screen no longer shows
       root.innerHTML =
@@ -442,7 +446,7 @@ export function createApp(root: HTMLElement): () => void {
       `<div class="status">${snap.tournament.name} · ` +
         `<button class="status-refresh" data-action="refresh" title="Refresh now"><span class="status-label">${freshnessLabel(snap)}</span> <span aria-hidden="true">↻</span></button>` +
         // CC BY-NC-SA: historical durations + ELO + birthdates come from Jeff Sackmann's data
-        ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener noreferrer">Tennis Abstract</a></span></div>`;
+        ` · <span class="credits">durations &amp; ratings: <a href="https://www.tennisabstract.com/" target="_blank" rel="noopener noreferrer">Tennis Abstract</a> · live: <a href="https://www.flashscore.com/" target="_blank" rel="noopener noreferrer">Flashscore</a></span></div>`;
     // Help is NOT part of this innerHTML — it lives in helpHost (see setHelp) so this swap
     // can't reset its scroll/accordion/focus. The "?" trigger above is re-rendered with the
     // current aria-expanded via controlsOpts().helpOpen.
@@ -496,6 +500,22 @@ export function createApp(root: HTMLElement): () => void {
   };
   /** Refetch the snapshot the user is looking at — every refresh path names the current view through here. */
   const loadCurrent = (): Promise<boolean> => load(state.tour, state.year, state.slam);
+
+  const LIVE_SCORE_POLL_MS = 30_000;
+  // Fast score overlay from Flashscore (src/live.ts) — independent of the 90s snapshot poll. Joins
+  // to the CURRENT snapshot's players; redraws only when the computed patch actually changes.
+  const loadLive = async (): Promise<void> => {
+    const k = snapKey(state.tour, state.year, state.slam);
+    const raw = state.snapshots[k];
+    if (!raw) return; // nothing to join against yet
+    const records = await fetchLive(state.tour, state.slam);
+    if (!records) return;
+    if (snapKey(state.tour, state.year, state.slam) !== k) return; // view changed mid-fetch
+    const patch = overlayLive(raw, records);
+    if (JSON.stringify(state.livePatch[k] ?? {}) === JSON.stringify(patch)) return;
+    state.livePatch[k] = patch;
+    draw();
+  };
 
   const LIVE_POLL_MS = 90_000;
   const isLiveView = (): boolean =>
@@ -946,6 +966,7 @@ export function createApp(root: HTMLElement): () => void {
     void (async () => {
       if (Date.now() - lastIndexMs > LIVE_POLL_MS / 2) await refreshIndex();
       if (isLiveView() && Date.now() - lastLoadMs > LIVE_POLL_MS / 2) void loadCurrent();
+      if (isLiveView()) void loadLive();
     })();
     if (Date.now() - lastDrawMs > 60_000) draw();
   }, { signal });
@@ -961,6 +982,12 @@ export function createApp(root: HTMLElement): () => void {
     if (status === "live") void loadCurrent();
   }, LIVE_POLL_MS);
   signal.addEventListener("abort", () => clearInterval(pollTimer));
+  const liveScoreTimer = window.setInterval(() => {
+    if (document.hidden) return;
+    if (statusFor(state.index, state.tour, state.year, state.slam) !== "live") return;
+    void loadLive();
+  }, LIVE_SCORE_POLL_MS);
+  signal.addEventListener("abort", () => clearInterval(liveScoreTimer));
   // The chip is the user's staleness signal, and draw() deliberately skips identical data — so
   // tick the label TEXT in place (never a full redraw) while the tab is visible, or "updated
   // 2 min ago" would freeze exactly when the upstream refresh wedges.
@@ -1007,6 +1034,7 @@ export function createApp(root: HTMLElement): () => void {
     }
     if (!state.year) { state.loadFailed = true; draw(); return; } // no manifest → Retry state
     await loadCurrent();
+    if (isLiveView()) void loadLive();
     // Warm the other tour's same-or-default slam in the background.
     const other: Tour = state.tour === "ATP" ? "WTA" : "ATP";
     if (state.index) {

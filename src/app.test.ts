@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
-import type { SlamIndex } from "./model";
+import type { SlamIndex, Snapshot } from "./model";
 
 import { createApp } from "./app";
 
@@ -60,18 +60,21 @@ beforeEach(() => {
 /** The standard network: manifest + the two synthetic slams, overridable per test (a live
  *  manifest, a snapshot body re-read per request). Tests that simulate outages overwrite
  *  globalThis.fetch and call this to bring the network back. Returns a counter of
- *  roland-garros snapshot fetches. */
+ *  roland-garros snapshot fetches (the live-score endpoint's own query string names the slam
+ *  too, e.g. "/api/live?tour=atp&slam=roland-garros" — excluded so it isn't double-counted). It
+ *  answers /api/live with an empty overlay so live-gated tests here don't spuriously redraw. */
 function installFetchStub(overrides: { index?: () => unknown; snap?: () => unknown } = {}): () => number {
   const index = overrides.index ?? (() => INDEX);
   const snap = overrides.snap ?? (() => SNAP);
   const fn = vi.fn(async (url: string | URL | Request) => {
     const u = String(url);
+    if (u.includes("/api/live")) return { ok: true, status: 200, json: async () => ({ matches: [] }) } as Response;
     const body = u.includes("index.json") ? index()
       : u.includes("roland-garros") || u.includes("wimbledon") ? snap() : null;
     return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
   });
   globalThis.fetch = fn as unknown as typeof fetch;
-  return () => fn.mock.calls.filter(([u]) => String(u).includes("roland-garros")).length;
+  return () => fn.mock.calls.filter(([u]) => String(u).includes("roland-garros") && !String(u).includes("/api/live")).length;
 }
 
 // Dispose every app mounted during a test (createApp returns a disposer that detaches its
@@ -1284,6 +1287,83 @@ describe("live polling", () => {
     await vi.waitFor(() => {
       if (snapCalls() <= before) throw new Error("no refetch on tab return yet");
     }, { timeout: 2000 });
+  });
+});
+
+describe("live score overlay (/api/live)", () => {
+  const LIVE_INDEX_2: SlamIndex = { ...INDEX, slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]] };
+  const NOON2 = new Date("2026-06-15T12:00:00.000Z");
+  const short = (full: string) => { const t = full.split(" "); return `${t[t.length - 1]} ${t[0][0]}.`; };
+  // a real synthetic match with two known players → build a matching Flashscore record. The
+  // fixture names them "Player N" — nameTokens() strips the trailing digit, so EVERY player
+  // collapses to the same surname-pair key ("player:p") and the join always calls it ambiguous.
+  // Give this one match's pair real names (only in this describe's snapshot) so the join is
+  // deterministic without touching the shared SNAP used by every other test in this file.
+  const M = Object.values(SNAP.matches).find((x) => x.p1 && x.p2)!;
+  const LIVE_SNAP: Snapshot = {
+    ...SNAP,
+    players: {
+      ...SNAP.players,
+      [M.p1!]: { ...SNAP.players[M.p1!], name: "Novak Djokovic" },
+      [M.p2!]: { ...SNAP.players[M.p2!], name: "Rafael Nadal" },
+    },
+  };
+  const baseRecord = {
+    id: "fs1", stage: 2 as const,
+    home: short(LIVE_SNAP.players[M.p1!].name), away: short(LIVE_SNAP.players[M.p2!].name),
+    setsWon: [1, 0] as [number, number], sets: [[6, 4]] as Array<[number, number]>,
+  };
+
+  function installLiveNet(record: () => unknown): () => number {
+    let liveCalls = 0;
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes("/api/live")) { liveCalls++; return { ok: true, json: async () => ({ matches: [record()] }) } as Response; }
+      const body = u.includes("index.json") ? LIVE_INDEX_2 : (u.includes("roland-garros") || u.includes("wimbledon")) ? LIVE_SNAP : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as unknown as typeof fetch;
+    return () => liveCalls;
+  }
+
+  it("polls /api/live and overlays a changing live score onto the draw", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+    let served: unknown = { ...baseRecord };
+    const liveCalls = installLiveNet(() => served);
+    const root = await mountApp();
+    const marker = root.querySelector(".chart")!;
+    // the score advances → the next 30s tick produces a different patch → a redraw
+    served = { ...baseRecord, sets: [[6, 4], [3, 0]] };
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(liveCalls()).toBeGreaterThan(0);
+    await vi.waitFor(() => {
+      if (root.querySelector(".chart") === marker) throw new Error("overlay did not redraw");
+    }, { timeout: 2000 });
+  });
+
+  it("does not poll /api/live while the tab is hidden", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+    const liveCalls = installLiveNet(() => baseRecord);
+    await mountApp();
+    await vi.advanceTimersByTimeAsync(50);                                              // let the mount-time kick settle
+    Object.defineProperty(document, "hidden", { value: true, configurable: true });
+    const before = liveCalls();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(liveCalls()).toBe(before);
+  });
+
+  it("does not poll /api/live on a non-live view", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+    // standard (non-live) INDEX → the view is "complete", so the live gate stays shut
+    let liveCalls = 0;
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes("/api/live")) { liveCalls++; return { ok: true, json: async () => ({ matches: [] }) } as Response; }
+      const body = u.includes("index.json") ? INDEX : (u.includes("roland-garros") || u.includes("wimbledon")) ? SNAP : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as unknown as typeof fetch;
+    await mountApp();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(liveCalls).toBe(0);
   });
 });
 
