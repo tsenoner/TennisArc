@@ -94,6 +94,18 @@ export interface Match {
   stats: MatchStats | null;
 }
 
+/** A live/finished/scheduled match extracted from the Flashscore livescore feed (server-parsed by
+ *  ingest/flashscore.ts, joined onto the snapshot client-side by src/live.ts). Names are
+ *  Flashscore's surname-first short form ("Fritz T."). */
+export interface LiveRecord {
+  id: string;
+  stage: 1 | 2 | 3;              // 1 scheduled, 2 live, 3 finished
+  home: string;
+  away: string;
+  setsWon: [number, number];     // [home, away]
+  sets: Array<[number, number]>; // per-set games [home, away], in order
+}
+
 export interface Round {
   index: number;
   name: string;               // "Round of 128" … "Final"
