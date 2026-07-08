@@ -1,21 +1,12 @@
 import type { Match, Player, Tour } from "../src/model";
 import { ROUND, TOURNEY, fullKey, pairKey, sigKey } from "./names";
+import { matchesUrl, qualChallUrl } from "./sources";
 
-// Historical durations come from Jeff Sackmann's tennis_atp / tennis_wta CSVs (CC BY-NC-SA 4.0):
-// SofaScore's time.periodN is absent pre-mid-2014, has whole-event holes, and counts rain/curfew
-// suspensions as play time. Sackmann's `minutes` is official on-court time (Isner–Mahut = 665).
-const MATCHES_URL = (tour: Tour, year: number): string => {
-  const t = tour.toLowerCase();
-  return `https://raw.githubusercontent.com/JeffSackmann/tennis_${t}/master/${t}_matches_${year}.csv`;
-};
-
-/** Qualifying + Challenger (ATP) / qualifying + ITF (WTA) file. ATP: challengers from 2008, quallies
- *  from 2011; early years 404 (handled by fetchQualChallCsv). TA's published Elo includes these. */
-export const qualChallUrl = (tour: Tour, year: number): string => {
-  const t = tour.toLowerCase();
-  const stem = tour === "ATP" ? "qual_chall" : "qual_itf";
-  return `https://raw.githubusercontent.com/JeffSackmann/tennis_${t}/master/${t}_matches_${stem}_${year}.csv`;
-};
+// Historical durations come from Jeff Sackmann's schema (`minutes` = official on-court time,
+// Isner–Mahut = 665): SofaScore's time.periodN is absent pre-mid-2014, has whole-event holes, and
+// counts rain/curfew suspensions as play time. Sackmann's ATP repo is 404 (#41), so ATP now reads
+// the TML mirror (same columns + an extra `indoor` col, tolerated by the header-based parse); WTA
+// stays on Sackmann. Both source URLs are resolved per-tour in sources.ts.
 
 /** Fetch the qual/challenger file; returns null on 404 (some early years are absent) rather than throw. */
 export async function fetchQualChallCsv(tour: Tour, year: number): Promise<string | null> {
@@ -185,9 +176,9 @@ export function applyDurations(
   return stats;
 }
 
-/** Fetch + parse one tour-year Sackmann matches file (plain HTTPS GitHub raw). */
+/** Fetch + parse one tour-year matches file (plain HTTPS GET; provider resolved in sources.ts). */
 export async function fetchMatchesCsv(tour: Tour, year: number): Promise<string> {
-  const res = await fetch(MATCHES_URL(tour, year), { headers: { "User-Agent": "Mozilla/5.0 TennisArc/1.0" } });
+  const res = await fetch(matchesUrl(tour, year), { headers: { "User-Agent": "Mozilla/5.0 TennisArc/1.0" } });
   if (!res.ok) throw new Error(`matches CSV HTTP ${res.status} for ${tour} ${year}`);
   return res.text();
 }
