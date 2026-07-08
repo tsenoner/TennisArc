@@ -1,5 +1,5 @@
 import type { LiveRecord, Tour } from "../src/model";
-import { TOURNEY } from "./names";
+import { TOURNEY } from "./names.js"; // .js ext: this module is reached by the /api/live Vercel ESM function (see api/live.ts)
 
 const num = (v: string): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 

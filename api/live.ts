@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { Tour } from "../src/model";
-import { parseLiveFeed } from "../ingest/flashscore";
+// .js extension REQUIRED: with package.json "type":"module", Vercel transpiles this function to ESM
+// without bundling, and Node ESM needs explicit extensions on relative imports (tsc bundler-resolution,
+// Vite, tsx and vitest all resolve ".js" → ".ts", so it's safe across the whole toolchain). Applies
+// down the whole runtime import chain (ingest/flashscore.ts → ingest/names.ts → src/names.ts).
+import { parseLiveFeed } from "../ingest/flashscore.js";
 
 const FEED = "https://global.flashscore.ninja/2/x/feed/f_2_0_3_en_1";
 const X_FSIGN = "SW9D1eZo";
