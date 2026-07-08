@@ -5,7 +5,7 @@
 
 Companion to [`yelo-reproduction.md`](yelo-reproduction.md). Reproduces the official ATP/WTA ranking points
 each player **earned per tournament** (tier + round reached), summed per calendar year, from Jeff Sackmann's
-match CSVs. Tooling: [`ingest/points/`](../ingest/points/) (`validate.ts`, `round-extraction.ts`); authoritative
+match CSVs. Tooling: [`ingest/points/`](../ingest/points/) (`engine.ts`, `validate.ts`); authoritative
 spec (era-correct tables, tier lists, best-N rules, ground-truth standings) in `ingest/points/POINTS-TABLES.md`
 + `TIER-LISTS.md` (built by two cross-verified research workflows with adversarial checking).
 

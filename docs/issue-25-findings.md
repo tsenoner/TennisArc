@@ -146,7 +146,7 @@ Raw CSV pattern: `https://raw.githubusercontent.com/JeffSackmann/tennis_{atp,wta
 | `ingest/elo-reverse/{parse-boards,parse-yelo,yelo-fit}.ts`, `lib.ts` | Parse archived boards; fit yElo; shared helpers (`roundRank`, `RET_ERA_START`, dominant-id join). |
 | `ingest/elo-reverse/{serve.ts, dashboard.html, dashboard-data.ts}` | Dashboard server + UI + data generator (NEW — commit in this PR). |
 | `ingest/points/engine.ts` (NEW) | Generalized points engine over all repo-scope seasons; `--emit` / `--check`. Spec: `POINTS-TABLES.md`, `TIER-LISTS.md`, `ground-truth.json`. |
-| `ingest/points/{validate.ts, round-extraction.ts}` | 2019/2023 baseline validator; table-independent round-reached core. |
+| `ingest/points/validate.ts` | 2019/2023 baseline validator. (`round-extraction.ts`, the early mechanics check, was deleted 2026-07 — superseded by `engine.ts` + `shared.ts`.) |
 | `ingest/historical-elo.ts`, `elo-config.ts`, `calibrate-elo.ts` | Production from-scratch engine + params + calibration (NOTE: still ships the *superseded* split-seed + smooth injury model — migration pending, see What's next). |
 | `data/wayback/ta-elo-boards-2016-2026.tar.gz` | Committed canonical Wayback board reference (3.7M). |
 

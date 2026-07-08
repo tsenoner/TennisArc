@@ -638,6 +638,10 @@ export interface ReadoutInfo {
  *  instance with cls "ro-float": the chart's top-left corner card on desktop, the docked
  *  strip above the chart on narrow viewports. Append "ro-idle" when it would only
  *  duplicate the centre finalist pill (desktop blanks it then). */
+// The readout card's country line — shared so the player and nation cards can't drift apart.
+const roCtryLine = (country: string): string =>
+  `<div class="ro-ctry">${flagImg(country, 11)} ${escapeHtml(country)}</div>`;
+
 export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
   const c = cls ? ` ${cls}` : "";
   if (!info) return `<div class="readout${c}" aria-hidden="true"></div>`;
@@ -650,7 +654,7 @@ export function renderReadout(info: ReadoutInfo | null, cls = ""): string {
   const meta2 = [info.roundLabel, time].filter(Boolean).join(" · ");
   return (
     `<div class="readout filled${info.projected ? " projected" : ""}${c}">` +
-    `<div class="ro-ctry">${flagImg(info.country, 11)} ${escapeHtml(info.country)}</div>` +
+    roCtryLine(info.country) +
     `<div class="ro-name">${escapeHtml(info.name)}</div>` +
     (meta1 ? `<div class="ro-meta">${escapeHtml(meta1)}</div>` : "") +
     (info.eloLabel ? `<div class="ro-elo">${escapeHtml(info.eloLabel)}</div>` : "") +
@@ -669,10 +673,12 @@ export function renderNationReadout(
   info: Pick<NationRow, "country" | "entrants" | "stillIn">, cls = "",
 ): string {
   const c = cls ? ` ${cls}` : "";
-  const line = info.stillIn > 0 ? `${info.stillIn} of ${info.entrants} still in` : `all ${info.entrants} out`;
+  // Single-entrant nations are the MODAL nation size at a slam — "all 1 out" would be their card.
+  const line = info.stillIn > 0 ? `${info.stillIn} of ${info.entrants} still in`
+    : info.entrants === 1 ? "out" : `all ${info.entrants} out`;
   return (
     `<div class="readout filled ro-nation${c}">` +
-    `<div class="ro-ctry">${flagImg(info.country, 11)} ${escapeHtml(info.country)}</div>` +
+    roCtryLine(info.country) +
     `<div class="ro-name">${escapeHtml(line)}</div>` +
     `</div>`
   );

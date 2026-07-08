@@ -393,7 +393,7 @@ describe("country lens — nation select vs player pin", () => {
 
   it("a selected nation owns the float readout with its summary card (#7)", async () => {
     const root = await mountApp();
-    click(root.querySelector<HTMLElement>('[data-action="colordim"][data-dim="country"]')!);
+    setLens(root, "country");
 
     click(root.querySelector<HTMLElement>(".country-panel .ct-row")!);
     const card = root.querySelector(".readout.ro-float")!;

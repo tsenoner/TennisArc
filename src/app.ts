@@ -172,6 +172,12 @@ export function createApp(root: HTMLElement): () => void {
   // HERE, not in draw(), so updateReadout's outerHTML swaps re-emit it on every rewrite.
   const roCls = (idle: boolean) => "ro-float" + (idle ? " ro-idle" : "") + (ctx?.isMatch ? " has-match" : "");
   const nationKey = (n: NationRow) => `nation:${n.country}`; // roCurrent memo key while a nation owns the card
+  /** Render the nation card AND seed the memo to match — the ONE place the pair stays in
+   *  lockstep, shared by draw()'s float slot and updateReadout's hover-leave restore. */
+  const nationCard = (n: NationRow): string => {
+    roCurrent = nationKey(n); roIdle = false;
+    return renderNationReadout(n, roCls(false));
+  };
   let roCurrent: string | null = null; // what the readout currently shows (a player id, or a nationKey) — skips the 60-120Hz pointermove outerHTML churn
   let roIdle = false;                  // …and whether it is blanked (same skip must see idle flips)
   const updateReadout = (playerId: string | null) => {
@@ -184,12 +190,10 @@ export function createApp(root: HTMLElement): () => void {
     // A selected nation owns the idle card (#7): hover previews players as usual, but
     // leaving restores the nation summary rather than the default player card.
     if (!playerId && ctx.nation) {
-      const key = nationKey(ctx.nation);
-      if (roCurrent === key) return;
+      if (roCurrent === nationKey(ctx.nation)) return;
       const el = root.querySelector(".readout.ro-float");
       if (!el) return;
-      roCurrent = key; roIdle = false;
-      el.outerHTML = renderNationReadout(ctx.nation, roCls(false));
+      el.outerHTML = nationCard(ctx.nation);
       return;
     }
     const resolved = playerId ?? ctx.defaultId;
@@ -255,6 +259,7 @@ export function createApp(root: HTMLElement): () => void {
     hlNodes = []; hlCurrent = null; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
     const snap = state.year ? state.snapshots[snapKey(state.tour, state.year, state.slam)] : undefined;
     if (!snap) {
+      document.title = "TennisArc"; // don't let the tab keep naming a tournament the screen no longer shows
       root.innerHTML =
         renderControls(controlsOpts()) +
         (state.loadFailed
@@ -373,17 +378,16 @@ export function createApp(root: HTMLElement): () => void {
       ? nations?.find((r) => r.country === state.selectedCountry) ?? null
       : null;
     ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, isMatch, nation };
-    // idle = no pin (hover arrives later via updateReadout); the focused occupant is named
-    // by the restored centre pill, so focus alone no longer wakes the card.
-    const floatIdle = !pinned;
     // The float card — the nation summary when a nation owns it, else the player card for
     // defaultId — with roCurrent/roIdle seeded to match, so updateReadout's memo agrees
     // with the markup rendered below.
     let roFloat: string;
     if (nation) {
-      roCurrent = nationKey(nation); roIdle = false;
-      roFloat = renderNationReadout(nation, roCls(false));
+      roFloat = nationCard(nation);
     } else {
+      // idle = no pin (hover arrives later via updateReadout); the focused occupant is named
+      // by the restored centre pill, so focus alone no longer wakes the card.
+      const floatIdle = !pinned;
       roCurrent = defaultId; roIdle = floatIdle;
       roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
     }

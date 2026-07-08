@@ -27,6 +27,10 @@ export function makeSyntheticSnapshot(opts: SyntheticOpts): Snapshot {
   if (!Number.isInteger(rounds)) throw new Error("drawSize must be a power of 2");
   const completedRounds = opts.completedRounds ?? rounds; // default: whole draw played
   const rand = rng(seed);
+  // ONE seeded rand() stream feeds everything below: adding or removing a single draw
+  // (a field, a loop pass) reshuffles every later winner/set-count/duration for the same
+  // seed. Tests must derive expectations from the generated snapshot, never hardcode
+  // which side wins (the ageYears removal shifted the stream once already — PR #55).
 
   const players: Record<string, Player> = {};
   for (let i = 0; i < drawSize; i++) {

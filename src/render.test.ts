@@ -247,8 +247,11 @@ describe("renderNationReadout", () => {
     expect(html).toContain("1 of 4 still in");
   });
 
-  it("reads 'all out' when nobody is left", () => {
+  it("reads 'all out' when nobody is left — and plain 'out' for the modal single-entrant nation", () => {
     expect(renderNationReadout({ country: "SUI", entrants: 2, stillIn: 0 })).toContain("all 2 out");
+    const solo = renderNationReadout({ country: "GEO", entrants: 1, stillIn: 0 });
+    expect(solo).not.toContain("all 1 out");
+    expect(solo).toContain(">out<");
   });
 });
 

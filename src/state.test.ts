@@ -177,6 +177,7 @@ describe("timeLeaderboard", () => {
     // player guaranteed to have no later-round court time to leak into the assertion.
     s.matches["0-0"] = { ...wo, status: "walkover", durationSec: null };
     const time = timeOnCourt(s);
+    expect(wo.winner).not.toBeNull(); // fail loudly (not vacuously) if the fixture ever leaves round 0 undecided
     const loser = wo.winner === "p1" ? wo.p2! : wo.p1!;
     expect(time.get(loser)!.sec).toBe(0);
     const rows = timeLeaderboard(s, time, 50);
