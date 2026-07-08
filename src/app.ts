@@ -984,7 +984,7 @@ export function createApp(root: HTMLElement): () => void {
   signal.addEventListener("abort", () => clearInterval(pollTimer));
   const liveScoreTimer = window.setInterval(() => {
     if (document.hidden) return;
-    if (statusFor(state.index, state.tour, state.year, state.slam) !== "live") return;
+    if (!isLiveView()) return;
     void loadLive();
   }, LIVE_SCORE_POLL_MS);
   signal.addEventListener("abort", () => clearInterval(liveScoreTimer));

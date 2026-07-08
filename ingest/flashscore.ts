@@ -12,6 +12,17 @@ function field(rec: string, key: string): string {
   return "";
 }
 
+/** Parse a whole `¬`-joined record into a key→value map in one pass. Used for match records (which
+ *  read many fields) so the record isn't re-split once per lookup. */
+function fields(rec: string): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const p of rec.split("¬")) {
+    const i = p.indexOf("÷");
+    if (i > 0) m.set(p.slice(0, i), p.slice(i + 1));
+  }
+  return m;
+}
+
 const SET_PAIRS: ReadonlyArray<readonly [string, string]> =
   [["BA", "BB"], ["BC", "BD"], ["BE", "BF"], ["BG", "BH"], ["BI", "BJ"]];
 
@@ -35,23 +46,24 @@ export function parseLiveFeed(text: string, opts: { tour: Tour; slam: string }):
       continue; // a header record is never a match record
     }
     if (!inBlock || !rec.startsWith("AA÷")) continue;
+    const f = fields(rec); // a match record reads many fields — parse it once
 
-    const stage = num(field(rec, "AB"));
+    const stage = num(f.get("AB") ?? "");
     if (stage !== 1 && stage !== 2 && stage !== 3) continue;
-    const home = field(rec, "AE"), away = field(rec, "AF");
+    const home = f.get("AE") ?? "", away = f.get("AF") ?? "";
     if (!home || !away || home.includes("/") || away.includes("/")) continue; // "/" = doubles pair, skip defensively
 
     const sets: Array<[number, number]> = [];
     for (const [h, a] of SET_PAIRS) {
-      const hv = field(rec, h), av = field(rec, a);
+      const hv = f.get(h) ?? "", av = f.get(a) ?? "";
       if (hv === "" && av === "") continue;
       sets.push([num(hv), num(av)]);
     }
     out.push({
-      id: field(rec, "AA"),
+      id: f.get("AA") ?? "",
       stage: stage as 1 | 2 | 3,
       home, away,
-      setsWon: [num(field(rec, "AG")), num(field(rec, "AH"))],
+      setsWon: [num(f.get("AG") ?? ""), num(f.get("AH") ?? "")],
       sets,
     });
   }

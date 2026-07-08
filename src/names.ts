@@ -23,8 +23,11 @@ export const sigKey = (name: string): string => {
   return t.length ? `${t[t.length - 1]}:${t[0][0]}` : "";
 };
 
+/** Order-independent key for a name pair: sorted so (a,b) and (b,a) collide. */
+export const sortedPairKey = (a: string, b: string): string => [a, b].sort().join("~");
+
 export const pairKey = (roundIndex: number, a: string, b: string): string =>
-  `${roundIndex}|${[a, b].sort().join("~")}`;
+  `${roundIndex}|${sortedPairKey(a, b)}`;
 
 /** Flashscore lists names surname-first with a trailing initial ("Fritz T.", "Van Uytvanck A.").
  *  Normalize to the SAME "surname:initial" space as sigKey(fullName): the trailing single-letter

@@ -1353,17 +1353,11 @@ describe("live score overlay (/api/live)", () => {
 
   it("does not poll /api/live on a non-live view", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-    // standard (non-live) INDEX → the view is "complete", so the live gate stays shut
-    let liveCalls = 0;
-    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-      const u = String(url);
-      if (u.includes("/api/live")) { liveCalls++; return { ok: true, json: async () => ({ matches: [] }) } as Response; }
-      const body = u.includes("index.json") ? INDEX : (u.includes("roland-garros") || u.includes("wimbledon")) ? SNAP : null;
-      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
-    }) as unknown as typeof fetch;
+    installFetchStub(); // standard (non-live) network → the view is "complete", so the live gate stays shut
     await mountApp();
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(liveCalls).toBe(0);
+    const polledLive = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(([u]) => String(u).includes("/api/live"));
+    expect(polledLive).toBe(false);
   });
 });
 

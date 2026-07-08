@@ -3,7 +3,9 @@
 // seeds / historical-elo keep importing them from "./names" unchanged.
 export { nameTokens, fullKey, sigKey, pairKey, flashSigKey } from "../src/names.js"; // .js ext: reached by the /api/live Vercel ESM function (see api/live.ts)
 
-// Sackmann tourney_name variants per slam key (compared lowercased; 2024 files say "Us Open").
+// Slam-name variants per slam key (compared lowercased; 2024 Sackmann files say "Us Open"). TWO
+// consumers: the Sackmann CSV join (durations/finals/seeds/elo) AND the live Flashscore feed filter
+// (ingest/flashscore.ts parseLiveFeed) — keep the variants valid for both if you edit this.
 export const TOURNEY: Record<string, string[]> = {
   "australian-open": ["australian open"],
   "roland-garros": ["roland garros", "french open"],

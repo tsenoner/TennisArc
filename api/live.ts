@@ -19,16 +19,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   try {
     const r = await fetch(FEED, { headers: { "x-fsign": X_FSIGN, "user-agent": UA } });
-    if (!r.ok) {
-      res.setHeader("Cache-Control", "public, s-maxage=10");
-      res.status(200).json({ matches: [] });
+    if (r.ok) {
+      const body = await r.text();
+      res.setHeader("Cache-Control", "public, s-maxage=25, stale-while-revalidate=60");
+      res.status(200).json({ matches: parseLiveFeed(body, { tour: tour as Tour, slam }) });
       return;
     }
-    const body = await r.text();
-    res.setHeader("Cache-Control", "public, s-maxage=25, stale-while-revalidate=60");
-    res.status(200).json({ matches: parseLiveFeed(body, { tour: tour as Tour, slam }) });
-  } catch {
-    res.setHeader("Cache-Control", "public, s-maxage=10");
-    res.status(200).json({ matches: [] });
-  }
+  } catch { /* fall through to the empty-overlay fallback */ }
+  // Upstream unavailable (non-200 or network error) → empty overlay + short cache; the client keeps
+  // showing the snapshot's values. One fallback shared by the !ok and thrown paths.
+  res.setHeader("Cache-Control", "public, s-maxage=10");
+  res.status(200).json({ matches: [] });
 }

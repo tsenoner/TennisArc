@@ -1,18 +1,15 @@
 import type { LiveRecord, Match, SetScore, Snapshot, Tour } from "./model";
-import { flashSigKey, sigKey } from "./names";
+import { tryFetch } from "./api";
+import { flashSigKey, sigKey, sortedPairKey } from "./names";
 
 /** Fetch the same-origin live overlay for a view. Null on any failure (dev server has no function,
  *  network error, non-JSON) → the caller simply applies no overlay. Always same-origin (the Vercel
- *  function is co-deployed) — NOT VITE_DATA_BASE_URL, which points at the data branch. */
+ *  function is co-deployed) — NOT VITE_DATA_BASE_URL, which points at the data branch. `no-store`
+ *  because live scores must bypass the browser HTTP cache (the function's own s-maxage coalesces upstream). */
 export async function fetchLive(tour: Tour, slam: string): Promise<LiveRecord[] | null> {
-  try {
-    const res = await fetch(`/api/live?tour=${tour.toLowerCase()}&slam=${encodeURIComponent(slam)}`, { cache: "no-store" });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return Array.isArray(data?.matches) ? (data.matches as LiveRecord[]) : null;
-  } catch {
-    return null;
-  }
+  const url = `/api/live?tour=${tour.toLowerCase()}&slam=${encodeURIComponent(slam)}`;
+  const data = await tryFetch<{ matches: LiveRecord[] }>(url, (d) => Array.isArray(d?.matches), "no-store");
+  return data ? data.matches : null;
 }
 
 /**
@@ -29,7 +26,7 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
     const n2 = m.p2 ? snap.players[m.p2]?.name : undefined;
     if (!n1 || !n2) return null;
     const a = sigKey(n1), b = sigKey(n2);
-    return a && b ? [a, b].sort().join("~") : null;
+    return a && b ? sortedPairKey(a, b) : null;
   };
   const index = new Map<string, Match | null>(); // null = ambiguous
   for (const m of Object.values(snap.matches)) {
@@ -43,7 +40,7 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
     if (r.stage !== 2 && r.stage !== 3) continue;
     const hk = flashSigKey(r.home), ak = flashSigKey(r.away);
     if (!hk || !ak) continue;
-    const m = index.get([hk, ak].sort().join("~"));
+    const m = index.get(sortedPairKey(hk, ak));
     if (!m) continue; // unmatched or ambiguous
 
     const p1name = m.p1 ? snap.players[m.p1]?.name : undefined;
