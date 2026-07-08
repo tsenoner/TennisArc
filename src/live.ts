@@ -61,6 +61,16 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
   return out;
 }
 
+/** Order-insensitive equality of two live-patch maps. Flashscore can reorder matches between polls
+ *  with no score change; JSON.stringify would read that as different and trigger a redraw that wipes
+ *  panel scroll / focus. Compare by sorted match id + per-match value (overlayLive builds each
+ *  Partial<Match> with a fixed key order, so JSON.stringify of a value is stable for its content). */
+export function samePatch(a: Record<string, Partial<Match>>, b: Record<string, Partial<Match>>): boolean {
+  const ka = Object.keys(a).sort(), kb = Object.keys(b).sort();
+  if (ka.length !== kb.length) return false;
+  return ka.every((k, i) => k === kb[i] && JSON.stringify(a[k]) === JSON.stringify(b[k]));
+}
+
 /** A new snapshot with `patch` merged over its matches; the original is never mutated. Returns the
  *  same object (no clone) when there is nothing to apply. */
 export function applyLivePatch(snap: Snapshot, patch: Record<string, Partial<Match>> | undefined): Snapshot {

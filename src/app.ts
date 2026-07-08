@@ -13,7 +13,7 @@ import { pickDefaultSlam, availableYears, slamsForYear, statusFor } from "./slam
 import type { Match, Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
-import { fetchLive, overlayLive, applyLivePatch } from "./live";
+import { fetchLive, overlayLive, applyLivePatch, samePatch } from "./live";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
@@ -261,7 +261,10 @@ export function createApp(root: HTMLElement): () => void {
     hlNodes = []; hlCurrent = null; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
     const k0 = snapKey(state.tour, state.year, state.slam);
     const rawSnap = state.year ? state.snapshots[k0] : undefined;
-    const snap = rawSnap ? applyLivePatch(rawSnap, state.livePatch[k0]) : undefined;
+    // Overlay the live Flashscore patch ONLY while this view is live: livePatch is never cleared, so
+    // applying it to a completed slam (or after a refresh / a later revisit) would let a stale live
+    // score win over the authoritative snapshot for the rest of the session.
+    const snap = rawSnap ? (isLiveView() ? applyLivePatch(rawSnap, state.livePatch[k0]) : rawSnap) : undefined;
     if (!snap) {
       if (document.title !== "TennisArc") document.title = "TennisArc"; // don't keep naming a tournament the screen no longer shows
       root.innerHTML =
@@ -512,7 +515,7 @@ export function createApp(root: HTMLElement): () => void {
     if (!records) return;
     if (snapKey(state.tour, state.year, state.slam) !== k) return; // view changed mid-fetch
     const patch = overlayLive(raw, records);
-    if (JSON.stringify(state.livePatch[k] ?? {}) === JSON.stringify(patch)) return;
+    if (samePatch(state.livePatch[k] ?? {}, patch)) return;
     state.livePatch[k] = patch;
     draw();
   };

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { overlayLive, applyLivePatch, fetchLive } from "./live";
+import { overlayLive, applyLivePatch, fetchLive, samePatch } from "./live";
 import type { LiveRecord, Match, Player, Snapshot } from "./model";
 
 const player = (id: string, name: string): Player => ({
@@ -69,6 +69,20 @@ describe("applyLivePatch", () => {
     const s = snap("ATP", [player("a", "X Y")], []);
     expect(applyLivePatch(s, undefined)).toBe(s);
     expect(applyLivePatch(s, {})).toBe(s);
+  });
+});
+
+describe("samePatch", () => {
+  it("is true regardless of match-id insertion order (a reordered feed is not a change)", () => {
+    const a: Record<string, Partial<Match>> = { "0-0": { status: "live" }, "0-1": { status: "finished" } };
+    const b: Record<string, Partial<Match>> = { "0-1": { status: "finished" }, "0-0": { status: "live" } };
+    expect(samePatch(a, b)).toBe(true);
+  });
+  it("is false when a match's value differs", () => {
+    expect(samePatch({ "0-0": { status: "live" } }, { "0-0": { status: "finished" } })).toBe(false);
+  });
+  it("is false when the key sets differ", () => {
+    expect(samePatch({ "0-0": {} }, { "0-0": {}, "0-1": {} })).toBe(false);
   });
 });
 
