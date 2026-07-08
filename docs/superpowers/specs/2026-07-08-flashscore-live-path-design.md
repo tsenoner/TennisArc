@@ -1,7 +1,14 @@
 # Flashscore live-score path — design
 
 **Date:** 2026-07-08
-**Status:** approved (design); implementation pending
+**Status:** implemented (branch feat/flashscore-live-path)
+
+> **Post-design finding (deploy verification, build step 1 / Task 7):** because `package.json` is
+> `"type": "module"`, Vercel transpiles `api/live.ts` to ESM without bundling, so relative imports
+> in its chain need explicit `.js` extensions (Node ESM requirement) — omitted extensions crash
+> cold start with `ERR_MODULE_NOT_FOUND`. Not anticipated in the design below; fixed in the code
+> with inline comments.
+
 **Tracks:** P2 (roadmap), GitHub #48 (Flashscore evaluation). Related: #41 (Sackmann→TML),
 memory `flashscore-as-supplementary-source`, `sofascore-anti-bot-fingerprint`.
 
