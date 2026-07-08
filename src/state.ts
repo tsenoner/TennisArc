@@ -442,6 +442,11 @@ export function seedProgress(s: Snapshot, sort: SeedSort = "seed"): SeedProgress
 export interface NationPlayer { id: string; name: string; roundReached: number; alive: boolean; }
 export interface NationRow { country: string; entrants: number; stillIn: number; players: NationPlayer[]; }
 
+/** Display bucket for a player's nation: blank/unknown countries group under "—". ONE policy
+ *  shared by the panel rows (countryBreakdown), the wheel spotlight (colorScale) and the
+ *  Country-lens arc-tap grammar — so selecting the "—" row lights its players like any nation. */
+export const nationOf = (country: string): string => country || "—";
+
 /** Per-country breakdown: entrants, players still in, and each player's furthest round. */
 export function countryBreakdown(s: Snapshot): NationRow[] {
   const out = eliminatedSet(s);
@@ -469,7 +474,7 @@ export function countryBreakdown(s: Snapshot): NationRow[] {
   const byCountry = new Map<string, NationRow>();
   for (const p of Object.values(s.players)) {
     if (!isEntrant(p)) continue; // skip synthetic future-slot placeholders (not draw entrants)
-    const c = p.country || "—";
+    const c = nationOf(p.country);
     let row = byCountry.get(c);
     if (!row) { row = { country: c, entrants: 0, stillIn: 0, players: [] }; byCountry.set(c, row); }
     const alive = !out.has(p.id);
@@ -622,10 +627,11 @@ export function matchInsight(
 
   const e1 = p1.elo, e2 = p2.elo; // locals so the null check narrows through the fav/oth indirection
   if (e1 != null && e2 != null) {
-    const favSide = e1 >= e2 ? "p1" : "p2"; // the ONE favourite decision — name and numbers derive from it
-    const fav = favSide === "p1" ? p1 : p2;
-    const favElo = favSide === "p1" ? e1 : e2;
-    const othElo = favSide === "p1" ? e2 : e1;
+    // ONE favourite decision — side, name and numbers all destructure from the same branch,
+    // so a future tiebreak change can't desync the label from the pct/diff it carries.
+    const [favSide, fav, favElo, othElo] = e1 >= e2
+      ? (["p1", p1, e1, e2] as const)
+      : (["p2", p2, e2, e1] as const);
     const pct = Math.round(winProbability(favElo, othElo) * 100);
     const diff = Math.round(favElo - othElo);
     eloLine = `${surface}-ELO favoured ${fav.name} ${pct}% (+${diff})`;

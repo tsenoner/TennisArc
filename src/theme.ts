@@ -11,6 +11,9 @@ export function nextTheme(t: Theme): Theme {
 
 // Non-browser environments (tests) and legacy engines have no matchMedia — treat as "no
 // preference", which falls through to dark below.
+// NOTE: index.html carries a tiny inline pre-paint mirror of this policy (same key, same
+// precedence, same theme-color hexes) so the first frame is already themed — change one,
+// change both.
 const systemPrefersLight = (): boolean =>
   typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches;
 

@@ -43,6 +43,10 @@ export default defineConfig(({ mode }) => {
         name: "TennisArc",
         short_name: "TennisArc",
         description: "Live radial bracket for Grand Slam tennis (ATP + WTA).",
+        // A manifest is static — it can't follow prefers-color-scheme or the in-app toggle, so
+        // installed-PWA chrome/splash stays the dark brand default even for light-theme users
+        // (the in-page theme-color meta DOES follow, via index.html's pre-paint script +
+        // applyTheme). Revisit when the static manifest lands in offline-removal phase 2.
         theme_color: "#0d1014",
         background_color: "#0d1014",
         display: "standalone",

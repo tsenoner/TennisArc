@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -134,7 +134,7 @@ export function createApp(root: HTMLElement): () => void {
   }, { signal });
 
   // Updated each draw so the (frequent) hover handler can build a readout without a full re-render.
-  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; isMatch: boolean; nation: NationRow | null } | undefined;
+  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; isMatch: boolean; nation: NationRow | null; nationKey: string | null } | undefined;
 
   const surname = (name: string) => name.split(" ").slice(-1)[0] || name;
 
@@ -190,7 +190,7 @@ export function createApp(root: HTMLElement): () => void {
     // A selected nation owns the idle card (#7): hover previews players as usual, but
     // leaving restores the nation summary rather than the default player card.
     if (!playerId && ctx.nation) {
-      if (roCurrent === nationKey(ctx.nation)) return;
+      if (roCurrent === ctx.nationKey) return; // pre-built key: no allocation on the 60-120Hz move path
       const el = root.querySelector(".readout.ro-float");
       if (!el) return;
       el.outerHTML = nationCard(ctx.nation);
@@ -259,7 +259,7 @@ export function createApp(root: HTMLElement): () => void {
     hlNodes = []; hlCurrent = null; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
     const snap = state.year ? state.snapshots[snapKey(state.tour, state.year, state.slam)] : undefined;
     if (!snap) {
-      document.title = "TennisArc"; // don't let the tab keep naming a tournament the screen no longer shows
+      if (document.title !== "TennisArc") document.title = "TennisArc"; // don't keep naming a tournament the screen no longer shows
       root.innerHTML =
         renderControls(controlsOpts()) +
         (state.loadFailed
@@ -377,7 +377,7 @@ export function createApp(root: HTMLElement): () => void {
     const nation = !pinned && state.selectedCountry
       ? nations?.find((r) => r.country === state.selectedCountry) ?? null
       : null;
-    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, isMatch, nation };
+    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, isMatch, nation, nationKey: nation ? nationKey(nation) : null };
     // The float card — the nation summary when a nation owns it, else the player card for
     // defaultId — with roCurrent/roIdle seeded to match, so updateReadout's memo agrees
     // with the markup rendered below.
@@ -425,7 +425,8 @@ export function createApp(root: HTMLElement): () => void {
       crumbs = renderCrumbs(trail, sectionTitle(snap, tree, state.focusId));
     }
 
-    document.title = `${snap.tournament.name} — TennisArc`;
+    const title = `${snap.tournament.name} — TennisArc`;
+    if (document.title !== title) document.title = title; // draw() runs per state change — skip the redundant DOM write
     // .chart carries tabindex="-1": a programmatic landing spot for keyboard focus after the
     // strip's ✕ removes the element that held it (never tab-reachable, no visible ring).
     // The sr-only quarter buttons are the keyboard/SR twins of the SVG corner handles —
@@ -762,7 +763,8 @@ export function createApp(root: HTMLElement): () => void {
         // On the Country lens an arc tap selects that player's nation (no arc pin here) — touch
         // users still pin a single player's path by tapping their row in the expanded nation list.
         const s = state.snapshots[snapKey(state.tour, state.year, state.slam)];
-        const c = s?.players[el.dataset.occupant ?? ""]?.country;
+        const p = s?.players[el.dataset.occupant ?? ""];
+        const c = p ? nationOf(p.country) : undefined; // blank-country players toggle their "—" row
         if (c) state.selectedCountry = state.selectedCountry === c ? undefined : c;
       } else if (id && id === state.selectedNodeId) {
         // Tap-again-to-zoom: re-tapping the already-selected arc focuses its own section.
