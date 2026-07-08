@@ -3,9 +3,9 @@ import { type Snapshot, type SlamIndex, type Tour, snapshotPath } from "./model"
 const BASE = (import.meta as any).env?.VITE_DATA_BASE_URL as string | undefined;
 const trim = (u: string): string => u.replace(/\/+$/, "");
 
-async function tryFetch<T>(url: string, valid: (x: any) => boolean): Promise<T | null> {
+export async function tryFetch<T>(url: string, valid: (x: any) => boolean, cache: RequestCache = "no-cache"): Promise<T | null> {
   try {
-    const res = await fetch(url, { cache: "no-cache" });
+    const res = await fetch(url, { cache });
     if (!res.ok) return null;
     const data = await res.json();
     return valid(data) ? (data as T) : null;

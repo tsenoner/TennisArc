@@ -120,6 +120,31 @@ kickstarted. The recovery run published live Wimbledon scores (ATP 25 / WTA 14 m
 from 0) and force-pushed the `data` branch. Total downtime would have been unbounded without the
 guard.
 
+## Live scores (Flashscore) — not part of this chain
+
+Score/status freshness for the in-play slam does **not** go through the Mac refresh chain above.
+A stateless Vercel Node function, `api/live.ts`, fetches Flashscore's global livescore feed
+(`https://global.flashscore.ninja/2/x/feed/f_2_0_3_en_1`, header `x-fsign: SW9D1eZo`), parses it
+(`ingest/flashscore.ts` → `parseLiveFeed`) down to the requested slam's main-draw singles, and
+returns `{ matches }` with `Cache-Control: s-maxage=25, stale-while-revalidate=60`. The client
+(`src/live.ts` + `src/app.ts`) polls `/api/live` every ~30s while viewing a LIVE slam, joins
+records to the snapshot by surname-pair (`sigKey`/`flashSigKey`), and overlays live/finished
+status + score + winner onto the immutable snapshot at render time — the snapshot itself is never
+mutated.
+
+That means the Mac (and everything above in this doc) supplies **structure only** — draw shape,
+new matches, durations, seeds/ELO — not live scores. If the Mac's refresh is wedged (see the
+failure mode above), live scores keep updating on their own ~25-30s cadence unaffected; only
+structural changes (a new round's matches appearing, final durations) wait for the next healthy
+Mac cycle.
+
+> **Gotcha — ESM needs explicit `.js` extensions.** `package.json` is `"type": "module"`, so
+> Vercel transpiles `api/live.ts` to ESM **without bundling** — Node's ESM loader requires explicit
+> `.js` extensions on relative imports (it won't infer `.ts` source resolves to `.js` output).
+> Omitting one crashes the function at cold start with `ERR_MODULE_NOT_FOUND`, invisible in local
+> dev/build and only surfacing on Vercel. Already fixed (inline comments mark the affected
+> imports) — keep it in mind when editing `api/live.ts`'s import chain.
+
 ## Does it show on the site?
 
 Publishing to the `data` branch only reaches https://tennisarc.vercel.app if the Vercel env var
