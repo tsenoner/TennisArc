@@ -1,7 +1,7 @@
 // Shared points MECHANICS — the table-independent rules common to the generalized engine (engine.ts) and the
 // hardcoded-table cross-check (validate.ts). Both import these so the LOGIC lives once; each file keeps its own
 // point TABLES + tier-classification ruleset (engine loads them from the spec docs; validate hardcodes 2019/2023
-// inline as an independent transcription cross-check). round-extraction.ts also imports isQ/norm from here.
+// inline as an independent transcription cross-check).
 //
 // NOT shared here, deliberately: the per-tour tier classifier. engine's atpCls/wtaCls (generalized, every era,
 // year-guarded specials, RoundMap tables resolved by draw) and validate's atpTier/wtaTier (Era-A only, flat

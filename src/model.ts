@@ -40,7 +40,6 @@ export interface Player {
   seed: number | null;
   entry: EntryType;
   ranking: number | null;
-  ageYears: number | null;
   sofaSlug: string | null;
   elo: PlayerElo | null;
   birthdate: string | null;   // ISO "YYYY-MM-DD" (from Jeff Sackmann player files)

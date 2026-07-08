@@ -163,8 +163,8 @@ The overhaul (write-once labels, centre readout, 3 lens panels, match insight, m
 
 - [#5](https://github.com/tsenoner/TennisArc/issues/5) — a11y: keyboard + screen-reader access for the bracket
 - [#6](https://github.com/tsenoner/TennisArc/issues/6) — bundle SVG flags (Windows emoji-flag gap)
-- [#7](https://github.com/tsenoner/TennisArc/issues/7) — country-lens nation summary in the centre readout
+- [#7](https://github.com/tsenoner/TennisArc/issues/7) — country-lens nation summary in the centre readout — **done, PR #55**
 - [#8](https://github.com/tsenoner/TennisArc/issues/8) — guard match insight on projected/TBD arcs
-- [#9](https://github.com/tsenoner/TennisArc/issues/9) — retire `Player.ageYears`
+- [#9](https://github.com/tsenoner/TennisArc/issues/9) — retire `Player.ageYears` — **done, PR #55**
 - [#10](https://github.com/tsenoner/TennisArc/issues/10) — `slamStatus` "upcoming"
-- [#11](https://github.com/tsenoner/TennisArc/issues/11) — small cleanups (deep-link URL escaping, `winProbability` assertions)
+- [#11](https://github.com/tsenoner/TennisArc/issues/11) — small cleanups (deep-link URL escaping, `winProbability` assertions) — **done, PR #55**

@@ -48,7 +48,6 @@ note ships in `points-data.json`.
 |---|---|
 | `engine.ts` | **generalized** points engine — all seasons, spec-driven tables/tiers, `--emit`/`--check`/per-player |
 | `validate.ts` | original hardcoded-2019/2023 validator (kept; the known-answer baseline) |
-| `round-extraction.ts` | the table-independent round-reached core (mechanics check) |
 | `ground-truth.json` | published year-end top-30 — ATP 2009-2025 + WTA 2015-2025 (28 seasons); `_meta.provenance` flags source |
 | `POINTS-TABLES.md` | era-correct per-round point tables (both tours), counting rules, ground truth |
 | `TIER-LISTS.md` | CSV-verified per-year ATP-500 / WTA-tier name lists, qualifying tables, diagnosed residuals |

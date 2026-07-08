@@ -192,6 +192,16 @@ describe("colorScale country lens", () => {
     expect(sel(arc(ids[0]))).not.toBe(sel(arc(ids[1]))); // ESP highlighted, FRA muted
     expect(none(arc(ids[0]))).toBe(none(arc(ids[1])));   // no selection → both muted (same colour)
   });
+
+  it("groups blank-country players under '—' so selecting that panel row lights them", () => {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 1 });
+    const ids = Object.keys(s.players);
+    s.players[ids[0]] = { ...s.players[ids[0]], country: "" }; // unenriched entrant
+    s.players[ids[1]] = { ...s.players[ids[1]], country: "FRA" };
+    const sel = colorScale("country", s, "—");
+    expect(sel(arc(ids[0]))).not.toBe(sel(arc(ids[1]))); // "—" bucket highlighted, FRA muted
+    expect(sel(arc(ids[0]))).toBe(colorScale("country", s, "FRA")(arc(ids[1]))); // same highlight colour
+  });
 });
 
 describe("no projection wash (seed / country lenses)", () => {

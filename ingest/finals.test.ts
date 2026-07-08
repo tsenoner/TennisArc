@@ -3,7 +3,7 @@ import { parseSackmannScore, parseFinalRow, applyFinal, type FinalRow } from "./
 import type { Match, Player } from "../src/model";
 
 const player = (id: string, name: string): Player => ({
-  id, name, country: "", seed: null, entry: null, ranking: null, ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+  id, name, country: "", seed: null, entry: null, ranking: null, sofaSlug: null, elo: null, birthdate: null,
 });
 const finalMatch = (p1: string, p2: string): Match => ({
   id: "6-0", roundIndex: 6, slot: 0, nextMatchId: null, p1, p2,

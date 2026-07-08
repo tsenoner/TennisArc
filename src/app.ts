@@ -1,8 +1,8 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
-  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderCenterId,
+  renderSunburst, renderControls, renderLegend, renderLeaderboard, renderReadout, renderNationReadout, renderCenterId,
   renderCenterSection, renderCrumbs, renderQuarterFocusButtons,
   renderSeedPanel, renderCountryPanel, renderMatchStrip, renderMatchDetail, roundAbbrev, renderPanelFab, formatScheduledArc, startOfLocalDay, type ArcSched, type ReadoutInfo,
 } from "./render";
@@ -134,7 +134,7 @@ export function createApp(root: HTMLElement): () => void {
   }, { signal });
 
   // Updated each draw so the (frequent) hover handler can build a readout without a full re-render.
-  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; isMatch: boolean } | undefined;
+  let ctx: { snap: Snapshot; time: Map<string, PlayerTime>; defaultId: string | null; champId: string | null; champProjected: boolean; pinned: string | null; isMatch: boolean; nation: NationRow | null; nationKey: string | null } | undefined;
 
   const surname = (name: string) => name.split(" ").slice(-1)[0] || name;
 
@@ -171,7 +171,14 @@ export function createApp(root: HTMLElement): () => void {
   // "has-match" hides the readout while a match strip names both players (CSS); it lives
   // HERE, not in draw(), so updateReadout's outerHTML swaps re-emit it on every rewrite.
   const roCls = (idle: boolean) => "ro-float" + (idle ? " ro-idle" : "") + (ctx?.isMatch ? " has-match" : "");
-  let roCurrent: string | null = null; // who the readout currently shows — skips the 60-120Hz pointermove outerHTML churn
+  const nationKey = (n: NationRow) => `nation:${n.country}`; // roCurrent memo key while a nation owns the card
+  /** Render the nation card AND seed the memo to match — the ONE place the pair stays in
+   *  lockstep, shared by draw()'s float slot and updateReadout's hover-leave restore. */
+  const nationCard = (n: NationRow): string => {
+    roCurrent = nationKey(n); roIdle = false;
+    return renderNationReadout(n, roCls(false));
+  };
+  let roCurrent: string | null = null; // what the readout currently shows (a player id, or a nationKey) — skips the 60-120Hz pointermove outerHTML churn
   let roIdle = false;                  // …and whether it is blanked (same skip must see idle flips)
   const updateReadout = (playerId: string | null) => {
     if (!ctx) return;
@@ -180,6 +187,15 @@ export function createApp(root: HTMLElement): () => void {
     // drag-to-explore fires a stream of pointermoves); highlightPath still runs separately,
     // so the lit path keeps following the hover.
     if (ctx.isMatch) return;
+    // A selected nation owns the idle card (#7): hover previews players as usual, but
+    // leaving restores the nation summary rather than the default player card.
+    if (!playerId && ctx.nation) {
+      if (roCurrent === ctx.nationKey) return; // pre-built key: no allocation on the 60-120Hz move path
+      const el = root.querySelector(".readout.ro-float");
+      if (!el) return;
+      el.outerHTML = nationCard(ctx.nation);
+      return;
+    }
     const resolved = playerId ?? ctx.defaultId;
     const idle = !playerId && !ctx.pinned;
     if (resolved === roCurrent && idle === roIdle) return;
@@ -243,6 +259,7 @@ export function createApp(root: HTMLElement): () => void {
     hlNodes = []; hlCurrent = null; // root.innerHTML is about to be replaced — drop refs to the now-detached arc nodes
     const snap = state.year ? state.snapshots[snapKey(state.tour, state.year, state.slam)] : undefined;
     if (!snap) {
+      if (document.title !== "TennisArc") document.title = "TennisArc"; // don't keep naming a tournament the screen no longer shows
       root.innerHTML =
         renderControls(controlsOpts()) +
         (state.loadFailed
@@ -310,8 +327,10 @@ export function createApp(root: HTMLElement): () => void {
           };
         });
     const isMatch = !!(state.selectedMatchId && snap.matches[state.selectedMatchId]);
+    // Computed once per draw: the Country lens panel AND the nation readout below share it.
+    const nations = state.colorDim === "country" ? countryBreakdown(snap) : null;
     const lens = state.colorDim === "seed" ? renderSeedPanel(seedProgress(snap, state.seedSort), snap.rounds)
-      : state.colorDim === "country" ? renderCountryPanel(countryBreakdown(snap), state.selectedCountry, snap.rounds)
+      : nations ? renderCountryPanel(nations, state.selectedCountry, snap.rounds)
       : renderLeaderboard(timeLeaderboard(snap, time));
     // The lens panel doubles as a mobile bottom drawer; `.open` (state.panelOpen) slides it in
     // at peek height, `.expanded` makes it tall. The scrim dims the bracket only when expanded —
@@ -354,11 +373,24 @@ export function createApp(root: HTMLElement): () => void {
     // a pinned player owns the readout (hover still previews others; leave restores the pin)
     const pinned = state.pinnedId && snap.players[state.pinnedId] ? state.pinnedId : null;
     const defaultId = pinned ?? focusOcc ?? tree.occupant ?? null;
-    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, isMatch };
-    // idle = no pin (hover arrives later via updateReadout); the focused occupant is named
-    // by the restored centre pill, so focus alone no longer wakes the card.
-    const floatIdle = !pinned;
-    roCurrent = defaultId; roIdle = floatIdle; // the markup below renders the float readout for defaultId
+    // a selected nation on the Country lens owns the float card (#7) — unless a pin outranks it
+    const nation = !pinned && state.selectedCountry
+      ? nations?.find((r) => r.country === state.selectedCountry) ?? null
+      : null;
+    ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, isMatch, nation, nationKey: nation ? nationKey(nation) : null };
+    // The float card — the nation summary when a nation owns it, else the player card for
+    // defaultId — with roCurrent/roIdle seeded to match, so updateReadout's memo agrees
+    // with the markup rendered below.
+    let roFloat: string;
+    if (nation) {
+      roFloat = nationCard(nation);
+    } else {
+      // idle = no pin (hover arrives later via updateReadout); the focused occupant is named
+      // by the restored centre pill, so focus alone no longer wakes the card.
+      const floatIdle = !pinned;
+      roCurrent = defaultId; roIdle = floatIdle;
+      roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
+    }
 
     // The centre pill shows FACTS only: a DECIDED result (flag + surname) anchors every lens —
     // a projection is a guess and never appears here (removed 2026-07; it used to show on Seed).
@@ -379,7 +411,6 @@ export function createApp(root: HTMLElement): () => void {
     }
     // While the final is undecided its order-of-play tag is drawn INSIDE the svg by
     // renderSunburst (the root disc's sched label), so it scales with the chart.
-    const roFloat = renderReadout(buildReadout(snap, time, defaultId, tree.occupant, tree.projected), roCls(floatIdle));
 
     // Focus crumbs — the zoom's primary exit on every input: "‹ Full draw", a tappable chip
     // per ancestor section, then the current section's name. In-flow at the top of the wheel
@@ -394,6 +425,8 @@ export function createApp(root: HTMLElement): () => void {
       crumbs = renderCrumbs(trail, sectionTitle(snap, tree, state.focusId));
     }
 
+    const title = `${snap.tournament.name} — TennisArc`;
+    if (document.title !== title) document.title = title; // draw() runs per state change — skip the redundant DOM write
     // .chart carries tabindex="-1": a programmatic landing spot for keyboard focus after the
     // strip's ✕ removes the element that held it (never tab-reachable, no visible ring).
     // The sr-only quarter buttons are the keyboard/SR twins of the SVG corner handles —
@@ -730,7 +763,8 @@ export function createApp(root: HTMLElement): () => void {
         // On the Country lens an arc tap selects that player's nation (no arc pin here) — touch
         // users still pin a single player's path by tapping their row in the expanded nation list.
         const s = state.snapshots[snapKey(state.tour, state.year, state.slam)];
-        const c = s?.players[el.dataset.occupant ?? ""]?.country;
+        const p = s?.players[el.dataset.occupant ?? ""];
+        const c = p ? nationOf(p.country) : undefined; // blank-country players toggle their "—" row
         if (c) state.selectedCountry = state.selectedCountry === c ? undefined : c;
       } else if (id && id === state.selectedNodeId) {
         // Tap-again-to-zoom: re-tapping the already-selected arc focuses its own section.

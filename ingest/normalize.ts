@@ -90,7 +90,7 @@ export function normalizeCuptrees(cup: SofaCuptrees, meta: TournamentMeta): Snap
           const { seed, entry } = parseSeed(p.teamSeed);
           players[pid] = {
             id: pid, name: p.team.name, country: "", seed, entry,
-            ranking: p.team.ranking ?? null, ageYears: null, sofaSlug: p.team.slug ?? null,
+            ranking: p.team.ranking ?? null, sofaSlug: p.team.slug ?? null,
             elo: null, birthdate: null,
           };
         }

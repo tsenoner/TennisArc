@@ -4,6 +4,26 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0d1014" />
+    <script>
+      // Pre-paint mirror of src/theme.ts (loadTheme + applyTheme): stored choice wins, else the
+      // system preference. Without this a light-preference first visit paints the dark shell
+      // until the bundle executes. Keep the storage key, precedence and hex values in sync with
+      // theme.ts — this must stay a tiny inline script so it runs before first paint.
+      (() => {
+        let t = null;
+        try { t = localStorage.getItem("tennisarc-theme"); } catch {}
+        if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        document.documentElement.dataset.theme = t;
+        document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "light" ? "#f6f4ef" : "#0d1014");
+      })();
+    </script>
+    <meta name="description" content="Live Grand Slam draws as a radial bracket — every ring a round, every arc a player. Trace paths, Elo win probabilities, upsets and time on court." />
+    <meta property="og:title" content="TennisArc" />
+    <meta property="og:description" content="Live Grand Slam draws as a radial bracket — every ring a round, every arc a player. Trace paths, Elo win probabilities, upsets and time on court." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://tennisarc.vercel.app/" />
+    <meta property="og:image" content="https://tennisarc.vercel.app/pwa-512x512.png" />
+    <meta name="twitter:card" content="summary" />
     <!-- a preconnect for the live data host (VITE_DATA_BASE_URL) is injected at build time; see vite.config.ts -->
     <title>TennisArc</title>
   </head>

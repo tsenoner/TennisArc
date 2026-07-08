@@ -129,6 +129,11 @@ describe("click handler — pin vs nested action precedence", () => {
     expect(status.textContent).toContain("Tennis Abstract");
   });
 
+  it("names the current tournament in document.title", async () => {
+    await mountApp();
+    expect(document.title).toBe(`${SNAP.tournament.name} — TennisArc`);
+  });
+
   it("lets a [data-action] nested inside a pin row win over pinning", async () => {
     const root = await mountApp();
     expect(document.documentElement.dataset.theme).toBe("dark");
@@ -384,6 +389,20 @@ describe("country lens — nation select vs player pin", () => {
     click(root.querySelector<HTMLElement>(".country-panel .ct-pl[data-hl-path][data-occupant]")!);
     expect(pinnedRows(root).length).toBeGreaterThan(0);
     expect(litArcs(root).length).toBeGreaterThan(0);
+  });
+
+  it("a selected nation owns the float readout with its summary card (#7)", async () => {
+    const root = await mountApp();
+    setLens(root, "country");
+
+    click(root.querySelector<HTMLElement>(".country-panel .ct-row")!);
+    const card = root.querySelector(".readout.ro-float")!;
+    expect(card.classList.contains("ro-nation")).toBe(true);
+    expect(card.textContent).toMatch(/\d+ of \d+ still in|all \d+ out/);
+
+    // deselecting the nation hands the slot back to the player card
+    click(root.querySelector<HTMLElement>(".country-panel .ct-row.on")!);
+    expect(root.querySelector(".readout.ro-float.ro-nation")).toBeNull();
   });
 });
 

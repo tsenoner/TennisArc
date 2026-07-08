@@ -21,6 +21,31 @@ final, and each ring outward is an earlier round. It covers both the men's (**AT
 women's (**WTA**) tours. Tap any player to trace their path, open the match, and see the
 Elo head-to-head.
 
+## Reading the wheel
+
+The wheel is the whole draw at once. Each **ring** is a round — the outermost ring is
+the first round, and rounds step inward until the **centre disc**, which is the final
+(the champion's name sits there once the title is decided; before that it shows the
+final's scheduled slot).
+
+Each **arc** is one player in one round: a player who keeps winning reappears on every
+ring further in, so a deep run reads as a wedge narrowing toward the centre. Hovering
+or touch-dragging over an arc lights up that player's whole path, and tapping it opens
+the match they play in that round.
+
+Colour comes from the active **lens** (the header toggle):
+
+- **Time** — how long each player has spent on court so far.
+- **Seed** — seeding bands, so a pale arc deep in the draw is an unseeded run. Upsets
+  get a ⚡ in this lens's side list — the next sections explain how Elo defines one.
+- **Country** — one colour per nation. On this lens, tapping an arc spotlights that
+  player's whole nation (so does picking it in the side panel), and the centre card
+  sums the nation up; open its panel row to reach individual players.
+
+Around the wheel: the four **corner names** are the drawn top seed of each quarter
+(dimmed once they're out), a **pulsing arc** is a match in play, and a small **clock
+tag** on an arc is that match's scheduled start.
+
 ## Elo ratings
 
 **Elo** is a single number for a player's strength. Win and it rises, lose and it falls —

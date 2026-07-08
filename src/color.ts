@@ -2,7 +2,7 @@ import { scaleLinear } from "d3-scale";
 import { interpolateRgbBasis } from "d3-interpolate";
 import type { Snapshot } from "./model";
 import type { Theme } from "./theme";
-import { cumulativeOnCourt, eloRank, type SeedSort } from "./state";
+import { cumulativeOnCourt, eloRank, nationOf, type SeedSort } from "./state";
 
 export type ColorDim = "time" | "seed" | "country";
 export const COLOR_DIMS: ColorDim[] = ["time", "seed", "country"];
@@ -91,8 +91,9 @@ export function colorScale(dim: ColorDim, s: Snapshot, selectedCountry?: string,
   }
   // country — neutral wheel; the selected nation lights up (flags carry identity)
   return withPending((a) => {
-    const c = s.players[a.occupant!]?.country;
-    if (!c) return NEUTRAL[theme];
+    const p = s.players[a.occupant!];
+    if (!p) return NEUTRAL[theme];
+    const c = nationOf(p.country); // blank countries group under "—", matching their panel row
     return selectedCountry && c === selectedCountry ? COUNTRY_HL[theme] : COUNTRY_MUTED[theme];
   });
 }

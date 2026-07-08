@@ -9,8 +9,21 @@ export function nextTheme(t: Theme): Theme {
   return t === "dark" ? "light" : "dark";
 }
 
-export function loadTheme(storage: Getter = localStorage): Theme {
-  return storage.getItem(KEY) === "light" ? "light" : "dark"; // default dark
+// Non-browser environments (tests) and legacy engines have no matchMedia — treat as "no
+// preference", which falls through to dark below.
+// NOTE: index.html carries a tiny inline pre-paint mirror of this policy (same key, same
+// precedence, same theme-color hexes) so the first frame is already themed — change one,
+// change both.
+const systemPrefersLight = (): boolean =>
+  typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches;
+
+export function loadTheme(
+  storage: Getter = localStorage,
+  prefersLight: () => boolean = systemPrefersLight,
+): Theme {
+  const stored = storage.getItem(KEY);
+  if (stored === "light" || stored === "dark") return stored; // an explicit choice always wins
+  return prefersLight() ? "light" : "dark"; // first visit: follow the system, default dark
 }
 
 export function saveTheme(t: Theme, storage: Setter = localStorage): void {

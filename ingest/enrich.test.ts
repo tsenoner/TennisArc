@@ -10,8 +10,8 @@ const baseMatch = (over: Partial<Match> = {}): Match => ({
   durationSec: null, durationProvisional: false, sofaEventId: 16214963, sofaCustomId: null, stats: null, ...over,
 });
 const players = (): Record<string, Player> => ({
-  100: { id: "100", name: "A", country: "", seed: 1, entry: null, ranking: 1, ageYears: null, sofaSlug: "a", elo: null, birthdate: null },
-  101: { id: "101", name: "B", country: "", seed: null, entry: "WC", ranking: 80, ageYears: null, sofaSlug: "b", elo: null, birthdate: null },
+  100: { id: "100", name: "A", country: "", seed: 1, entry: null, ranking: 1, sofaSlug: "a", elo: null, birthdate: null },
+  101: { id: "101", name: "B", country: "", seed: null, entry: "WC", ranking: 80, sofaSlug: "b", elo: null, birthdate: null },
 });
 
 describe("enrichMatch", () => {
@@ -193,7 +193,7 @@ describe("enrichMatch", () => {
 describe("fillMissingCountries", () => {
   const player = (id: string, country: string): Player => ({
     id, name: id, country, seed: null, entry: null, ranking: null,
-    ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+    sofaSlug: null, elo: null, birthdate: null,
   });
 
   it("looks up only blank-country players (not-yet-played entrants) and fills them", async () => {
@@ -300,7 +300,7 @@ describe("carryForwardSuspended", () => {
 describe("carryForwardCountries", () => {
   const player = (id: string, country: string): Player => ({
     id, name: id, country, seed: null, entry: null, ranking: null,
-    ageYears: null, sofaSlug: null, elo: null, birthdate: null,
+    sofaSlug: null, elo: null, birthdate: null,
   });
 
   it("reuses a prior country for a still-blank entrant, leaving enriched ones untouched", () => {

@@ -15,11 +15,22 @@ describe("theme", () => {
     expect(nextTheme("light")).toBe("dark");
   });
 
-  it("defaults to dark and round-trips through storage", () => {
+  it("defaults to dark (absent a system light preference) and round-trips through storage", () => {
     expect(loadTheme(fakeStorage())).toBe("dark");
     const s = fakeStorage();
     saveTheme("light", s);
     expect(loadTheme(s)).toBe("light");
+  });
+
+  it("first visit follows the system preference; a stored choice always wins", () => {
+    expect(loadTheme(fakeStorage(), () => true)).toBe("light");
+    expect(loadTheme(fakeStorage(), () => false)).toBe("dark");
+    const dark = fakeStorage();
+    saveTheme("dark", dark);
+    expect(loadTheme(dark, () => true)).toBe("dark");
+    const light = fakeStorage();
+    saveTheme("light", light);
+    expect(loadTheme(light, () => false)).toBe("light");
   });
 
   it("applies the theme as a data attribute on the given element", () => {
