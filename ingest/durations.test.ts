@@ -2,7 +2,7 @@ import { describe, it, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  parseMatchesCsv, applyDurations, qualChallUrl, keepWtaQualItf,
+  parseMatchesCsv, applyDurations, keepWtaQualItf,
   recoverLocalDurationSec, MAX_SET_SEC, MAX_LOCAL_SEC, type SlamDurationRow,
 } from "./durations";
 import type { Match, Player } from "../src/model";
@@ -41,6 +41,23 @@ describe("parseMatchesCsv", () => {
     const wo = rows.find((r) => r.winnerName === "Casper Ruud");
     expect(wo).toBeDefined();
     expect(wo!.durationSec).toBeNull();
+  });
+
+  it("reads columns by header, so TML's extra 'indoor' column doesn't shift the parse", () => {
+    // TML (stats.tennismylife.org) mirrors Sackmann's columns plus an `indoor` column after
+    // tourney_level (see #41). Header-based indexing must stay column-order-independent.
+    const tml =
+      "tourney_id,tourney_name,surface,draw_size,tourney_level,indoor,tourney_date,match_num," +
+      "winner_id,winner_seed,winner_entry,winner_name,winner_hand,winner_ht,winner_ioc,winner_age," +
+      "winner_rank,winner_rank_points,loser_id,loser_seed,loser_entry,loser_name,loser_hand,loser_ht," +
+      "loser_ioc,loser_age,loser_rank,loser_rank_points,score,best_of,round,minutes\n" +
+      "2026-580,Australian Open,Hard,128,G,0,20260112,1,206173,1,,Jannik Sinner,R,191,ITA,24.4," +
+      "1,9000,105000,,,Botic Van De Zandschulp,R,188,NED,29.5,80,900,6-4 6-4 6-4,5,R128,127";
+    const rows = parseMatchesCsv(tml, "australian-open");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].winnerName).toBe("Jannik Sinner");
+    expect(rows[0].roundIndex).toBe(0);
+    expect(rows[0].durationSec).toBe(127 * 60);
   });
 });
 
@@ -185,13 +202,6 @@ describe("recoverLocalDurationSec", () => {
     expect(recoverLocalDurationSec({ period1: long, period2: long, period3: long, period4: long }))
       .toBeNull(); // ...but four of them sum past 6h, so the local value is dropped
   });
-});
-
-test("qualChallUrl builds the qual/challenger file URL per tour", () => {
-  expect(qualChallUrl("ATP", 2024)).toBe(
-    "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master/atp_matches_qual_chall_2024.csv");
-  expect(qualChallUrl("WTA", 2024)).toBe(
-    "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master/wta_matches_qual_itf_2024.csv");
 });
 
 test("keepWtaQualItf keeps >=50K ITF tiers and all non-numeric (non-ITF) levels", () => {
