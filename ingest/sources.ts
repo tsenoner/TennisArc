@@ -27,11 +27,6 @@ export function playersUrl(tour: Tour): string {
     : `${sackmannBase(tour)}/${tour.toLowerCase()}_players.csv`;
 }
 
-/** The layout of a tour's players CSV, selecting how parsePlayersCsv extracts name + dob. */
-export function playersSchema(tour: Tour): Provider {
-  return PROVIDER[tour];
-}
-
 /** Yearly main-draw matches CSV (carries official `minutes` on-court durations). */
 export function matchesUrl(tour: Tour, year: number): string {
   return PROVIDER[tour] === "tml"

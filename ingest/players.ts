@@ -1,6 +1,6 @@
 import type { Player, Tour } from "../src/model";
 import { normalizeName } from "./elo";
-import { type Provider, playersSchema, playersUrl } from "./sources";
+import { PROVIDER, type Provider, playersUrl } from "./sources";
 
 const dobToIso = (dob: string): string | null =>
   /^\d{8}$/.test(dob) ? `${dob.slice(0, 4)}-${dob.slice(4, 6)}-${dob.slice(6, 8)}` : null;
@@ -64,5 +64,5 @@ export function applyBirthdates(players: Record<string, Player>, dob: Map<string
 export async function fetchPlayers(tour: Tour): Promise<Map<string, string>> {
   const res = await fetch(playersUrl(tour), { headers: { "User-Agent": "Mozilla/5.0 TennisArc/1.0" } });
   if (!res.ok) throw new Error(`players HTTP ${res.status} for ${tour}`);
-  return parsePlayersCsv(await res.text(), playersSchema(tour));
+  return parsePlayersCsv(await res.text(), PROVIDER[tour]);
 }
