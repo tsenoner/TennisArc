@@ -65,5 +65,18 @@ describe("parseCurrentGame (df_mhs current-game feed)", () => {
     expect(parseCurrentGame("A1÷deadbeef¬~")).toBeNull();
     expect(parseCurrentGame("")).toBeNull();
     expect(parseCurrentGame("TS÷SC¬PT÷PT¬PV÷1¬PT÷VA¬PV÷15¬TE÷SC¬~")).toBeNull(); // only player 1
+    expect(parseCurrentGame("TS÷SC¬PT÷PT¬PV÷2¬PT÷VA¬PV÷15¬TE÷SC¬~")).toBeNull(); // only player 2
+  });
+
+  it("returns null when orphaned pairing state leaks across block boundaries (drift regression)", () => {
+    // Without block-boundary reset: orphaned PT÷PT¬PV÷1 (no matching VA) at end of first block
+    // persists into the next block, where a header's PT÷VA incorrectly captures its value.
+    // Result would be {home:"Some header", away:"0"} — wrong-loud.
+    // With fix: pairing state resets at TS/TE, so header's PT÷VA sees player=null and is skipped.
+    const orphanedPlayerWithHeaderDrift =
+      "TS÷SC¬PT÷PT¬PV÷1¬TE÷SC¬" + // orphaned player 1, no value
+      "TS÷HD¬PT÷VA¬PV÷Some header¬TE÷HD¬" + // header block: should not capture as player 1
+      "TS÷SC¬PT÷PT¬PV÷2¬PT÷VA¬PV÷0¬TE÷SC¬~"; // player 2 block
+    expect(parseCurrentGame(orphanedPlayerWithHeaderDrift)).toBeNull(); // missing player 1 value
   });
 });
