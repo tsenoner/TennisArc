@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseCurrentGame, parseLiveFeed } from "./flashscore";
-import { BETWEEN_GAMES } from "./fixtures/flashscore-mhs.sample";
+import { BETWEEN_GAMES, IN_PLAY } from "./fixtures/flashscore-mhs.sample";
 
 const feed = readFileSync(fileURLToPath(new URL("./fixtures/flashscore-live.sample.txt", import.meta.url)), "utf8");
 
@@ -81,10 +81,10 @@ describe("parseCurrentGame (df_mhs current-game feed)", () => {
     expect(parseCurrentGame("TS÷SC¬PT÷PT¬PV÷2¬PT÷VA¬PV÷15¬TE÷SC¬~")).toBeNull(); // only player 2
   });
 
-  it("takes the FIRST complete pair — a later SC-shaped section (stats/history tab) cannot overwrite", () => {
-    const fuller = BETWEEN_GAMES +
-      "TS÷SC¬PT÷PT¬PV÷1¬PT÷VA¬PV÷40¬TE÷SC¬TS÷SC¬PT÷PT¬PV÷2¬PT÷VA¬PV÷30¬TE÷SC¬~";
-    expect(parseCurrentGame(fuller)).toEqual({ home: "0", away: "0" });
+  it("returns the LAST pair of an in-play progression (the current score), ignoring BB/SB marker rows", () => {
+    // The in-play feed lists the whole game's points in order; only the final pair is current.
+    // Also exercises the `~`-glued block starts ("¬~TS÷…") the live feed interleaves.
+    expect(parseCurrentGame(IN_PLAY)).toEqual({ home: "40", away: "40" });
   });
 
   it("returns null when a captured value is not a point value (junk-value feed)", () => {
