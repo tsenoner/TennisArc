@@ -1359,6 +1359,158 @@ describe("live score overlay (/api/live)", () => {
     const polledLive = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(([u]) => String(u).includes("/api/live"));
     expect(polledLive).toBe(false);
   });
+
+  describe("point-by-point (/api/pbp)", () => {
+    /** installLiveNet + an /api/pbp route. `game` is re-read per request; `pbpOk` can kill the route. */
+    function installPbpNet(record: () => unknown, game: () => unknown, pbpOk: () => boolean = () => true) {
+      installLiveNet(record);
+      const base = globalThis.fetch;
+      let pbpCalls = 0;
+      globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes("/api/pbp")) {
+          pbpCalls++;
+          return { ok: pbpOk(), status: pbpOk() ? 200 : 500, json: async () => game() } as Response;
+        }
+        return base(url);
+      }) as unknown as typeof fetch;
+      return () => pbpCalls;
+    }
+    const liveArc = (root: HTMLElement) => root.querySelector<HTMLElement>(`path.arc[data-match="${M.id}"]`)!;
+    const ptsText = (root: HTMLElement) =>
+      [...root.querySelectorAll<HTMLElement>(".ms-game .ms-pts")].map((el) => el.textContent);
+
+    it("selecting the live match kicks an immediate /api/pbp fetch and fills the points in place", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      let game: unknown = { home: "30", away: "15" };
+      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => game);
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (pbpCalls() === 0) throw new Error("no immediate pbp kick"); });
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "30") throw new Error("points not applied"); });
+      expect(ptsText(root)).toEqual(["30", "15"]);            // record home = M.p1 → no flip
+      // in-place update: the strip node identity survives the next tick
+      const strip = root.querySelector(".match-strip")!;
+      game = { home: "40", away: "15" };
+      await vi.advanceTimersByTimeAsync(8_000);
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "40") throw new Error("tick not applied"); });
+      expect(root.querySelector(".match-strip")).toBe(strip);
+    });
+
+    it("re-tapping the already-selected live arc does not fire an extra immediate /api/pbp call", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "30", away: "15" }));
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (pbpCalls() === 0) throw new Error("no immediate pbp kick"); });
+      const before = pbpCalls();
+      // re-tap the same arc: selectedMatchId is unchanged (this taps the tap-again-to-zoom branch),
+      // so it must not force another out-of-cadence fetch — the 8s tick still covers it.
+      click(liveArc(root));
+      await vi.advanceTimersByTimeAsync(50);
+      expect(pbpCalls()).toBe(before);
+    });
+
+    it("shows the chip when the point is a set point, with side attribution and an accessible name", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      // an actually-IN-PROGRESS set (baseRecord's 6-4 is decided → the stale-context guard
+      // suppresses chips): at 5-4 p1's 40-30 wins the set 6-4 ⇒ SP for p1 (0 completed sets)
+      installPbpNet(() => ({ ...baseRecord, setsWon: [0, 0], sets: [[5, 4]], srv: 1 }), () => ({ home: "40", away: "30" }));
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => {
+        const chip = root.querySelector<HTMLElement>(".ms-chip");
+        if (!chip || chip.hidden || chip.textContent !== "SP") throw new Error("no SP chip");
+      });
+      const chip = root.querySelector<HTMLElement>(".ms-chip")!;
+      expect(chip.dataset.for).toBe("p1");
+      expect(chip.getAttribute("aria-label")).toBe("set point");
+    });
+
+    it("does not poll /api/pbp while nothing is selected", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      const pbpCalls = installPbpNet(() => baseRecord, () => ({ home: "0", away: "0" }));
+      await mountApp();
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(pbpCalls()).toBe(0);
+    });
+
+    it("does not poll /api/pbp while the tab is hidden", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "30", away: "15" }));
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (pbpCalls() === 0) throw new Error("no immediate pbp kick"); });
+      Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      const before = pbpCalls();
+      await vi.advanceTimersByTimeAsync(24_000);
+      expect(pbpCalls()).toBe(before);
+    });
+
+    it("keeps the last shown points when a pbp fetch fails", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      let ok = true;
+      installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "30", away: "15" }), () => ok);
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "30") throw new Error("points not applied"); });
+      ok = false;
+      await vi.advanceTimersByTimeAsync(9_000);
+      expect(ptsText(root)).toEqual(["30", "15"]);
+    });
+
+    it("ignores an out-of-order /api/pbp response (an older request resolving after a newer one)", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      installLiveNet(() => ({ ...baseRecord, srv: 1 }));
+      const base = globalThis.fetch;
+      // /api/pbp requests hang until the test resolves them explicitly, in any order
+      const pending: Array<(g: unknown) => void> = [];
+      globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes("/api/pbp")) {
+          return new Promise<Response>((resolve) => {
+            pending.push((g) => resolve({ ok: true, status: 200, json: async () => g } as Response));
+          });
+        }
+        return base(url);
+      }) as unknown as typeof fetch;
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));                                     // request #1 (immediate kick) — left hanging
+      await vi.waitFor(() => { if (pending.length === 0) throw new Error("no immediate pbp kick"); });
+      await vi.advanceTimersByTimeAsync(8_000);                 // request #2 (8s tick) — also hanging
+      await vi.waitFor(() => { if (pending.length < 2) throw new Error("no second pbp request"); });
+      pending[1]({ home: "40", away: "0" });                    // newer response lands first
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "40") throw new Error("newer points not applied"); });
+      pending[0]({ home: "30", away: "15" });                   // then the stale one straggles in
+      await vi.advanceTimersByTimeAsync(50);
+      expect(ptsText(root)).toEqual(["40", "0"]);               // the stale response must not regress the display
+    });
+
+    it("re-renders placeholders (not minutes-old points) when the last pbp value outlives the live-poll cycle", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      let ok = true;
+      let served: unknown = { ...baseRecord, setsWon: [0, 0], sets: [[5, 4]], srv: 1 };
+      const pbpCalls = installPbpNet(() => served, () => ({ home: "30", away: "15" }), () => ok);
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "30") throw new Error("points not applied"); });
+      const before = pbpCalls();
+      ok = false;                                               // upstream pbp dies for good
+      await vi.advanceTimersByTimeAsync(32_000);                // ticks keep failing → lastPbp ages past 30s
+      expect(pbpCalls()).toBeGreaterThan(before);
+      served = { ...baseRecord, setsWon: [0, 0], sets: [[5, 5]], srv: 1 }; // overlay change → next 30s live tick redraws
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "–") throw new Error("stale points still shown"); });
+      expect(ptsText(root)).toEqual(["–", "–"]);                // placeholders are more honest than minutes-old points
+    });
+  });
 });
 
 describe("freshness chip", () => {

@@ -13,7 +13,8 @@ import { pickDefaultSlam, availableYears, slamsForYear, statusFor } from "./slam
 import type { Match, Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
-import { fetchLive, overlayLive, applyLivePatch, samePatch } from "./live";
+import { fetchLive, fetchPbp, overlayLive, applyLivePatch, samePatch, type CurrentGame } from "./live";
+import { deriveContext, pointState, bestOfForTour, CHIP_LABEL } from "./points";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
@@ -459,6 +460,7 @@ export function createApp(root: HTMLElement): () => void {
       highlightPath(pinned);
       root.querySelector(`[data-hl-path][data-occupant="${CSS.escape(pinned)}"]`)?.classList.add("row-pinned");
     }
+    applyPbp(); // restore the last known point-by-point values into the freshly-rendered strip
   };
 
   let lastLoadMs = 0; // last snapshot fetch that actually RETURNED data for the current view (visibility refetch throttle)
@@ -776,6 +778,7 @@ export function createApp(root: HTMLElement): () => void {
       setHelp(!state.helpOpen);
       return;
     } else if (a === "inspect" && el.dataset.match) {
+      const prevSel = state.selectedMatchId; // kick pbpTick only when this actually changes the selection
       if (id && id === state.focusId) {
         // The focused section's own arc is the hub: tapping it zooms OUT one level (its
         // parent; setFocus maps "r" to a full clear). Checked before any lens semantics —
@@ -806,6 +809,10 @@ export function createApp(root: HTMLElement): () => void {
         state.selectedNodeId = id;
       }
       draw();
+      // Immediate kick: don't make the user wait up to 8s to see the current game — but only when
+      // this action actually changed which match is selected. Zoom taps, re-taps, and country-lens
+      // taps leave selectedMatchId untouched, so they must not force an out-of-cadence /api/pbp fetch.
+      if (state.selectedMatchId !== prevSel) void pbpTick();
     } else if (a === "focus" && el.dataset.id !== undefined) {
       // dataset.id may be "" — the crumbs' "‹ Full draw" chip and the strip's "Reset zoom"
       // clear focus through this same branch (setFocus(undefined) pops our history entry).
@@ -969,7 +976,7 @@ export function createApp(root: HTMLElement): () => void {
     void (async () => {
       if (Date.now() - lastIndexMs > LIVE_POLL_MS / 2) await refreshIndex();
       if (isLiveView() && Date.now() - lastLoadMs > LIVE_POLL_MS / 2) void loadCurrent();
-      if (isLiveView()) void loadLive();
+      if (isLiveView()) { void loadLive(); void pbpTick(); } // the pbp slot returns fresh too, not just the overlay
     })();
     if (Date.now() - lastDrawMs > 60_000) draw();
   }, { signal });
@@ -991,6 +998,75 @@ export function createApp(root: HTMLElement): () => void {
     void loadLive();
   }, LIVE_SCORE_POLL_MS);
   signal.addEventListener("abort", () => clearInterval(liveScoreTimer));
+
+  // Point-by-point: while a LIVE match is selected, poll its per-match current game and write
+  // the values into the strip IN PLACE — never draw(): a point tick must not wipe panel
+  // scroll/focus or rebuild the wheel. lastPbp survives redraws; draw()'s tail re-applies it
+  // so the 30s overlay redraw doesn't blank the slot back to its "–" placeholders — but only
+  // while it is fresh (applyPbp's 30s age bound), so a wedged upstream degrades to placeholders.
+  const PBP_POLL_MS = 8_000;
+  let lastPbp: { mid: string; game: CurrentGame; at: number } | null = null;
+  let pbpSeq = 0; // stamps each pbpTick request — only the most-recently-started one may write
+  /** The selected match with its live patch merged — undefined unless it is live and joined. */
+  const pbpTarget = (): Match | undefined => {
+    if (!isLiveView() || !state.selectedMatchId) return undefined;
+    const k = snapKey(state.tour, state.year, state.slam);
+    const raw = state.snapshots[k]?.matches[state.selectedMatchId];
+    if (!raw) return undefined;
+    const m = { ...raw, ...state.livePatch[k]?.[state.selectedMatchId] };
+    return m.status === "live" && m.flash ? m : undefined;
+  };
+  const applyPbp = (m = pbpTarget()): void => {
+    if (!lastPbp || !m?.flash || m.flash.id !== lastPbp.mid) return;
+    // Stale beyond one live-poll cycle (a permanently failing /api/pbp must not freeze
+    // minutes-old points under a live badge) — placeholders are more honest than old points.
+    if (Date.now() - lastPbp.at > 30_000) return;
+    const gameEl = root.querySelector<HTMLElement>(".ms-game");
+    if (!gameEl) return;
+    const homeIsP1 = m.flash.homeIsP1;
+    const pts = {
+      p1: homeIsP1 ? lastPbp.game.home : lastPbp.game.away,
+      p2: homeIsP1 ? lastPbp.game.away : lastPbp.game.home,
+    };
+    const st = pointState({ pts, serving: m.serving, ...deriveContext(m.score), bestOf: bestOfForTour(state.tour) });
+    for (const side of ["p1", "p2"] as const) {
+      const el = gameEl.querySelector<HTMLElement>(`.ms-pts[data-side="${side}"]`);
+      if (el) el.textContent = pts[side];
+    }
+    const chip = gameEl.querySelector<HTMLElement>(".ms-chip");
+    if (chip) {
+      chip.hidden = st.chip == null;
+      chip.textContent = st.chip ?? "";
+      if (st.chip != null) { // pointState always pairs chip with chipFor
+        chip.dataset.for = st.chipFor!;
+        chip.setAttribute("aria-label", CHIP_LABEL[st.chip]);
+      } else {
+        delete chip.dataset.for;
+        chip.removeAttribute("aria-label");
+      }
+    }
+    // CX rotates every two points in a tiebreak — faster than its 30s cadence — so hide the dot.
+    // Scoped to the strip: the serve dots live in .ms-mu beside .ms-game, never in the SVG tree.
+    for (const dot of gameEl.closest(".match-strip")?.querySelectorAll<HTMLElement>(".ms-serve") ?? [])
+      dot.hidden = st.tb;
+  };
+  const pbpTick = async (): Promise<void> => {
+    if (document.hidden) return;
+    const m = pbpTarget();
+    if (!m?.flash) return;
+    const mid = m.flash.id;
+    const seq = ++pbpSeq;
+    const game = await fetchPbp(mid);
+    if (!game) return;                                  // keep the last shown values; retry next tick
+    if (seq !== pbpSeq) return;                          // a newer request started — only the most-recently-started may write
+    const cur = pbpTarget();
+    if (cur?.flash?.id !== mid) return;                  // selection changed mid-fetch
+    lastPbp = { mid, game, at: Date.now() };
+    applyPbp(cur);
+  };
+  const pbpTimer = window.setInterval(() => { void pbpTick(); }, PBP_POLL_MS);
+  signal.addEventListener("abort", () => clearInterval(pbpTimer));
+
   // The chip is the user's staleness signal, and draw() deliberately skips identical data — so
   // tick the label TEXT in place (never a full redraw) while the tab is visible, or "updated
   // 2 min ago" would freeze exactly when the upstream refresh wedges.

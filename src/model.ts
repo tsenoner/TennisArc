@@ -71,6 +71,11 @@ export interface Match {
   winner: "p1" | "p2" | null;
   score: SetScore[] | null;
   live: { set: number; game: string; server: "p1" | "p2" } | null;
+  /** Transient live-overlay fields (set by src/live.ts overlayLive on in-play matches only) —
+   *  never present in snapshot JSON, gone the moment the overlay marks the match finished.
+   *  flash keys the /api/pbp per-match feed (id) and orients its home/away values (homeIsP1). */
+  flash?: { id: string; homeIsP1: boolean };
+  serving?: "p1" | "p2";
   durationSec: number | null; // Σ per-set seconds (provisional while live)
   durationProvisional: boolean;
   /** Sticky: set once a stoppage is observed (live, via the currentPeriodStartTimestamp signal) or
@@ -104,7 +109,13 @@ export interface LiveRecord {
   away: string;
   setsWon: [number, number];     // [home, away]
   sets: Array<[number, number]>; // per-set games [home, away], in order
+  srv?: 1 | 2;                   // current server (CX), live records only — 1 home, 2 away
 }
+
+/** The selected live match's current-game point values (Flashscore df_mhs feed, home/away order).
+ *  Raw display strings — "0" | "15" | "30" | "40" | "A", plain digits during a tiebreak — parsed
+ *  by ingest/flashscore.ts, fetched through /api/pbp by src/live.ts, rendered verbatim. */
+export interface CurrentGame { home: string; away: string }
 
 export interface Round {
   index: number;

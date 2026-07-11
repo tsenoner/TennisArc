@@ -591,6 +591,19 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
   .ctrl.theme, .ctrl.help, .issues-link { padding: 6px 4px; }
 }
 
+/* Live current-game block in the match strip (fed in place by the /api/pbp tick). Teal like
+   the caption's .ms-dot — same live signal, just relocated next to the set score. */
+.ms-game { display: inline-flex; align-items: baseline; gap: 4px; margin-left: 10px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--teal-text); }
+.ms-pts-sep { opacity: 0.5; }
+.ms-chip { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; padding: 1px 5px; border-radius: 4px; margin-left: 4px; background: var(--teal); color: #04211f; }
+/* Side attribution: p1's chip renders BEFORE p1's points (flex order), p2's stays trailing —
+   otherwise data-for has no visible consumer and a viewer can't tell whose MP it is. */
+.ms-chip[data-for="p1"] { order: -1; margin-left: 0; margin-right: 4px; }
+.ms-serve { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); display: inline-block; margin: 0 4px; flex: none; }
+/* An author display beats the UA's [hidden] rule — without this the tiebreak serve-dot hide
+   (applyPbp sets .hidden) is a no-op in real browsers (jsdom has no layout to catch it). */
+.ms-serve[hidden] { display: none; }
+
 /* Honour prefers-reduced-motion: suppress the only continuous motion (the live dot's infinite
    pulse) and the detail tier's entrance rise. Placed LAST so it overrides the ≤720px bottom-sheet
    rule above by source order (same specificity). The dot stays visible (opacity reset to full). */

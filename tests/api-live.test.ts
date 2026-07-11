@@ -1,18 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import handler from "./live";
+import handler from "../api/live";
+import { fakeRes } from "./api-helpers";
 
 const feed = readFileSync(fileURLToPath(new URL("../ingest/fixtures/flashscore-live.sample.txt", import.meta.url)), "utf8");
 
-function fakeRes() {
-  return {
-    statusCode: 0, headers: {} as Record<string, string>, body: undefined as unknown,
-    status(c: number) { this.statusCode = c; return this; },
-    setHeader(k: string, v: string) { this.headers[k] = v; },
-    json(b: unknown) { this.body = b; return this; },
-  };
-}
 afterEach(() => vi.restoreAllMocks());
 
 describe("/api/live handler", () => {

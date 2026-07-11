@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
 import { renderMatchStrip, renderMatchDetail } from "./render";
 import type { MatchInsight } from "./state";
@@ -15,7 +16,7 @@ const base: MatchInsight = {
   p2: { id: "b", name: "Jannik Sinner", country: "ITA", seed: 1, ranking: 1, elo: 2215, roundReached: 6, sec: 19000, age: 24, birthday: "16 Aug", birthdayNear: false },
   badges: ["Upset", "From a set down", "1 tiebreak", "Marathon"], upset: true,
   eloLine: "Clay-ELO favoured Jannik Sinner 65% (+109)",
-  aces: [9, 12], doubleFaults: [3, 2], scheduled: null,
+  aces: [9, 12], doubleFaults: [3, 2], scheduled: null, live: null,
 };
 const NOW = 1_782_999_600; // Thu 02 Jul 2026, 13:40 UTC — the shared reference clock for every call below
 const opts = { expanded: false, focused: false, nowSec: NOW };
@@ -157,5 +158,41 @@ describe("renderMatchDetail", () => {
 
   it("omits the scheduled line for a match with no scheduled info", () => {
     expect(renderMatchDetail(base, null, rounds, NOW)).not.toContain("mi-sched");
+  });
+});
+
+describe("renderMatchStrip — live current-game block", () => {
+  const liveIns = (over: Partial<MatchInsight> = {}): MatchInsight => ({
+    ...base,
+    status: "live", winner: null,
+    live: { flashId: "nkXJ8mYa", homeIsP1: true, serving: "p1" },
+    ...over,
+  });
+  const liveOpts = { expanded: false, focused: false, nowSec: 1_750_000_000 };
+
+  it("renders the points placeholders, separator and hidden chip for a live match", () => {
+    const html = renderMatchStrip(liveIns(), "r.0", liveOpts);
+    const el = document.createElement("div"); el.innerHTML = html;
+    const pts = el.querySelectorAll(".ms-game .ms-pts");
+    expect(pts).toHaveLength(2);
+    expect(pts[0].getAttribute("data-side")).toBe("p1");
+    expect(pts[1].getAttribute("data-side")).toBe("p2");
+    expect(pts[0].textContent).toBe("–");
+    expect(el.querySelector<HTMLElement>(".ms-chip")!.hidden).toBe(true);
+  });
+
+  it("marks the serving player's side with the serve dot", () => {
+    const el = document.createElement("div");
+    el.innerHTML = renderMatchStrip(liveIns({ live: { flashId: "nkXJ8mYa", homeIsP1: true, serving: "p2" } }), "r.0", liveOpts);
+    const sides = el.querySelectorAll(".ms-side");
+    expect(sides[0].querySelector(".ms-serve")).toBeNull();
+    expect(sides[1].querySelector(".ms-serve")).not.toBeNull();
+  });
+
+  it("renders no game block when the match is not live (live: null)", () => {
+    const el = document.createElement("div");
+    el.innerHTML = renderMatchStrip(liveIns({ status: "finished", live: null, winner: "p1" }), "r.0", liveOpts);
+    expect(el.querySelector(".ms-game")).toBeNull();
+    expect(el.querySelector(".ms-serve")).toBeNull();
   });
 });
