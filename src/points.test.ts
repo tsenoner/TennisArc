@@ -45,6 +45,12 @@ describe("pointState — normal games", () => {
   it("junk point strings → no chip, no crash", () => {
     expect(st({ pts: { p1: "Adv?", p2: "" } })).toEqual({ tb: false, chip: null, chipFor: null });
   });
+  it("A-A (impossible both rank 4) → no chip", () => {
+    expect(st({ pts: { p1: "A", p2: "A" }, serving: "p2" })).toEqual({ tb: false, chip: null, chipFor: null });
+  });
+  it("prototype key junk (toString) → no chip", () => {
+    expect(st({ pts: { p1: "toString", p2: "40" }, serving: "p2" })).toEqual({ tb: false, chip: null, chipFor: null });
+  });
 });
 
 describe("pointState — tiebreaks", () => {

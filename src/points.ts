@@ -36,8 +36,10 @@ export function pointState(i: PointStateInput): PointState {
     return { tb: true, chip: null, chipFor: null };
   }
 
-  const r1 = RANK[i.pts.p1], r2 = RANK[i.pts.p2];
+  const r1 = Object.hasOwn(RANK, i.pts.p1) ? RANK[i.pts.p1] : undefined;
+  const r2 = Object.hasOwn(RANK, i.pts.p2) ? RANK[i.pts.p2] : undefined;
   if (r1 == null || r2 == null) return { tb: false, chip: null, chipFor: null };
+  if (r1 === 4 && r2 === 4) return { tb: false, chip: null, chipFor: null };
   for (const side of ["p1", "p2"] as const) {
     const mine = side === "p1" ? r1 : r2, theirs = side === "p1" ? r2 : r1;
     const gamePoint = (mine === 3 && theirs < 3) || mine === 4;
