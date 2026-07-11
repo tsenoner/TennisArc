@@ -99,6 +99,21 @@ export interface Match {
   stats: MatchStats | null;
 }
 
+/** The decided winner's playerId, or null while the match is undecided. */
+export function winnerId(m: Match): string | null {
+  if (m.winner === "p1") return m.p1;
+  if (m.winner === "p2") return m.p2;
+  return null;
+}
+
+/** True while a match is genuinely being contested: in progress by status AND not yet decided.
+ *  Decided wins over status — SofaScore sets the winner before flipping the status code, so a
+ *  data-lag match (winner already set while status still reads "live"/"suspended") is decided
+ *  here, matching buildSunburst's arc-tier gate (which re-encodes live vs suspended per-status
+ *  on purpose: distinct visual tiers). */
+export const isUndecidedInPlay = (m: Match): boolean =>
+  winnerId(m) === null && isInProgress(m.status);
+
 /** A live/finished/scheduled match extracted from the Flashscore livescore feed (server-parsed by
  *  ingest/flashscore.ts, joined onto the snapshot client-side by src/live.ts). Names are
  *  Flashscore's surname-first short form ("Fritz T."). */

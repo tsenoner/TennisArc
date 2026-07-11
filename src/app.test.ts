@@ -67,13 +67,15 @@ beforeEach(() => {
  *  globalThis.fetch and call this to bring the network back. Returns a counter of
  *  roland-garros snapshot fetches (the live-score endpoint's own query string names the slam
  *  too, e.g. "/api/live?tour=atp&slam=roland-garros" — excluded so it isn't double-counted). It
- *  answers /api/live with an empty overlay so live-gated tests here don't spuriously redraw. */
-function installFetchStub(overrides: { index?: () => unknown; snap?: () => unknown } = {}): () => number {
+ *  answers /api/live with `live` (default: an empty overlay, so live-gated tests here don't
+ *  spuriously redraw). */
+function installFetchStub(overrides: { index?: () => unknown; snap?: () => unknown; live?: () => unknown } = {}): () => number {
   const index = overrides.index ?? (() => INDEX);
   const snap = overrides.snap ?? (() => SNAP);
+  const live = overrides.live ?? (() => ({ matches: [] }));
   const fn = vi.fn(async (url: string | URL | Request) => {
     const u = String(url);
-    if (u.includes("/api/live")) return { ok: true, status: 200, json: async () => ({ matches: [] }) } as Response;
+    if (u.includes("/api/live")) return { ok: true, status: 200, json: async () => live() } as Response;
     const body = u.includes("index.json") ? index()
       : u.includes("roland-garros") || u.includes("wimbledon") ? snap() : null;
     return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
@@ -231,6 +233,8 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
   }
   const litFor = (root: HTMLElement, pid: string) =>
     root.querySelectorAll(`.sunburst path.arc-hl[data-occupant="${pid}"]`).length;
+  const litOccs = (root: HTMLElement) =>
+    new Set([...litArcs(root)].map((a) => (a as HTMLElement).dataset.occupant));
   /** Serve `s`, mount, and select the semifinal by tapping its arc. */
   async function mountAndSelect(s = inPlaySnap()) {
     installFetchStub({ snap: () => s });
@@ -274,7 +278,7 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
     const root = await mountApp();                       // default SNAP: fully played
     const arc = pickArc(root);
     click(arc);
-    const occs = new Set([...litArcs(root)].map((a) => (a as HTMLElement).dataset.occupant));
+    const occs = litOccs(root);
     expect(occs).toEqual(new Set([arc.dataset.occupant]));
   });
 
@@ -282,7 +286,7 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
     const s = inPlaySnap();
     s.matches["1-0"].winner = "p1"; // SofaScore sets the winner before flipping the status code
     const { root, m } = await mountAndSelect(s);
-    const occs = new Set([...litArcs(root)].map((a) => (a as HTMLElement).dataset.occupant));
+    const occs = litOccs(root);
     expect(occs).toEqual(new Set([m.p1])); // the decided arc pins its winner — loser stays unlit
   });
 
@@ -293,7 +297,7 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
     click(row);
 
     expect(root.querySelector(".match-strip")).not.toBeNull(); // the selection survives the re-pin
-    const occs = new Set([...litArcs(root)].map((a) => (a as HTMLElement).dataset.occupant));
+    const occs = litOccs(root);
     expect(occs).toEqual(new Set([row.dataset.occupant]));     // …but only the new pin's path lights
   });
 
@@ -306,14 +310,7 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
     s.players[m.p1!] = { ...s.players[m.p1!], name: "Novak Djokovic" };
     s.players[m.p2!] = { ...s.players[m.p2!], name: "Rafael Nadal" };
     const rec = { id: "fs1", stage: 2, home: short(s.players[m.p1!].name), away: short(s.players[m.p2!].name), setsWon: [1, 0], sets: [[6, 4]] };
-    // the standard stub answers /api/live with an empty overlay — layer just that route on top
-    // of it (installPbpNet's pattern), delegating everything else to the base stub
-    installFetchStub({ index: () => LIVE_INDEX, snap: () => s });
-    const base = globalThis.fetch;
-    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-      if (String(url).includes("/api/live")) return { ok: true, status: 200, json: async () => ({ matches: [rec] }) } as Response;
-      return base(url);
-    }) as unknown as typeof fetch;
+    installFetchStub({ index: () => LIVE_INDEX, snap: () => s, live: () => ({ matches: [rec] }) });
 
     const root = await mountApp();
     await vi.waitFor(() => { // the mount-time loadLive() has applied the overlay once the arc hatches

@@ -1,5 +1,5 @@
 import type { Match, MatchStatus, Player, Round, SetScore, Snapshot } from "./model";
-import { isPlaceholderPlayer, isInProgress, isUpcoming } from "./model";
+import { isPlaceholderPlayer, isInProgress, isUpcoming, winnerId } from "./model";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -42,20 +42,6 @@ export interface SunNode {
   depth: number;              // 0 = champion (centre)
   children: SunNode[];
 }
-
-export function winnerId(m: Match): string | null {
-  if (m.winner === "p1") return m.p1;
-  if (m.winner === "p2") return m.p2;
-  return null;
-}
-
-/** True while a match is genuinely being contested: in progress by status AND not yet decided.
- *  Decided wins over status — SofaScore sets the winner before flipping the status code, so a
- *  data-lag match (winner already set while status still reads "live"/"suspended") is decided
- *  here. The single home of that rule: buildSunburst's arc tiers and the app's both-contenders
- *  path highlight both read it, so the lag shape can never split the surfaces. */
-export const isUndecidedInPlay = (m: Match): boolean =>
-  winnerId(m) === null && isInProgress(m.status);
 
 export function finalMatch(s: Snapshot): Match {
   const final = Object.values(s.matches).find((m) => m.nextMatchId === null);
@@ -131,14 +117,15 @@ export function buildSunburst(s: Snapshot): SunNode {
           { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
           { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
         ];
-    // `live`/`suspended` are the two arc tiers of an isUndecidedInPlay match (decided-wins-over-
-    // status lives THERE): a data-lag match must NOT be both decided and live, or render would
-    // draw it named + heat-filled AND hatched/breathing (and possibly .out).
+    // `live` requires no decided result yet (SunNode.live = "in progress, no winner"): a data-lag
+    // match — winner already set while status still reads "live" — must NOT be both decided and
+    // live, or render would draw it named + heat-filled AND hatched/breathing (and possibly .out).
+    // Same decided-wins-over-status rule as isUndecidedInPlay (model.ts); the per-status equality
+    // here is deliberate — live and suspended get distinct visual tiers.
     const undecided = decided === null;
-    const inPlay = isUndecidedInPlay(m);
     return {
       id, matchId: m.id, occupant, projected: undecided,
-      live: inPlay && m.status === "live", suspended: inPlay && m.status === "suspended",
+      live: undecided && m.status === "live", suspended: undecided && m.status === "suspended",
       depth, children,
     };
   };
