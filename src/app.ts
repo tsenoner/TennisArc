@@ -506,7 +506,7 @@ export function createApp(root: HTMLElement): () => void {
   /** Refetch the snapshot the user is looking at — every refresh path names the current view through here. */
   const loadCurrent = (): Promise<boolean> => load(state.tour, state.year, state.slam);
 
-  const LIVE_SCORE_POLL_MS = 30_000;
+  const LIVE_SCORE_POLL_MS = 15_000;
   // Fast score overlay from Flashscore (src/live.ts) — independent of the 90s snapshot poll. Joins
   // to the CURRENT snapshot's players; redraws only when the computed patch actually changes.
   const loadLive = async (): Promise<void> => {
