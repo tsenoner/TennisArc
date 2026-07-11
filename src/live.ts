@@ -50,6 +50,11 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
       status: r.stage === 2 ? "live" : "finished",
       score: score.length ? score : null,
     };
+    if (r.stage === 2) {
+      patch.flashId = r.id;
+      patch.flashHomeIsP1 = homeIsP1;
+      if (r.srv) patch.serving = (r.srv === 1) === homeIsP1 ? "p1" : "p2";
+    }
     if (r.stage === 3) {
       const [p1Won, p2Won] = homeIsP1 ? r.setsWon : [r.setsWon[1], r.setsWon[0]];
       if (p1Won >= setsToWin) patch.winner = "p1";

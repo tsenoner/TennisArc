@@ -25,8 +25,12 @@ describe("overlayLive", () => {
   it("joins by surname-pair and overlays a live score, oriented to p1/p2", () => {
     const s = snap("ATP", [player("a", "Taylor Fritz"), player("b", "Alexander Zverev")], [match("0-0", "a", "b")]);
     // Flashscore lists Zverev as home, Fritz as away → must orient to p1=Fritz(a)
-    const patch = overlayLive(s, [rec({ home: "Zverev A.", away: "Fritz T.", stage: 2, setsWon: [0, 1], sets: [[4, 6], [2, 3]] })]);
-    expect(patch["0-0"]).toEqual({ status: "live", score: [{ p1: 6, p2: 4 }, { p1: 3, p2: 2 }] });
+    const r = rec({ id: "x", home: "Zverev A.", away: "Fritz T.", stage: 2, setsWon: [0, 1], sets: [[4, 6], [2, 3]] });
+    const patch = overlayLive(s, [r]);
+    expect(patch["0-0"]).toEqual({
+      status: "live", score: [{ p1: 6, p2: 4 }, { p1: 3, p2: 2 }],
+      flashId: "x", flashHomeIsP1: false,
+    });
   });
   it("sets winner on a finished match only when a side reaches the sets-to-win threshold (ATP=3)", () => {
     const s = snap("ATP", [player("a", "Carlos Alcaraz"), player("b", "Jannik Sinner")], [match("0-0", "a", "b")]);
@@ -54,6 +58,30 @@ describe("overlayLive", () => {
       [player("a", "Taylor Fritz"), player("b", "Alexander Zverev"), player("c", "Tommy Fritz"), player("d", "Andrey Zverev")],
       [match("0-0", "a", "b"), match("0-1", "c", "d")]);
     expect(overlayLive(s, [rec({ home: "Fritz T.", away: "Zverev A.", stage: 2, setsWon: [1, 0], sets: [[6, 0]] })])).toEqual({});
+  });
+  it("stamps flashId/orientation/serving on a live patch", () => {
+    // reuse the Alcaraz/Sinner snapshot (home = p1's short name), adding srv
+    const s = snap("ATP", [player("a", "Carlos Alcaraz"), player("b", "Jannik Sinner")], [match("0-0", "a", "b")]);
+    const r = rec({ home: "Alcaraz C.", away: "Sinner J.", stage: 2, srv: 2 }); // away serving
+    const patch = overlayLive(s, [r])["0-0"]!;
+    expect(patch.flashId).toBe(r.id);
+    expect(patch.flashHomeIsP1).toBe(true);
+    expect(patch.serving).toBe("p2"); // away = p2 when home is p1
+  });
+  it("resolves orientation and serving when the record's home is our p2", () => {
+    const s = snap("ATP", [player("a", "Carlos Alcaraz"), player("b", "Jannik Sinner")], [match("0-0", "a", "b")]);
+    const r = rec({ home: "Sinner J.", away: "Alcaraz C.", stage: 2, srv: 1 }); // record home (our p2) serving
+    const patch = overlayLive(s, [r])["0-0"]!;
+    expect(patch.flashHomeIsP1).toBe(false);
+    expect(patch.serving).toBe("p2"); // record home serving = our p2
+  });
+  it("puts NO transient live fields on a finished patch", () => {
+    const s = snap("ATP", [player("a", "Carlos Alcaraz"), player("b", "Jannik Sinner")], [match("0-0", "a", "b")]);
+    const r = rec({ home: "Alcaraz C.", away: "Sinner J.", stage: 3, setsWon: [3, 0], srv: 1 });
+    const patch = overlayLive(s, [r])["0-0"]!;
+    expect(patch.flashId).toBeUndefined();
+    expect(patch.flashHomeIsP1).toBeUndefined();
+    expect(patch.serving).toBeUndefined();
   });
 });
 
