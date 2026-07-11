@@ -69,3 +69,29 @@ export function parseLiveFeed(text: string, opts: { tour: Tour; slam: string }):
   }
   return out;
 }
+
+/**
+ * Parse a `df_mhs_1_<mid>` current-game feed into the two sides' point values, or null when
+ * no current game is present (match finished / not started / malformed). Values are the raw
+ * display strings ("0" | "15" | "30" | "40" | "A"; plain digits during a tiebreak) — callers
+ * render them verbatim. Structure: TS/TE-delimited blocks where each score cell is
+ * `PT÷PT ¬ PV÷<playerNo> ¬ PT÷VA ¬ PV÷<value>`; a PT÷VA with no pending player (the
+ * "Current game" header) must not capture.
+ */
+export function parseCurrentGame(text: string): { home: string; away: string } | null {
+  let player: string | null = null;
+  let expect: "player" | "value" | null = null;
+  const vals: Record<string, string> = {};
+  for (const p of text.split("¬")) {
+    const i = p.indexOf("÷");
+    if (i <= 0) continue;
+    const k = p.slice(0, i), v = p.slice(i + 1);
+    if (k === "PT") { expect = v === "PT" ? "player" : v === "VA" && player != null ? "value" : null; continue; }
+    if (k === "PV") {
+      if (expect === "player") player = v;
+      else if (expect === "value" && player != null) { vals[player] = v; player = null; }
+      expect = null;
+    }
+  }
+  return vals["1"] != null && vals["2"] != null ? { home: vals["1"], away: vals["2"] } : null;
+}

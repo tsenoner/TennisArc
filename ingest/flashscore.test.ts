@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseLiveFeed } from "./flashscore";
+import { parseCurrentGame, parseLiveFeed } from "./flashscore";
 
 const feed = readFileSync(fileURLToPath(new URL("./fixtures/flashscore-live.sample.txt", import.meta.url)), "utf8");
 
@@ -28,5 +28,42 @@ describe("parseLiveFeed", () => {
   it("omits odds-noise fields", () => {
     const live = parseLiveFeed(feed, { tour: "ATP", slam: "wimbledon" }).find((m) => m.id === "aaa1")!;
     expect(Object.keys(live)).toEqual(["id", "stage", "home", "away", "setsWon", "sets"]);
+  });
+});
+
+describe("parseCurrentGame (df_mhs current-game feed)", () => {
+  // Verbatim shape captured live 2026-07-10 (Sinner–Djokovic Wimbledon SF, between games).
+  const BETWEEN_GAMES =
+    "TS÷GR¬PT÷TI¬PV÷notab¬TS÷TA¬TS÷HD¬PT÷VA¬PV÷Current game¬TE÷HD¬TS÷RWP¬" +
+    "TS÷SC¬PT÷PT¬PV÷1¬PT÷VA¬PV÷0¬TE÷SC¬TS÷SC¬PT÷PT¬PV÷2¬PT÷VA¬PV÷0¬TE÷SC¬" +
+    "TE÷RWP¬TE÷TA¬TE÷GR¬A1÷559e897e9099399799bb8fe726208ada¬~";
+  const MID_GAME = BETWEEN_GAMES.replace("PV÷1¬PT÷VA¬PV÷0", "PV÷1¬PT÷VA¬PV÷40")
+    .replace("PV÷2¬PT÷VA¬PV÷0", "PV÷2¬PT÷VA¬PV÷A");
+
+  it("reads both sides' point values (home = player 1)", () => {
+    expect(parseCurrentGame(MID_GAME)).toEqual({ home: "40", away: "A" });
+  });
+
+  it("reads 0/0 between games", () => {
+    expect(parseCurrentGame(BETWEEN_GAMES)).toEqual({ home: "0", away: "0" });
+  });
+
+  it("does NOT capture the 'Current game' header text as a value", () => {
+    // the header block is PT÷VA¬PV÷Current game with no preceding PT÷PT — must be skipped
+    const parsed = parseCurrentGame(BETWEEN_GAMES);
+    expect(parsed).not.toBeNull();
+    expect(Object.values(parsed!)).not.toContain("Current game");
+  });
+
+  it("reads tiebreak digit values", () => {
+    const tb = BETWEEN_GAMES.replace("PV÷1¬PT÷VA¬PV÷0", "PV÷1¬PT÷VA¬PV÷6")
+      .replace("PV÷2¬PT÷VA¬PV÷0", "PV÷2¬PT÷VA¬PV÷5");
+    expect(parseCurrentGame(tb)).toEqual({ home: "6", away: "5" });
+  });
+
+  it("returns null when a side is missing (finished / not-started match)", () => {
+    expect(parseCurrentGame("A1÷deadbeef¬~")).toBeNull();
+    expect(parseCurrentGame("")).toBeNull();
+    expect(parseCurrentGame("TS÷SC¬PT÷PT¬PV÷1¬PT÷VA¬PV÷15¬TE÷SC¬~")).toBeNull(); // only player 1
   });
 });
