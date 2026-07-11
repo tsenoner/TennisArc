@@ -5,10 +5,10 @@ import type { Tour } from "../src/model";
 // Vite, tsx and vitest all resolve ".js" → ".ts", so it's safe across the whole toolchain). Applies
 // down the whole runtime import chain (ingest/flashscore.ts → ingest/names.ts → src/names.ts).
 import { parseLiveFeed } from "../ingest/flashscore.js";
+// .js extension REQUIRED here too (same ESM rule as the parseLiveFeed import below).
+import { FEED_HOST, UA, X_FSIGN } from "./_flashscore.js";
 
-const FEED = "https://global.flashscore.ninja/2/x/feed/f_2_0_3_en_1";
-const X_FSIGN = "SW9D1eZo";
-const UA = "TennisArc/1.0 (+https://tennisarc.vercel.app)";
+const FEED = `${FEED_HOST}/f_2_0_3_en_1`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const tour = String(req.query.tour ?? "").toUpperCase();
