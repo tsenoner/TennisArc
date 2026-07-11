@@ -20,6 +20,11 @@ const INDEX: SlamIndex = {
     surface: "Grass", status: "upcoming", generatedAt: "2026-06-07T00:00:00.000Z", drawSize: 8,
   }],
 };
+// INDEX with the first slam flipped live — every live-gated flow (polling, /api/live overlay,
+// the both-contenders highlight) shares this one copy.
+const LIVE_INDEX: SlamIndex = { ...INDEX, slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]] };
+/** Flashscore's "Surname F." short-name shape — what the /api/live name-join parses. */
+const short = (full: string) => { const t = full.split(" "); return `${t[t.length - 1]} ${t[0][0]}.`; };
 
 /** This jsdom build exposes no localStorage (Node's experimental global shadows it); theme.ts
  *  reads it at mount, so install a fresh in-memory Storage shim on every test. */
@@ -226,15 +231,17 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
   }
   const litFor = (root: HTMLElement, pid: string) =>
     root.querySelectorAll(`.sunburst path.arc-hl[data-occupant="${pid}"]`).length;
+  /** Serve `s`, mount, and select the semifinal by tapping its arc. */
+  async function mountAndSelect(s = inPlaySnap()) {
+    installFetchStub({ snap: () => s });
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    return { root, m: s.matches["1-0"] };
+  }
 
   for (const status of ["live", "suspended"] as const) {
     it(`${status}: an arc tap lights the paths of both players, not just the ELO favourite's`, async () => {
-      const s = inPlaySnap(status);
-      installFetchStub({ snap: () => s });
-      const root = await mountApp();
-      const m = s.matches["1-0"];
-
-      click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+      const { root, m } = await mountAndSelect(inPlaySnap(status));
       expect(root.querySelector(".match-strip")).not.toBeNull();
       expect(litFor(root, m.p1!)).toBeGreaterThan(0);
       expect(litFor(root, m.p2!)).toBeGreaterThan(0);
@@ -242,13 +249,7 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
   }
 
   it("hovering the selected in-play arc keeps both paths (no collapse to the favourite)", async () => {
-    const s = inPlaySnap();
-    installFetchStub({ snap: () => s });
-    const root = await mountApp();
-    const m = s.matches["1-0"];
-
-    const arc = root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!;
-    click(arc);
+    const { root, m } = await mountAndSelect();
     // the pointer is still ON the arc just clicked — the very next move must not drop a path
     root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!
       .dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
@@ -257,12 +258,7 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
   });
 
   it("hovering elsewhere previews that player alone; leaving restores both contenders", async () => {
-    const s = inPlaySnap();
-    installFetchStub({ snap: () => s });
-    const root = await mountApp();
-    const m = s.matches["1-0"];
-
-    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    const { root, m } = await mountAndSelect();
     const other = [...root.querySelectorAll<HTMLElement>(".sunburst path.arc[data-occupant]")]
       .find((a) => a.dataset.occupant && a.dataset.occupant !== m.p1 && a.dataset.occupant !== m.p2)!;
     other.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
@@ -285,21 +281,13 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
   it("a data-lag match (winner set, status still 'live') counts as decided: single path", async () => {
     const s = inPlaySnap();
     s.matches["1-0"].winner = "p1"; // SofaScore sets the winner before flipping the status code
-    installFetchStub({ snap: () => s });
-    const root = await mountApp();
-
-    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    const { root, m } = await mountAndSelect(s);
     const occs = new Set([...litArcs(root)].map((a) => (a as HTMLElement).dataset.occupant));
-    expect(occs).toEqual(new Set([s.matches["1-0"].p1])); // the decided arc pins its winner — loser stays unlit
+    expect(occs).toEqual(new Set([m.p1])); // the decided arc pins its winner — loser stays unlit
   });
 
   it("re-pinning a NON-contender row while the in-play match stays selected lights only them", async () => {
-    const s = inPlaySnap();
-    installFetchStub({ snap: () => s });
-    const root = await mountApp();
-    const m = s.matches["1-0"];
-
-    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    const { root, m } = await mountAndSelect();
     const row = [...root.querySelectorAll<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")]
       .find((r) => r.dataset.occupant !== m.p1 && r.dataset.occupant !== m.p2)!;
     click(row);
@@ -317,13 +305,14 @@ describe("selecting an in-play match lights BOTH contenders' paths", () => {
     // real names so the Flashscore name-join is unambiguous (fixture names all collapse to "player:p")
     s.players[m.p1!] = { ...s.players[m.p1!], name: "Novak Djokovic" };
     s.players[m.p2!] = { ...s.players[m.p2!], name: "Rafael Nadal" };
-    const liveIndex: SlamIndex = { ...INDEX, slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]] };
-    const rec = { id: "fs1", stage: 2, home: "Djokovic N.", away: "Nadal R.", setsWon: [1, 0], sets: [[6, 4]] };
+    const rec = { id: "fs1", stage: 2, home: short(s.players[m.p1!].name), away: short(s.players[m.p2!].name), setsWon: [1, 0], sets: [[6, 4]] };
+    // the standard stub answers /api/live with an empty overlay — layer just that route on top
+    // of it (installPbpNet's pattern), delegating everything else to the base stub
+    installFetchStub({ index: () => LIVE_INDEX, snap: () => s });
+    const base = globalThis.fetch;
     globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-      const u = String(url);
-      if (u.includes("/api/live")) return { ok: true, status: 200, json: async () => ({ matches: [rec] }) } as Response;
-      const body = u.includes("index.json") ? liveIndex : u.includes("roland-garros") || u.includes("wimbledon") ? s : null;
-      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+      if (String(url).includes("/api/live")) return { ok: true, status: 200, json: async () => ({ matches: [rec] }) } as Response;
+      return base(url);
     }) as unknown as typeof fetch;
 
     const root = await mountApp();
@@ -1348,10 +1337,6 @@ describe("load failure", () => {
 });
 
 describe("live polling", () => {
-  const LIVE_INDEX: SlamIndex = {
-    ...INDEX,
-    slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]],
-  };
   // Fake-timer base pinned to noon UTC: seeding from real-now would let the app's midnight
   // timer land inside an advanced window when the suite runs within ~91s of 00:00 UTC, swapping
   // the DOM mid-assertion — a daily flake window.
@@ -1415,9 +1400,7 @@ describe("live polling", () => {
 });
 
 describe("live score overlay (/api/live)", () => {
-  const LIVE_INDEX_2: SlamIndex = { ...INDEX, slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]] };
   const NOON2 = new Date("2026-06-15T12:00:00.000Z");
-  const short = (full: string) => { const t = full.split(" "); return `${t[t.length - 1]} ${t[0][0]}.`; };
   // a real synthetic match with two known players → build a matching Flashscore record. The
   // fixture names them "Player N" — nameTokens() strips the trailing digit, so EVERY player
   // collapses to the same surname-pair key ("player:p") and the join always calls it ambiguous.
@@ -1443,7 +1426,7 @@ describe("live score overlay (/api/live)", () => {
     globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
       const u = String(url);
       if (u.includes("/api/live")) { liveCalls++; return { ok: true, json: async () => ({ matches: [record()] }) } as Response; }
-      const body = u.includes("index.json") ? LIVE_INDEX_2 : (u.includes("roland-garros") || u.includes("wimbledon")) ? LIVE_SNAP : null;
+      const body = u.includes("index.json") ? LIVE_INDEX : (u.includes("roland-garros") || u.includes("wimbledon")) ? LIVE_SNAP : null;
       return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
     }) as unknown as typeof fetch;
     return () => liveCalls;

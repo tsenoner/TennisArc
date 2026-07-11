@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, winnerId, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, isUndecidedInPlay, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -10,7 +10,7 @@ import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { fetchSnapshot, fetchIndex } from "./api";
 import { pickDefaultSlam, availableYears, slamsForYear, statusFor } from "./slams";
-import { isInProgress, type Match, type Player, type SlamIndex, type Snapshot, type Tour } from "./model";
+import type { Match, Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
 import { fetchLive, fetchPbp, overlayLive, applyLivePatch, samePatch, type CurrentGame } from "./live";
@@ -213,16 +213,19 @@ export function createApp(root: HTMLElement): () => void {
   // The cache holds the currently-lit arc nodes so leave/move can clear them without re-querying;
   // it is dropped at the top of draw() so the innerHTML swap never leaves detached references behind.
   let hlNodes: Element[] = [];
-  let hlCurrent: string | null = null; // joined-ids memo: skip re-querying when pointermove repeats the same target
-  const highlightPath = (playerIds: string | readonly string[] | null) => {
-    const ids = playerIds == null ? [] : typeof playerIds === "string" ? [playerIds] : playerIds;
-    const key = ids.join("\u0000"); // NUL never appears in a playerId, so joined keys cannot collide
+  let hlCurrent: string | null = null; // memo key: a lone id, or NUL-joined ids — skips re-querying when pointermove repeats the same target
+  const highlightPath = (playerIds: string | readonly string[]) => {
+    // Key before ids: the memo-hit path is the steady state of every 60-120Hz hover move, and the
+    // single-id case must stay allocation-free (roCurrent's documented bar). A lone id is its own
+    // key — an id can't contain NUL, so it can never collide with a joined pair.
+    const key = typeof playerIds === "string" ? playerIds : playerIds.join("\u0000");
     if (key === hlCurrent) return;
     hlCurrent = key;
     const sb = root.querySelector<HTMLElement>(".sunburst");
     for (const n of hlNodes) n.classList.remove("arc-hl", "q-hl");
     hlNodes = [];
-    if (!ids.length || !sb) { sb?.classList.remove("arc-dim-mode"); return; }
+    if (!key || !sb) { sb?.classList.remove("arc-dim-mode"); return; }
+    const ids = typeof playerIds === "string" ? [playerIds] : playerIds;
     // Each id comes from a row's data-occupant, read back DECODED (the browser undoes the escapeHtml
     // applied when the arc was written). CSS.escape escapes that decoded value for the selector, so the
     // two escapers act on different layers (HTML serialization vs CSS selector) and need not match byte-for-byte.
@@ -237,18 +240,32 @@ export function createApp(root: HTMLElement): () => void {
   };
 
   /** The path ids the current pin lights. Normally just the pinned player — but while the
-   *  SELECTED match is still being played (live/suspended) the pin sits on the arc's occupant,
-   *  which is only the ELO-projected favourite, so both contenders' paths light together.
-   *  A decided match keeps the single path: the loser's run is over (hover still previews it).
-   *  Decided means winnerId, not status — a data-lag match (winner already set while the status
-   *  code still reads "live") is decided everywhere else (buildSunburst) and must not re-light
-   *  the loser here. */
+   *  SELECTED match is still being contested (isUndecidedInPlay: decided-wins-over-status lives
+   *  there) the pin sits on the arc's occupant, which is only the ELO-projected favourite, so
+   *  both contenders' paths light together. A decided match keeps the single path: the loser's
+   *  run is over (hover still previews it). Reads ctx.snap — the live-PATCHED snapshot — so the
+   *  /api/live overlay's status flip counts. */
   const pinnedPathIds = (): string[] => {
     if (!state.pinnedId) return [];
     const m = state.selectedMatchId ? ctx?.snap.matches[state.selectedMatchId] : undefined;
-    return m && !winnerId(m) && isInProgress(m.status) && m.p1 && m.p2 && (m.p1 === state.pinnedId || m.p2 === state.pinnedId)
+    return m && isUndecidedInPlay(m) && m.p1 && m.p2 && (m.p1 === state.pinnedId || m.p2 === state.pinnedId)
       ? [m.p1, m.p2]
       : [state.pinnedId];
+  };
+  // pinnedPathIds, cached once per draw(): every pin/selection/livePatch mutation funnels through
+  // draw(), so it can't go stale — and the pointermove hot path never re-derives or re-allocates it.
+  let hlPin: readonly string[] = [];
+
+  /** What a hover should light: the hovered player's own path — EXCEPT over the selected pair's
+   *  arcs, which keep both contenders lit (the pointer sits on that exact arc right after the
+   *  selecting tap, so previewing its occupant would instantly collapse the pair to the
+   *  favourite alone). hlPin.length > 1 only when the selected match is in play and the pin is a
+   *  contender, so the data-match equality can't false-positive on panel rows (no data-match).
+   *  Off-target (no occupant under the pointer), the pin keeps its path(s) lit. */
+  const hoverPathIds = (el: HTMLElement | null): string | readonly string[] => {
+    const occ = el?.dataset.occupant;
+    if (!el || !occ) return hlPin;
+    return hlPin.length > 1 && el.dataset.match === state.selectedMatchId ? hlPin : occ;
   };
 
   // Top-bar dropdown menu helpers (mobile): the trigger button, and the focusable (non-disabled) menu items.
@@ -403,6 +420,7 @@ export function createApp(root: HTMLElement): () => void {
       ? nations?.find((r) => r.country === state.selectedCountry) ?? null
       : null;
     ctx = { snap, time, defaultId, champId: tree.occupant, champProjected: tree.projected, pinned, isMatch, nation, nationKey: nation ? nationKey(nation) : null };
+    hlPin = pinnedPathIds(); // resolve the pin's lit set for this render (and the hover hot path)
     // The float card — the nation summary when a nation owns it, else the player card for
     // defaultId — with roCurrent/roIdle seeded to match, so updateReadout's memo agrees
     // with the markup rendered below.
@@ -474,7 +492,7 @@ export function createApp(root: HTMLElement): () => void {
 
     // re-light the pinned path on the freshly-rendered arcs (innerHTML swap dropped the classes)
     if (pinned) {
-      highlightPath(pinnedPathIds());
+      highlightPath(hlPin);
       root.querySelector(`[data-hl-path][data-occupant="${CSS.escape(pinned)}"]`)?.classList.add("row-pinned");
     }
     applyPbp(); // restore the last known point-by-point values into the freshly-rendered strip
@@ -873,18 +891,11 @@ export function createApp(root: HTMLElement): () => void {
     const probe = e.pointerType === "mouse" ? null : document.elementFromPoint(e.clientX, e.clientY);
     const el = (probe ?? (e.target as Element | null))?.closest<HTMLElement>("[data-occupant]");
     updateReadout(el?.dataset.occupant || null);
-    // hovering an arc or a panel row previews that player's path through the sunburst
-    // (the float card names them too); off-target, the pinned path(s) stay lit. Arcs of the
-    // SELECTED in-play match are the exception: they keep the both-contenders highlight —
-    // the pointer sits on that very arc right after the tap that selected it, so previewing
-    // its occupant here would instantly collapse the pair to the favourite's path alone.
-    const pinIds = pinnedPathIds();
-    const occ = el?.dataset.occupant;
-    highlightPath(!occ ? pinIds
-      : pinIds.length > 1 && el?.dataset.match === state.selectedMatchId ? pinIds
-      : occ);
+    // hovering an arc or a panel row previews that player's path through the sunburst (the float
+    // card names them too); hoverPathIds owns the exceptions (selected pair's arcs, off-target pin).
+    highlightPath(hoverPathIds(el ?? null));
   }, { signal });
-  root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(pinnedPathIds()); }, { capture: true, signal });
+  root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(hlPin); }, { capture: true, signal });
 
   // Sighted-keyboard focus indicator for the SVG-only quarter handles (WCAG 2.4.7): the
   // sr-only twin's own focus ring is clipped to 1px (invisible), so mirror focus onto the

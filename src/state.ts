@@ -49,6 +49,14 @@ export function winnerId(m: Match): string | null {
   return null;
 }
 
+/** True while a match is genuinely being contested: in progress by status AND not yet decided.
+ *  Decided wins over status — SofaScore sets the winner before flipping the status code, so a
+ *  data-lag match (winner already set while status still reads "live"/"suspended") is decided
+ *  here. The single home of that rule: buildSunburst's arc tiers and the app's both-contenders
+ *  path highlight both read it, so the lag shape can never split the surfaces. */
+export const isUndecidedInPlay = (m: Match): boolean =>
+  winnerId(m) === null && isInProgress(m.status);
+
 export function finalMatch(s: Snapshot): Match {
   const final = Object.values(s.matches).find((m) => m.nextMatchId === null);
   if (!final) throw new Error("no final match (nextMatchId === null) in snapshot");
@@ -123,14 +131,14 @@ export function buildSunburst(s: Snapshot): SunNode {
           { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
           { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
         ];
-    // `live` requires no decided result yet (SunNode.live = "in progress, no winner"). A data-lag
-    // match — winner already set while status still reads "live" — must NOT be both decided and
-    // live, or render would draw it named + heat-filled AND hatched/breathing (and possibly .out).
-    // `suspended` mirrors `live` but for a paused match (its own arc treatment, no breathing hatch).
+    // `live`/`suspended` are the two arc tiers of an isUndecidedInPlay match (decided-wins-over-
+    // status lives THERE): a data-lag match must NOT be both decided and live, or render would
+    // draw it named + heat-filled AND hatched/breathing (and possibly .out).
     const undecided = decided === null;
+    const inPlay = isUndecidedInPlay(m);
     return {
       id, matchId: m.id, occupant, projected: undecided,
-      live: undecided && m.status === "live", suspended: undecided && m.status === "suspended",
+      live: inPlay && m.status === "live", suspended: inPlay && m.status === "suspended",
       depth, children,
     };
   };
