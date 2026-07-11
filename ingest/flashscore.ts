@@ -1,4 +1,4 @@
-import type { LiveRecord, Tour } from "../src/model";
+import type { CurrentGame, LiveRecord, Tour } from "../src/model";
 import { TOURNEY } from "./names.js"; // .js ext: this module is reached by the /api/live Vercel ESM function (see api/live.ts)
 
 const num = (v: string): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -85,9 +85,13 @@ export function parseLiveFeed(text: string, opts: { tour: Tour; slam: string }):
  * render them verbatim. Structure: TS/TE-delimited blocks where each score cell is
  * `PT÷PT ¬ PV÷<playerNo> ¬ PT÷VA ¬ PV÷<value>`; a PT÷VA with no pending player (the
  * "Current game" header) must not capture. Pairing state is scoped to each block: TS/TE
- * tokens reset player and pending so values cannot span block boundaries.
+ * tokens reset player and pending so values cannot span block boundaries. The FIRST complete
+ * pair wins — scanning stops there, so later SC-shaped sections of a fuller feed variant
+ * (stats/history tabs) can never overwrite the current game. Captured values must look like
+ * point values (A or 1–2 digits); anything else means the shape drifted → null, never wrong-loud.
  */
-export function parseCurrentGame(text: string): { home: string; away: string } | null {
+const POINT_VALUE = /^(?:A|\d{1,2})$/;
+export function parseCurrentGame(text: string): CurrentGame | null {
   let player: string | null = null;
   let pending: "player" | "value" | null = null;
   const vals: Record<string, string> = {};
@@ -101,9 +105,14 @@ export function parseCurrentGame(text: string): { home: string; away: string } |
     if (k === "PT") { pending = v === "PT" ? "player" : v === "VA" && player != null ? "value" : null; continue; }
     if (k === "PV") {
       if (pending === "player") player = v;
-      else if (pending === "value" && player != null) { vals[player] = v; player = null; }
+      else if (pending === "value" && player != null) {
+        vals[player] = v; player = null;
+        if (vals["1"] != null && vals["2"] != null) break; // first complete pair wins
+      }
       pending = null;
     }
   }
-  return vals["1"] != null && vals["2"] != null ? { home: vals["1"], away: vals["2"] } : null;
+  return vals["1"] != null && POINT_VALUE.test(vals["1"]) && vals["2"] != null && POINT_VALUE.test(vals["2"])
+    ? { home: vals["1"], away: vals["2"] }
+    : null;
 }

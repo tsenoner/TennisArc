@@ -1,5 +1,6 @@
-// Shared test-only helpers for api/*.test.ts. The leading underscore keeps Vercel from deploying
-// this file as a route (same convention as _flashscore.ts).
+// Shared test-only helpers for tests/api-*.test.ts. These live OUTSIDE api/ on purpose: Vercel
+// deploys every api/* file as a public function unless it is underscore-prefixed, so a *.test.ts
+// there ships as a crashing public route (prod-verified: GET /api/live.test → 500).
 export function fakeRes() {
   return {
     statusCode: 0, headers: {} as Record<string, string>, body: undefined as unknown,

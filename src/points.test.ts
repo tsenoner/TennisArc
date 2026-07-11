@@ -82,6 +82,25 @@ describe("pointState — tiebreaks", () => {
   });
 });
 
+describe("pointState — stale-context guards", () => {
+  // The games context rides the 30s list poll while points ride the 8s pbp poll, so the
+  // set/tiebreak transition windows show fresh points against a stale set context.
+  it("suppresses every chip when the current-set games are already decided (new set not yet appended)", () => {
+    expect(st({ pts: { p1: "40", p2: "15" }, games: { p1: 6, p2: 4 } }))
+      .toEqual({ tb: false, chip: null, chipFor: null });
+  });
+  it("suppresses the TB chip when both values read as tennis points (stale 6-6 context, normal game in progress)", () => {
+    expect(st({ pts: { p1: "15", p2: "0" }, games: { p1: 6, p2: 6 } }))
+      .toEqual({ tb: true, chip: null, chipFor: null });
+  });
+  it("legit chips survive both guards", () => {
+    expect(st({ pts: { p1: "40", p2: "30" }, games: { p1: 5, p2: 4 } }).chip).toBe("SP");
+    expect(st({ pts: { p1: "6", p2: "5" }, games: { p1: 6, p2: 6 } }).chip).toBe("SP");
+    // "15"-"14" deep in a 10-point TB: "14" is out-of-set, so the tennis-format guard passes
+    expect(st({ pts: { p1: "15", p2: "14" }, games: { p1: 6, p2: 6 }, sets: { p1: 2, p2: 2 } }).chip).toBe("MP");
+  });
+});
+
 describe("deriveContext", () => {
   const s = (p1: number, p2: number, tbv?: number): SetScore => ({ p1, p2, ...(tbv !== undefined && { tb: tbv }) });
   it("last entry is the current set; completed earlier sets are counted", () => {

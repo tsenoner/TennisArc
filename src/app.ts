@@ -976,7 +976,7 @@ export function createApp(root: HTMLElement): () => void {
     void (async () => {
       if (Date.now() - lastIndexMs > LIVE_POLL_MS / 2) await refreshIndex();
       if (isLiveView() && Date.now() - lastLoadMs > LIVE_POLL_MS / 2) void loadCurrent();
-      if (isLiveView()) void loadLive();
+      if (isLiveView()) { void loadLive(); void pbpTick(); } // the pbp slot returns fresh too, not just the overlay
     })();
     if (Date.now() - lastDrawMs > 60_000) draw();
   }, { signal });
@@ -1002,9 +1002,11 @@ export function createApp(root: HTMLElement): () => void {
   // Point-by-point: while a LIVE match is selected, poll its per-match current game and write
   // the values into the strip IN PLACE — never draw(): a point tick must not wipe panel
   // scroll/focus or rebuild the wheel. lastPbp survives redraws; draw()'s tail re-applies it
-  // so the 30s overlay redraw doesn't blank the slot back to its "–" placeholders.
+  // so the 30s overlay redraw doesn't blank the slot back to its "–" placeholders — but only
+  // while it is fresh (applyPbp's 30s age bound), so a wedged upstream degrades to placeholders.
   const PBP_POLL_MS = 8_000;
-  let lastPbp: { mid: string; game: CurrentGame } | null = null;
+  let lastPbp: { mid: string; game: CurrentGame; at: number } | null = null;
+  let pbpSeq = 0; // stamps each pbpTick request — only the most-recently-started one may write
   /** The selected match with its live patch merged — undefined unless it is live and joined. */
   const pbpTarget = (): Match | undefined => {
     if (!isLiveView() || !state.selectedMatchId) return undefined;
@@ -1016,6 +1018,9 @@ export function createApp(root: HTMLElement): () => void {
   };
   const applyPbp = (m = pbpTarget()): void => {
     if (!lastPbp || !m?.flash || m.flash.id !== lastPbp.mid) return;
+    // Stale beyond one live-poll cycle (a permanently failing /api/pbp must not freeze
+    // minutes-old points under a live badge) — placeholders are more honest than old points.
+    if (Date.now() - lastPbp.at > 30_000) return;
     const gameEl = root.querySelector<HTMLElement>(".ms-game");
     if (!gameEl) return;
     const homeIsP1 = m.flash.homeIsP1;
@@ -1032,8 +1037,8 @@ export function createApp(root: HTMLElement): () => void {
     if (chip) {
       chip.hidden = st.chip == null;
       chip.textContent = st.chip ?? "";
-      if (st.chip != null && st.chipFor != null) {
-        chip.dataset.for = st.chipFor;
+      if (st.chip != null) { // pointState always pairs chip with chipFor
+        chip.dataset.for = st.chipFor!;
         chip.setAttribute("aria-label", CHIP_LABEL[st.chip]);
       } else {
         delete chip.dataset.for;
@@ -1041,18 +1046,22 @@ export function createApp(root: HTMLElement): () => void {
       }
     }
     // CX rotates every two points in a tiebreak — faster than its 30s cadence — so hide the dot.
-    for (const dot of root.querySelectorAll<HTMLElement>(".ms-serve")) dot.hidden = st.tb;
+    // Scoped to the strip: the serve dots live in .ms-mu beside .ms-game, never in the SVG tree.
+    for (const dot of gameEl.closest(".match-strip")?.querySelectorAll<HTMLElement>(".ms-serve") ?? [])
+      dot.hidden = st.tb;
   };
   const pbpTick = async (): Promise<void> => {
     if (document.hidden) return;
     const m = pbpTarget();
     if (!m?.flash) return;
     const mid = m.flash.id;
+    const seq = ++pbpSeq;
     const game = await fetchPbp(mid);
     if (!game) return;                                  // keep the last shown values; retry next tick
+    if (seq !== pbpSeq) return;                          // a newer request started — only the most-recently-started may write
     const cur = pbpTarget();
     if (cur?.flash?.id !== mid) return;                  // selection changed mid-fetch
-    lastPbp = { mid, game };
+    lastPbp = { mid, game, at: Date.now() };
     applyPbp(cur);
   };
   const pbpTimer = window.setInterval(() => { void pbpTick(); }, PBP_POLL_MS);

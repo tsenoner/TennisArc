@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import handler from "./pbp";
-import { fakeRes } from "./_test-helpers";
+import handler from "../api/pbp";
+import { fakeRes } from "./api-helpers";
 import { BETWEEN_GAMES } from "../ingest/fixtures/flashscore-mhs.sample";
 
 afterEach(() => vi.restoreAllMocks());

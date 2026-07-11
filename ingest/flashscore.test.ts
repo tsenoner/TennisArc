@@ -81,6 +81,21 @@ describe("parseCurrentGame (df_mhs current-game feed)", () => {
     expect(parseCurrentGame("TS÷SC¬PT÷PT¬PV÷2¬PT÷VA¬PV÷15¬TE÷SC¬~")).toBeNull(); // only player 2
   });
 
+  it("takes the FIRST complete pair — a later SC-shaped section (stats/history tab) cannot overwrite", () => {
+    const fuller = BETWEEN_GAMES +
+      "TS÷SC¬PT÷PT¬PV÷1¬PT÷VA¬PV÷40¬TE÷SC¬TS÷SC¬PT÷PT¬PV÷2¬PT÷VA¬PV÷30¬TE÷SC¬~";
+    expect(parseCurrentGame(fuller)).toEqual({ home: "0", away: "0" });
+  });
+
+  it("returns null when a captured value is not a point value (junk-value feed)", () => {
+    const pct = BETWEEN_GAMES.replace("PV÷1¬PT÷VA¬PV÷0", "PV÷1¬PT÷VA¬PV÷67%");
+    expect(parseCurrentGame(pct)).toBeNull();
+    const words = BETWEEN_GAMES.replace("PV÷2¬PT÷VA¬PV÷0", "PV÷2¬PT÷VA¬PV÷Current game");
+    expect(parseCurrentGame(words)).toBeNull();
+    const empty = BETWEEN_GAMES.replace("PV÷1¬PT÷VA¬PV÷0", "PV÷1¬PT÷VA¬PV÷");
+    expect(parseCurrentGame(empty)).toBeNull();
+  });
+
   it("returns null when orphaned pairing state leaks across block boundaries (drift regression)", () => {
     // Without block-boundary reset: orphaned PT÷PT¬PV÷1 (no matching VA) at end of first block
     // persists into the next block, where a header's PT÷VA incorrectly captures its value.

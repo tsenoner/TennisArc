@@ -1,4 +1,4 @@
-import type { LiveRecord, Match, SetScore, Snapshot, Tour } from "./model";
+import type { CurrentGame, LiveRecord, Match, SetScore, Snapshot, Tour } from "./model";
 import { tryFetch } from "./api";
 import { flashSigKey, sigKey, sortedPairKey } from "./names";
 import { bestOfForTour, isTiebreak, setsToWin } from "./points";
@@ -17,7 +17,7 @@ export async function fetchLive(tour: Tour, slam: string): Promise<LiveRecord[] 
  *  Null on any failure or when there is no current game ({} body) — the caller keeps
  *  showing its last value and retries on the next tick. `no-store` for the same reason
  *  as fetchLive: the function's own s-maxage does the coalescing. */
-export interface CurrentGame { home: string; away: string }
+export type { CurrentGame } from "./model"; // the shape is named once, in model.ts (app.ts imports it from here)
 export async function fetchPbp(mid: string): Promise<CurrentGame | null> {
   return tryFetch<CurrentGame>(
     `/api/pbp?mid=${encodeURIComponent(mid)}`,

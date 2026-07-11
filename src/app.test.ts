@@ -1415,8 +1415,9 @@ describe("live score overlay (/api/live)", () => {
 
     it("shows the chip when the point is a set point, with side attribution and an accessible name", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-      // baseRecord sets=[[6,4]] → current set reads 6-4; p1 at 40 wins 7-4 ⇒ SP for p1 (0 completed sets)
-      installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "40", away: "30" }));
+      // an actually-IN-PROGRESS set (baseRecord's 6-4 is decided → the stale-context guard
+      // suppresses chips): at 5-4 p1's 40-30 wins the set 6-4 ⇒ SP for p1 (0 completed sets)
+      installPbpNet(() => ({ ...baseRecord, setsWon: [0, 0], sets: [[5, 4]], srv: 1 }), () => ({ home: "40", away: "30" }));
       const root = await mountApp();
       await vi.advanceTimersByTimeAsync(50);
       click(liveArc(root));
@@ -1461,6 +1462,53 @@ describe("live score overlay (/api/live)", () => {
       ok = false;
       await vi.advanceTimersByTimeAsync(9_000);
       expect(ptsText(root)).toEqual(["30", "15"]);
+    });
+
+    it("ignores an out-of-order /api/pbp response (an older request resolving after a newer one)", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      installLiveNet(() => ({ ...baseRecord, srv: 1 }));
+      const base = globalThis.fetch;
+      // /api/pbp requests hang until the test resolves them explicitly, in any order
+      const pending: Array<(g: unknown) => void> = [];
+      globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes("/api/pbp")) {
+          return new Promise<Response>((resolve) => {
+            pending.push((g) => resolve({ ok: true, status: 200, json: async () => g } as Response));
+          });
+        }
+        return base(url);
+      }) as unknown as typeof fetch;
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));                                     // request #1 (immediate kick) — left hanging
+      await vi.waitFor(() => { if (pending.length === 0) throw new Error("no immediate pbp kick"); });
+      await vi.advanceTimersByTimeAsync(8_000);                 // request #2 (8s tick) — also hanging
+      await vi.waitFor(() => { if (pending.length < 2) throw new Error("no second pbp request"); });
+      pending[1]({ home: "40", away: "0" });                    // newer response lands first
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "40") throw new Error("newer points not applied"); });
+      pending[0]({ home: "30", away: "15" });                   // then the stale one straggles in
+      await vi.advanceTimersByTimeAsync(50);
+      expect(ptsText(root)).toEqual(["40", "0"]);               // the stale response must not regress the display
+    });
+
+    it("re-renders placeholders (not minutes-old points) when the last pbp value outlives the live-poll cycle", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      let ok = true;
+      let served: unknown = { ...baseRecord, setsWon: [0, 0], sets: [[5, 4]], srv: 1 };
+      const pbpCalls = installPbpNet(() => served, () => ({ home: "30", away: "15" }), () => ok);
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "30") throw new Error("points not applied"); });
+      const before = pbpCalls();
+      ok = false;                                               // upstream pbp dies for good
+      await vi.advanceTimersByTimeAsync(32_000);                // ticks keep failing → lastPbp ages past 30s
+      expect(pbpCalls()).toBeGreaterThan(before);
+      served = { ...baseRecord, setsWon: [0, 0], sets: [[5, 5]], srv: 1 }; // overlay change → next 30s live tick redraws
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "–") throw new Error("stale points still shown"); });
+      expect(ptsText(root)).toEqual(["–", "–"]);                // placeholders are more honest than minutes-old points
     });
   });
 });

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import handler from "./live";
-import { fakeRes } from "./_test-helpers";
+import handler from "../api/live";
+import { fakeRes } from "./api-helpers";
 
 const feed = readFileSync(fileURLToPath(new URL("../ingest/fixtures/flashscore-live.sample.txt", import.meta.url)), "utf8");
 

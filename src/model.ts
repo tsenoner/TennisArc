@@ -112,6 +112,11 @@ export interface LiveRecord {
   srv?: 1 | 2;                   // current server (CX), live records only — 1 home, 2 away
 }
 
+/** The selected live match's current-game point values (Flashscore df_mhs feed, home/away order).
+ *  Raw display strings — "0" | "15" | "30" | "40" | "A", plain digits during a tiebreak — parsed
+ *  by ingest/flashscore.ts, fetched through /api/pbp by src/live.ts, rendered verbatim. */
+export interface CurrentGame { home: string; away: string }
+
 export interface Round {
   index: number;
   name: string;               // "Round of 128" … "Final"
