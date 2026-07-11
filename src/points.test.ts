@@ -83,7 +83,7 @@ describe("pointState — tiebreaks", () => {
 });
 
 describe("deriveContext", () => {
-  const s = (p1: number, p2: number, tbv?: number): SetScore => ({ p1, p2, tb: tbv ?? null });
+  const s = (p1: number, p2: number, tbv?: number): SetScore => ({ p1, p2, ...(tbv !== undefined && { tb: tbv }) });
   it("last entry is the current set; completed earlier sets are counted", () => {
     expect(deriveContext([s(6, 4), s(4, 6), s(2, 1)]))
       .toEqual({ games: { p1: 2, p2: 1 }, sets: { p1: 1, p2: 1 } });
