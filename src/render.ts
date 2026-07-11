@@ -754,13 +754,24 @@ function statBar(label: string, v: [number, number] | null): string {
 /** One side of the strip's matchup row. Both name forms are always rendered — a pure CSS
  *  media query picks the full name (wide) or the surname (≤960px), so no resize JS exists.
  *  `rev` mirrors the right-hand side: name then flag, so the flags bracket the score. */
-function stripSide(side: InsightSide, win: boolean, rev: boolean): string {
+function stripSide(side: InsightSide, win: boolean, rev: boolean, serve = false): string {
   const short = side.name.split(" ").slice(-1)[0] || side.name;
   const name = `<span class="ms-name"><span class="nm-full">${escapeHtml(side.name)}</span>` +
     `<span class="nm-short">${escapeHtml(short)}</span></span>`;
   const chk = win ? '<span class="mi-chk">✓</span>' : "";
+  const dot = serve ? '<span class="ms-serve" role="img" aria-label="serving"></span>' : "";
   const flag = `<span class="ms-fl">${flagImg(side.country, 14, side.country)}</span>`;
-  return `<span class="ms-side">${rev ? `${name}${chk}${flag}` : `${flag}${name}${chk}`}</span>`;
+  return `<span class="ms-side">${rev ? `${name}${dot}${chk}${flag}` : `${flag}${name}${dot}${chk}`}</span>`;
+}
+
+/** The live current-game slot next to the set score. Rendered with placeholders; the app's
+ *  8s /api/pbp tick fills the nodes IN PLACE (data-side addressing) — a redraw resets them to
+ *  "–" and the tick (or the post-draw re-apply) restores the last known values. */
+function gameBlock(ins: MatchInsight): string {
+  if (!ins.live) return "";
+  return `<span class="ms-game"><span class="ms-pts" data-side="p1">–</span>` +
+    `<span class="ms-pts-sep" aria-hidden="true">·</span>` +
+    `<span class="ms-pts" data-side="p2">–</span><span class="ms-chip" hidden></span></span>`;
 }
 
 /** Slim match context strip — an in-flow summary at the top of the wheel column on EVERY
@@ -795,9 +806,9 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
     `<button class="ms-more" data-action="detail-expand"${opts.expanded ? ' aria-controls="match-detail"' : ""} aria-expanded="${opts.expanded}">Details ${opts.expanded ? "▴" : "▾"}</button>` +
     zoom +
     `<button class="ms-close" data-action="close-detail" aria-label="Close match">✕</button></div>` +
-    `<div class="ms-mu">${stripSide(ins.p1, ins.winner === "p1", false)}` +
-    `<div class="ms-score">${insightScore(ins)}</div>` +
-    `${stripSide(ins.p2, ins.winner === "p2", true)}</div>` +
+    `<div class="ms-mu">${stripSide(ins.p1, ins.winner === "p1", false, ins.live?.serving === "p1")}` +
+    `<div class="ms-score">${insightScore(ins)}${gameBlock(ins)}</div>` +
+    `${stripSide(ins.p2, ins.winner === "p2", true, ins.live?.serving === "p2")}</div>` +
     `</div>`
   );
 }

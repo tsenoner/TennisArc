@@ -592,6 +592,9 @@ export interface MatchInsight {
   badges: string[]; upset: boolean; eloLine: string;
   aces: [number, number] | null; doubleFaults: [number, number] | null;
   scheduled: ScheduledInfo | null;
+  /** Present only while the match is live AND the Flashscore overlay joined it: everything the
+   *  strip needs to poll /api/pbp and orient its home/away values. */
+  live: { flashId: string; homeIsP1: boolean; serving?: "p1" | "p2" } | null;
 }
 
 function insightSide(s: Snapshot, pid: string | null, surface: string, time: Map<string, PlayerTime>, ref: string): InsightSide {
@@ -661,5 +664,8 @@ export function matchInsight(
     p1, p2, badges, upset, eloLine,
     aces: m.stats?.aces ?? null, doubleFaults: m.stats?.doubleFaults ?? null,
     scheduled: scheduledInfo(m, nowSec, s.tournament.slam),
+    live: m.status === "live" && m.flashId != null && m.flashHomeIsP1 != null
+      ? { flashId: m.flashId, homeIsP1: m.flashHomeIsP1, ...(m.serving ? { serving: m.serving } : {}) }
+      : null,
   };
 }
