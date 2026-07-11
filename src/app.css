@@ -593,7 +593,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 
 /* Live current-game block in the match strip (fed in place by the /api/pbp tick). Teal like
    the caption's .ms-dot — same live signal, just relocated next to the set score. */
-.ms-game { display: inline-flex; align-items: baseline; gap: 4px; margin-left: 10px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--teal); }
+.ms-game { display: inline-flex; align-items: baseline; gap: 4px; margin-left: 10px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--teal-text); }
 .ms-pts-sep { opacity: 0.5; }
 .ms-chip { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; padding: 1px 5px; border-radius: 4px; margin-left: 4px; background: var(--teal); color: #04211f; }
 .ms-serve { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); display: inline-block; margin: 0 4px; flex: none; }

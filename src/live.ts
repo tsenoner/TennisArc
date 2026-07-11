@@ -66,7 +66,12 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
     };
     if (r.stage === 2) {
       patch.flash = { id: r.id, homeIsP1 };
-      if (r.srv) {
+      // Tiebreak (last set reads e.g. 6-6, or the rare 12-12+): CX (r.srv) rotates every two
+      // points, far faster than the 30s poll, so each tick would produce a differing patch and
+      // defeat samePatch. The client hides the serve dot in tiebreaks anyway, so omit `serving`.
+      const last = r.sets[r.sets.length - 1];
+      const inTb = last != null && last[0] === last[1] && last[0] >= 6;
+      if (r.srv && !inTb) {
         const homeServes = r.srv === 1;
         patch.serving = homeServes ? (homeIsP1 ? "p1" : "p2") : (homeIsP1 ? "p2" : "p1");
       }

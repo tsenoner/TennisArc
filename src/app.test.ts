@@ -1398,9 +1398,9 @@ describe("live score overlay (/api/live)", () => {
       expect(root.querySelector(".match-strip")).toBe(strip);
     });
 
-    it("shows the chip when the point is a set point", async () => {
+    it("shows the chip when the point is a set point, with side attribution and an accessible name", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-      // baseRecord sets=[[6,4]] → current set reads 6-4; p1 at 40 wins 7-4 ⇒ SP (0 completed sets)
+      // baseRecord sets=[[6,4]] → current set reads 6-4; p1 at 40 wins 7-4 ⇒ SP for p1 (0 completed sets)
       installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "40", away: "30" }));
       const root = await mountApp();
       await vi.advanceTimersByTimeAsync(50);
@@ -1409,6 +1409,9 @@ describe("live score overlay (/api/live)", () => {
         const chip = root.querySelector<HTMLElement>(".ms-chip");
         if (!chip || chip.hidden || chip.textContent !== "SP") throw new Error("no SP chip");
       });
+      const chip = root.querySelector<HTMLElement>(".ms-chip")!;
+      expect(chip.dataset.for).toBe("p1");
+      expect(chip.getAttribute("aria-label")).toBe("set point");
     });
 
     it("does not poll /api/pbp while nothing is selected", async () => {

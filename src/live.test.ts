@@ -74,6 +74,20 @@ describe("overlayLive", () => {
     expect(patch.flash?.homeIsP1).toBe(false);
     expect(patch.serving).toBe("p2"); // record home serving = our p2
   });
+  it("omits serving during a tiebreak set so CX rotation cannot churn the patch", () => {
+    // last set reads 6-6: a tiebreak in progress. CX (r.srv) rotates every two points here,
+    // so the client hides the serve dot anyway — dropping `serving` keeps the patch stable.
+    const s = snap("ATP", [player("a", "Carlos Alcaraz"), player("b", "Jannik Sinner")], [match("0-0", "a", "b")]);
+    const r = rec({ home: "Alcaraz C.", away: "Sinner J.", stage: 2, srv: 1, sets: [[6, 4], [6, 6]] });
+    const patch = overlayLive(s, [r])["0-0"]!;
+    expect(patch.serving).toBeUndefined();
+  });
+  it("still sets serving on a non-tiebreak set score", () => {
+    const s = snap("ATP", [player("a", "Carlos Alcaraz"), player("b", "Jannik Sinner")], [match("0-0", "a", "b")]);
+    const r = rec({ home: "Alcaraz C.", away: "Sinner J.", stage: 2, srv: 1, sets: [[6, 4], [3, 2]] });
+    const patch = overlayLive(s, [r])["0-0"]!;
+    expect(patch.serving).toBe("p1");
+  });
   it("puts NO transient live fields on a finished patch", () => {
     const s = snap("ATP", [player("a", "Carlos Alcaraz"), player("b", "Jannik Sinner")], [match("0-0", "a", "b")]);
     const r = rec({ home: "Alcaraz C.", away: "Sinner J.", stage: 3, setsWon: [3, 0], srv: 1 });
@@ -109,6 +123,13 @@ describe("samePatch", () => {
   });
   it("is false when the key sets differ", () => {
     expect(samePatch({ "0-0": {} }, { "0-0": {}, "0-1": {} })).toBe(false);
+  });
+  it("compares nested flash + serving fields", () => {
+    const a: Record<string, Partial<Match>> = { "0-0": { flash: { id: "x", homeIsP1: true }, serving: "p1" } };
+    const bSame: Record<string, Partial<Match>> = { "0-0": { flash: { id: "x", homeIsP1: true }, serving: "p1" } };
+    expect(samePatch(a, bSame)).toBe(true);
+    const bDiff: Record<string, Partial<Match>> = { "0-0": { flash: { id: "x", homeIsP1: true }, serving: "p2" } };
+    expect(samePatch(a, bDiff)).toBe(false);
   });
 });
 

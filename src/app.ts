@@ -18,6 +18,9 @@ import { deriveContext, pointState, bestOfForTour } from "./points";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
+/** Spelled-out meaning for the .ms-chip abbreviation, for its aria-label (the visible text is the
+ *  terse "BP"/"SP"/"MP" — screen-reader users get the full phrase instead). */
+const CHIP_LABEL: Record<"BP" | "SP" | "MP", string> = { BP: "break point", SP: "set point", MP: "match point" };
 
 interface AppState {
   tour: Tour;
@@ -1025,7 +1028,17 @@ export function createApp(root: HTMLElement): () => void {
       if (el) el.textContent = pts[side];
     }
     const chip = gameEl.querySelector<HTMLElement>(".ms-chip");
-    if (chip) { chip.hidden = st.chip == null; chip.textContent = st.chip ?? ""; }
+    if (chip) {
+      chip.hidden = st.chip == null;
+      chip.textContent = st.chip ?? "";
+      if (st.chip != null && st.chipFor != null) {
+        chip.dataset.for = st.chipFor;
+        chip.setAttribute("aria-label", CHIP_LABEL[st.chip]);
+      } else {
+        delete chip.dataset.for;
+        chip.removeAttribute("aria-label");
+      }
+    }
     // CX rotates every two points in a tiebreak — faster than its 30s cadence — so hide the dot.
     for (const dot of root.querySelectorAll<HTMLElement>(".ms-serve")) dot.hidden = st.tb;
   };
