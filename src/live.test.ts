@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { overlayLive, applyLivePatch, fetchLive, samePatch } from "./live";
+import { overlayLive, applyLivePatch, fetchLive, fetchPbp, samePatch } from "./live";
 import type { LiveRecord, Match, Player, Snapshot } from "./model";
 
 const player = (id: string, name: string): Player => ({
@@ -124,5 +124,24 @@ describe("fetchLive", () => {
     expect(await fetchLive("ATP", "wimbledon")).toBeNull();
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => { throw new Error("html"); } })));
     expect(await fetchLive("ATP", "wimbledon")).toBeNull();
+  });
+});
+
+describe("fetchPbp", () => {
+  it("fetches same-origin with no-store and returns the game", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ home: "30", away: "15" }) } as Response));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await fetchPbp("nkXJ8mYa")).toEqual({ home: "30", away: "15" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/pbp?mid=nkXJ8mYa", { cache: "no-store" });
+  });
+  it("returns null on the empty {} body (no current game)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({}) } as Response)));
+    expect(await fetchPbp("nkXJ8mYa")).toBeNull();
+  });
+  it("returns null on HTTP failure and thrown fetch", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500 } as Response)));
+    expect(await fetchPbp("nkXJ8mYa")).toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("net"); }));
+    expect(await fetchPbp("nkXJ8mYa")).toBeNull();
   });
 });

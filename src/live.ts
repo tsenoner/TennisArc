@@ -12,6 +12,19 @@ export async function fetchLive(tour: Tour, slam: string): Promise<LiveRecord[] 
   return data ? data.matches : null;
 }
 
+/** The selected live match's current-game points, from the same-origin /api/pbp proxy.
+ *  Null on any failure or when there is no current game ({} body) — the caller keeps
+ *  showing its last value and retries on the next tick. `no-store` for the same reason
+ *  as fetchLive: the function's own s-maxage does the coalescing. */
+export interface CurrentGame { home: string; away: string }
+export async function fetchPbp(mid: string): Promise<CurrentGame | null> {
+  return tryFetch<CurrentGame>(
+    `/api/pbp?mid=${encodeURIComponent(mid)}`,
+    (d) => typeof d?.home === "string" && typeof d?.away === "string",
+    "no-store",
+  );
+}
+
 /**
  * Join Flashscore live records onto snapshot matches by sorted surname-pair (unique within a live
  * singles draw). Returns matchId → Partial<Match> for LIVE (stage 2) and FINISHED (stage 3) records.
