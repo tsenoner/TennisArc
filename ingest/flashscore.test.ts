@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseCurrentGame, parseLiveFeed } from "./flashscore";
+import { BETWEEN_GAMES } from "./fixtures/flashscore-mhs.sample";
 
 const feed = readFileSync(fileURLToPath(new URL("./fixtures/flashscore-live.sample.txt", import.meta.url)), "utf8");
 
@@ -49,11 +50,6 @@ describe("parseLiveFeed", () => {
 });
 
 describe("parseCurrentGame (df_mhs current-game feed)", () => {
-  // Verbatim shape captured live 2026-07-10 (Sinner–Djokovic Wimbledon SF, between games).
-  const BETWEEN_GAMES =
-    "TS÷GR¬PT÷TI¬PV÷notab¬TS÷TA¬TS÷HD¬PT÷VA¬PV÷Current game¬TE÷HD¬TS÷RWP¬" +
-    "TS÷SC¬PT÷PT¬PV÷1¬PT÷VA¬PV÷0¬TE÷SC¬TS÷SC¬PT÷PT¬PV÷2¬PT÷VA¬PV÷0¬TE÷SC¬" +
-    "TE÷RWP¬TE÷TA¬TE÷GR¬A1÷559e897e9099399799bb8fe726208ada¬~";
   const MID_GAME = BETWEEN_GAMES.replace("PV÷1¬PT÷VA¬PV÷0", "PV÷1¬PT÷VA¬PV÷40")
     .replace("PV÷2¬PT÷VA¬PV÷0", "PV÷2¬PT÷VA¬PV÷A");
 

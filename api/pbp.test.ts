@@ -1,22 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import handler from "./pbp";
+import { fakeRes } from "./_test-helpers";
+import { BETWEEN_GAMES } from "../ingest/fixtures/flashscore-mhs.sample";
 
-// Between-games df_mhs body (both sides at love) — verbatim shape from ingest/flashscore.test.ts's
-// BETWEEN_GAMES fixture, reused here so this handler test exercises a real feed shape rather than
-// an ad-hoc string.
-const BETWEEN_GAMES =
-  "TS÷GR¬PT÷TI¬PV÷notab¬TS÷TA¬TS÷HD¬PT÷VA¬PV÷Current game¬TE÷HD¬TS÷RWP¬" +
-  "TS÷SC¬PT÷PT¬PV÷1¬PT÷VA¬PV÷0¬TE÷SC¬TS÷SC¬PT÷PT¬PV÷2¬PT÷VA¬PV÷0¬TE÷SC¬" +
-  "TE÷RWP¬TE÷TA¬TE÷GR¬A1÷559e897e9099399799bb8fe726208ada¬~";
-
-function fakeRes() {
-  return {
-    statusCode: 0, headers: {} as Record<string, string>, body: undefined as unknown,
-    status(c: number) { this.statusCode = c; return this; },
-    setHeader(k: string, v: string) { this.headers[k] = v; },
-    json(b: unknown) { this.body = b; return this; },
-  };
-}
 afterEach(() => vi.restoreAllMocks());
 
 describe("/api/pbp handler", () => {

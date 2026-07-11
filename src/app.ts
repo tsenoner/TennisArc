@@ -14,13 +14,10 @@ import type { Match, Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
 import { fetchLive, fetchPbp, overlayLive, applyLivePatch, samePatch, type CurrentGame } from "./live";
-import { deriveContext, pointState, bestOfForTour } from "./points";
+import { deriveContext, pointState, bestOfForTour, CHIP_LABEL } from "./points";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
-/** Spelled-out meaning for the .ms-chip abbreviation, for its aria-label (the visible text is the
- *  terse "BP"/"SP"/"MP" — screen-reader users get the full phrase instead). */
-const CHIP_LABEL: Record<"BP" | "SP" | "MP", string> = { BP: "break point", SP: "set point", MP: "match point" };
 
 interface AppState {
   tour: Tour;
@@ -781,6 +778,7 @@ export function createApp(root: HTMLElement): () => void {
       setHelp(!state.helpOpen);
       return;
     } else if (a === "inspect" && el.dataset.match) {
+      const prevSel = state.selectedMatchId; // kick pbpTick only when this actually changes the selection
       if (id && id === state.focusId) {
         // The focused section's own arc is the hub: tapping it zooms OUT one level (its
         // parent; setFocus maps "r" to a full clear). Checked before any lens semantics —
@@ -811,7 +809,10 @@ export function createApp(root: HTMLElement): () => void {
         state.selectedNodeId = id;
       }
       draw();
-      void pbpTick(); // immediate kick: don't make the user wait up to 8s to see the current game
+      // Immediate kick: don't make the user wait up to 8s to see the current game — but only when
+      // this action actually changed which match is selected. Zoom taps, re-taps, and country-lens
+      // taps leave selectedMatchId untouched, so they must not force an out-of-cadence /api/pbp fetch.
+      if (state.selectedMatchId !== prevSel) void pbpTick();
     } else if (a === "focus" && el.dataset.id !== undefined) {
       // dataset.id may be "" — the crumbs' "‹ Full draw" chip and the strip's "Reset zoom"
       // clear focus through this same branch (setFocus(undefined) pops our history entry).

@@ -1398,6 +1398,21 @@ describe("live score overlay (/api/live)", () => {
       expect(root.querySelector(".match-strip")).toBe(strip);
     });
 
+    it("re-tapping the already-selected live arc does not fire an extra immediate /api/pbp call", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "30", away: "15" }));
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (pbpCalls() === 0) throw new Error("no immediate pbp kick"); });
+      const before = pbpCalls();
+      // re-tap the same arc: selectedMatchId is unchanged (this taps the tap-again-to-zoom branch),
+      // so it must not force another out-of-cadence fetch — the 8s tick still covers it.
+      click(liveArc(root));
+      await vi.advanceTimersByTimeAsync(50);
+      expect(pbpCalls()).toBe(before);
+    });
+
     it("shows the chip when the point is a set point, with side attribution and an accessible name", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
       // baseRecord sets=[[6,4]] → current set reads 6-4; p1 at 40 wins 7-4 ⇒ SP for p1 (0 completed sets)

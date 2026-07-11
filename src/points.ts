@@ -16,13 +16,21 @@ export interface PointStateInput {
 }
 export interface PointState { tb: boolean; chip: "BP" | "SP" | "MP" | null; chipFor: "p1" | "p2" | null; }
 
+/** Spelled-out meaning for the .ms-chip abbreviation, for its aria-label (the visible text is the
+ *  terse "BP"/"SP"/"MP" — screen-reader users get the full phrase instead). */
+export const CHIP_LABEL: Record<NonNullable<PointState["chip"]>, string> =
+  { BP: "break point", SP: "set point", MP: "match point" };
+
+/** A set sits in a tiebreak when both sides hold the same games count ≥6 (6-6; also 12-12-era data). */
+export const isTiebreak = (a: number, b: number): boolean => a === b && a >= 6;
+
 const RANK: Record<string, number> = { "0": 0, "15": 1, "30": 2, "40": 3, "A": 4 };
 const other = (s: "p1" | "p2"): "p1" | "p2" => (s === "p1" ? "p2" : "p1");
 
 export function pointState(i: PointStateInput): PointState {
   const toWin = setsToWin(i.bestOf);
   const finalSet = i.sets.p1 + i.sets.p2 === i.bestOf - 1;
-  const tb = i.games.p1 === i.games.p2 && i.games.p1 >= 6;
+  const tb = isTiebreak(i.games.p1, i.games.p2);
   // Winning the current SET: MP if it completes the match for that side, else SP.
   const setChip = (side: "p1" | "p2"): "SP" | "MP" => (i.sets[side] + 1 >= toWin ? "MP" : "SP");
 
