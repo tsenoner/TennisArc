@@ -29,6 +29,23 @@ describe("parseLiveFeed", () => {
     const live = parseLiveFeed(feed, { tour: "ATP", slam: "wimbledon" }).find((m) => m.id === "aaa1")!;
     expect(Object.keys(live)).toEqual(["id", "stage", "home", "away", "setsWon", "sets"]);
   });
+  it("emits srv from CX on a live record (1 = home, 2 = away)", () => {
+    const feed =
+      "ZA÷ATP - SINGLES: Wimbledon (United Kingdom), grass¬ZB÷5724¬~" +
+      "AA÷aaaa1111¬AB÷2¬AE÷Sinner J.¬AF÷Djokovic N.¬CX÷Sinner J.¬AG÷1¬AH÷0¬BA÷6¬BB÷4¬~" +
+      "AA÷bbbb2222¬AB÷2¬AE÷Alcaraz C.¬AF÷Zverev A.¬CX÷Zverev A.¬AG÷0¬AH÷0¬BA÷2¬BB÷3¬~";
+    const recs = parseLiveFeed(feed, { tour: "ATP", slam: "wimbledon" });
+    expect(recs.map((r) => r.srv)).toEqual([1, 2]);
+  });
+  it("omits srv when CX is absent, unmatched, or the record is not live", () => {
+    const feed =
+      "ZA÷ATP - SINGLES: Wimbledon (United Kingdom), grass¬ZB÷5724¬~" +
+      "AA÷cccc3333¬AB÷2¬AE÷Fritz T.¬AF÷Paul T.¬AG÷0¬AH÷0¬BA÷1¬BB÷1¬~" +          // no CX
+      "AA÷dddd4444¬AB÷2¬AE÷Ruud C.¬AF÷Rune H.¬CX÷Somebody E.¬AG÷0¬AH÷0¬BA÷1¬BB÷1¬~" + // unmatched CX
+      "AA÷eeee5555¬AB÷3¬AE÷Fery A.¬AF÷Zverev A.¬CX÷Zverev A.¬AG÷0¬AH÷3¬BA÷6¬BB÷7¬~";  // finished (CX persists upstream)
+    const recs = parseLiveFeed(feed, { tour: "ATP", slam: "wimbledon" });
+    expect(recs.map((r) => r.srv)).toEqual([undefined, undefined, undefined]);
+  });
 });
 
 describe("parseCurrentGame (df_mhs current-game feed)", () => {

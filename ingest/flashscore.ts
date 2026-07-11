@@ -59,13 +59,21 @@ export function parseLiveFeed(text: string, opts: { tour: Tour; slam: string }):
       if (hv === "" && av === "") continue;
       sets.push([num(hv), num(av)]);
     }
-    out.push({
+    const record: LiveRecord = {
       id: f.get("AA") ?? "",
       stage: stage as 1 | 2 | 3,
       home, away,
       setsWon: [num(f.get("AG") ?? ""), num(f.get("AH") ?? "")],
       sets,
-    });
+    };
+    // CX names the current server, but it PERSISTS on finished records (last server) — only a
+    // live record's value means "serving now". Exact match against the record's own names.
+    if (stage === 2) {
+      const cx = f.get("CX") ?? "";
+      if (cx === home) record.srv = 1;
+      else if (cx === away) record.srv = 2;
+    }
+    out.push(record);
   }
   return out;
 }

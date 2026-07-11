@@ -104,6 +104,7 @@ export interface LiveRecord {
   away: string;
   setsWon: [number, number];     // [home, away]
   sets: Array<[number, number]>; // per-set games [home, away], in order
+  srv?: 1 | 2;                   // current server (CX), live records only — 1 home, 2 away
 }
 
 export interface Round {
