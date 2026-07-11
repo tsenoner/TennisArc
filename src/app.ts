@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, winnerId, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -10,7 +10,7 @@ import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { fetchSnapshot, fetchIndex } from "./api";
 import { pickDefaultSlam, availableYears, slamsForYear, statusFor } from "./slams";
-import type { Match, Player, SlamIndex, Snapshot, Tour } from "./model";
+import { isInProgress, type Match, type Player, type SlamIndex, type Snapshot, type Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
 import { fetchLive, fetchPbp, overlayLive, applyLivePatch, samePatch, type CurrentGame } from "./live";
@@ -213,25 +213,42 @@ export function createApp(root: HTMLElement): () => void {
   // The cache holds the currently-lit arc nodes so leave/move can clear them without re-querying;
   // it is dropped at the top of draw() so the innerHTML swap never leaves detached references behind.
   let hlNodes: Element[] = [];
-  let hlCurrent: string | null = null; // skip re-querying when pointermove repeats the same target
-  const highlightPath = (playerId: string | null) => {
-    if (playerId === hlCurrent) return;
-    hlCurrent = playerId;
+  let hlCurrent: string | null = null; // joined-ids memo: skip re-querying when pointermove repeats the same target
+  const highlightPath = (playerIds: string | readonly string[] | null) => {
+    const ids = playerIds == null ? [] : typeof playerIds === "string" ? [playerIds] : playerIds;
+    const key = ids.join("\u0000"); // NUL never appears in a playerId, so joined keys cannot collide
+    if (key === hlCurrent) return;
+    hlCurrent = key;
     const sb = root.querySelector<HTMLElement>(".sunburst");
     for (const n of hlNodes) n.classList.remove("arc-hl", "q-hl");
     hlNodes = [];
-    if (!playerId || !sb) { sb?.classList.remove("arc-dim-mode"); return; }
-    // playerId comes from a row's data-occupant, read back DECODED (the browser undoes the escapeHtml
+    if (!ids.length || !sb) { sb?.classList.remove("arc-dim-mode"); return; }
+    // Each id comes from a row's data-occupant, read back DECODED (the browser undoes the escapeHtml
     // applied when the arc was written). CSS.escape escapes that decoded value for the selector, so the
     // two escapers act on different layers (HTML serialization vs CSS selector) and need not match byte-for-byte.
     // The lit player's quarter-owner corner label keeps full opacity too (.q-hl): dim-mode
     // fades all four corners with the arcs, but on touch every arc tap pins — without this
     // the lit player's own corner would sit dimmed for most of an interactive session.
-    hlNodes = [...root.querySelectorAll(
-      `.sunburst path.arc[data-occupant="${CSS.escape(playerId)}"], .sunburst .q-owner[data-occupant="${CSS.escape(playerId)}"]`,
-    )];
+    hlNodes = [...root.querySelectorAll(ids.map((id) =>
+      `.sunburst path.arc[data-occupant="${CSS.escape(id)}"], .sunburst .q-owner[data-occupant="${CSS.escape(id)}"]`,
+    ).join(", "))];
     for (const n of hlNodes) n.classList.add(n.classList.contains("q-owner") ? "q-hl" : "arc-hl");
     sb.classList.toggle("arc-dim-mode", hlNodes.length > 0);
+  };
+
+  /** The path ids the current pin lights. Normally just the pinned player — but while the
+   *  SELECTED match is still being played (live/suspended) the pin sits on the arc's occupant,
+   *  which is only the ELO-projected favourite, so both contenders' paths light together.
+   *  A decided match keeps the single path: the loser's run is over (hover still previews it).
+   *  Decided means winnerId, not status — a data-lag match (winner already set while the status
+   *  code still reads "live") is decided everywhere else (buildSunburst) and must not re-light
+   *  the loser here. */
+  const pinnedPathIds = (): string[] => {
+    if (!state.pinnedId) return [];
+    const m = state.selectedMatchId ? ctx?.snap.matches[state.selectedMatchId] : undefined;
+    return m && !winnerId(m) && isInProgress(m.status) && m.p1 && m.p2 && (m.p1 === state.pinnedId || m.p2 === state.pinnedId)
+      ? [m.p1, m.p2]
+      : [state.pinnedId];
   };
 
   // Top-bar dropdown menu helpers (mobile): the trigger button, and the focusable (non-disabled) menu items.
@@ -457,7 +474,7 @@ export function createApp(root: HTMLElement): () => void {
 
     // re-light the pinned path on the freshly-rendered arcs (innerHTML swap dropped the classes)
     if (pinned) {
-      highlightPath(pinned);
+      highlightPath(pinnedPathIds());
       root.querySelector(`[data-hl-path][data-occupant="${CSS.escape(pinned)}"]`)?.classList.add("row-pinned");
     }
     applyPbp(); // restore the last known point-by-point values into the freshly-rendered strip
@@ -857,10 +874,17 @@ export function createApp(root: HTMLElement): () => void {
     const el = (probe ?? (e.target as Element | null))?.closest<HTMLElement>("[data-occupant]");
     updateReadout(el?.dataset.occupant || null);
     // hovering an arc or a panel row previews that player's path through the sunburst
-    // (the float card names them too); off-target, a pinned path stays lit
-    highlightPath(el?.dataset.occupant || state.pinnedId || null);
+    // (the float card names them too); off-target, the pinned path(s) stay lit. Arcs of the
+    // SELECTED in-play match are the exception: they keep the both-contenders highlight —
+    // the pointer sits on that very arc right after the tap that selected it, so previewing
+    // its occupant here would instantly collapse the pair to the favourite's path alone.
+    const pinIds = pinnedPathIds();
+    const occ = el?.dataset.occupant;
+    highlightPath(!occ ? pinIds
+      : pinIds.length > 1 && el?.dataset.match === state.selectedMatchId ? pinIds
+      : occ);
   }, { signal });
-  root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(state.pinnedId ?? null); }, { capture: true, signal });
+  root.addEventListener("pointerleave", () => { updateReadout(null); highlightPath(pinnedPathIds()); }, { capture: true, signal });
 
   // Sighted-keyboard focus indicator for the SVG-only quarter handles (WCAG 2.4.7): the
   // sr-only twin's own focus ring is clipped to 1px (invisible), so mirror focus onto the

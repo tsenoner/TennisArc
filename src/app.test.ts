@@ -213,6 +213,130 @@ describe("arc tap → pin + match strip (one grammar on every input)", () => {
   });
 });
 
+describe("selecting an in-play match lights BOTH contenders' paths", () => {
+  /** Round 0 decided, later rounds scheduled — then flip the first semifinal in-play, so the
+   *  selected arc has two REAL contenders while its occupant is only the projected favourite. */
+  function inPlaySnap(status: "live" | "suspended" = "live") {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
+    const m = s.matches["1-0"];
+    m.status = status;
+    m.score = [{ p1: 4, p2: 3 }];
+    m.live = { set: 1, game: "30-15", server: "p1" };
+    return s;
+  }
+  const litFor = (root: HTMLElement, pid: string) =>
+    root.querySelectorAll(`.sunburst path.arc-hl[data-occupant="${pid}"]`).length;
+
+  for (const status of ["live", "suspended"] as const) {
+    it(`${status}: an arc tap lights the paths of both players, not just the ELO favourite's`, async () => {
+      const s = inPlaySnap(status);
+      installFetchStub({ snap: () => s });
+      const root = await mountApp();
+      const m = s.matches["1-0"];
+
+      click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+      expect(root.querySelector(".match-strip")).not.toBeNull();
+      expect(litFor(root, m.p1!)).toBeGreaterThan(0);
+      expect(litFor(root, m.p2!)).toBeGreaterThan(0);
+    });
+  }
+
+  it("hovering the selected in-play arc keeps both paths (no collapse to the favourite)", async () => {
+    const s = inPlaySnap();
+    installFetchStub({ snap: () => s });
+    const root = await mountApp();
+    const m = s.matches["1-0"];
+
+    const arc = root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!;
+    click(arc);
+    // the pointer is still ON the arc just clicked — the very next move must not drop a path
+    root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!
+      .dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(litFor(root, m.p1!)).toBeGreaterThan(0);
+    expect(litFor(root, m.p2!)).toBeGreaterThan(0);
+  });
+
+  it("hovering elsewhere previews that player alone; leaving restores both contenders", async () => {
+    const s = inPlaySnap();
+    installFetchStub({ snap: () => s });
+    const root = await mountApp();
+    const m = s.matches["1-0"];
+
+    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    const other = [...root.querySelectorAll<HTMLElement>(".sunburst path.arc[data-occupant]")]
+      .find((a) => a.dataset.occupant && a.dataset.occupant !== m.p1 && a.dataset.occupant !== m.p2)!;
+    other.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(litFor(root, other.dataset.occupant!)).toBeGreaterThan(0); // hover preview: that player only
+    expect(litFor(root, m.p1!) + litFor(root, m.p2!)).toBe(0);
+
+    root.dispatchEvent(new Event("pointerleave"));                    // off-target: the selection re-lights
+    expect(litFor(root, m.p1!)).toBeGreaterThan(0);
+    expect(litFor(root, m.p2!)).toBeGreaterThan(0);
+  });
+
+  it("a DECIDED match keeps the single-path highlight (the loser's run is over)", async () => {
+    const root = await mountApp();                       // default SNAP: fully played
+    const arc = pickArc(root);
+    click(arc);
+    const occs = new Set([...litArcs(root)].map((a) => (a as HTMLElement).dataset.occupant));
+    expect(occs).toEqual(new Set([arc.dataset.occupant]));
+  });
+
+  it("a data-lag match (winner set, status still 'live') counts as decided: single path", async () => {
+    const s = inPlaySnap();
+    s.matches["1-0"].winner = "p1"; // SofaScore sets the winner before flipping the status code
+    installFetchStub({ snap: () => s });
+    const root = await mountApp();
+
+    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    const occs = new Set([...litArcs(root)].map((a) => (a as HTMLElement).dataset.occupant));
+    expect(occs).toEqual(new Set([s.matches["1-0"].p1])); // the decided arc pins its winner — loser stays unlit
+  });
+
+  it("re-pinning a NON-contender row while the in-play match stays selected lights only them", async () => {
+    const s = inPlaySnap();
+    installFetchStub({ snap: () => s });
+    const root = await mountApp();
+    const m = s.matches["1-0"];
+
+    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    const row = [...root.querySelectorAll<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")]
+      .find((r) => r.dataset.occupant !== m.p1 && r.dataset.occupant !== m.p2)!;
+    click(row);
+
+    expect(root.querySelector(".match-strip")).not.toBeNull(); // the selection survives the re-pin
+    const occs = new Set([...litArcs(root)].map((a) => (a as HTMLElement).dataset.occupant));
+    expect(occs).toEqual(new Set([row.dataset.occupant]));     // …but only the new pin's path lights
+  });
+
+  it("the /api/live overlay path (production shape) lights both contenders too", async () => {
+    // The raw snapshot still says "scheduled"; only the Flashscore overlay (applyLivePatch in
+    // draw) flips the match live — pinnedPathIds must read the PATCHED snapshot, not the raw one.
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
+    const m = s.matches["1-0"];
+    // real names so the Flashscore name-join is unambiguous (fixture names all collapse to "player:p")
+    s.players[m.p1!] = { ...s.players[m.p1!], name: "Novak Djokovic" };
+    s.players[m.p2!] = { ...s.players[m.p2!], name: "Rafael Nadal" };
+    const liveIndex: SlamIndex = { ...INDEX, slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]] };
+    const rec = { id: "fs1", stage: 2, home: "Djokovic N.", away: "Nadal R.", setsWon: [1, 0], sets: [[6, 4]] };
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes("/api/live")) return { ok: true, status: 200, json: async () => ({ matches: [rec] }) } as Response;
+      const body = u.includes("index.json") ? liveIndex : u.includes("roland-garros") || u.includes("wimbledon") ? s : null;
+      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+    }) as unknown as typeof fetch;
+
+    const root = await mountApp();
+    await vi.waitFor(() => { // the mount-time loadLive() has applied the overlay once the arc hatches
+      if (!root.querySelector('.sunburst path.arc.live[data-match="1-0"]')) throw new Error("overlay not applied yet");
+    }, { timeout: 2000 });
+
+    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    expect(litFor(root, m.p1!)).toBeGreaterThan(0);
+    expect(litFor(root, m.p2!)).toBeGreaterThan(0);
+  });
+});
+
 describe("match detail tier (Details ▾)", () => {
   it("expands behind the strip and ESC unwinds one layer per press: detail → strip", async () => {
     const root = await mountApp();
