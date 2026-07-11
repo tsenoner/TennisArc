@@ -1359,6 +1359,92 @@ describe("live score overlay (/api/live)", () => {
     const polledLive = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(([u]) => String(u).includes("/api/live"));
     expect(polledLive).toBe(false);
   });
+
+  describe("point-by-point (/api/pbp)", () => {
+    /** installLiveNet + an /api/pbp route. `game` is re-read per request; `pbpOk` can kill the route. */
+    function installPbpNet(record: () => unknown, game: () => unknown, pbpOk: () => boolean = () => true) {
+      let pbpCalls = 0;
+      globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes("/api/pbp")) {
+          pbpCalls++;
+          return { ok: pbpOk(), status: pbpOk() ? 200 : 500, json: async () => game() } as Response;
+        }
+        if (u.includes("/api/live")) return { ok: true, json: async () => ({ matches: [record()] }) } as Response;
+        const body = u.includes("index.json") ? LIVE_INDEX_2 : (u.includes("roland-garros") || u.includes("wimbledon")) ? LIVE_SNAP : null;
+        return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+      }) as unknown as typeof fetch;
+      return () => pbpCalls;
+    }
+    const liveArc = (root: HTMLElement) => root.querySelector<HTMLElement>(`path.arc[data-match="${M.id}"]`)!;
+    const ptsText = (root: HTMLElement) =>
+      [...root.querySelectorAll<HTMLElement>(".ms-game .ms-pts")].map((el) => el.textContent);
+
+    it("selecting the live match kicks an immediate /api/pbp fetch and fills the points in place", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      let game: unknown = { home: "30", away: "15" };
+      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => game);
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (pbpCalls() === 0) throw new Error("no immediate pbp kick"); });
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "30") throw new Error("points not applied"); });
+      expect(ptsText(root)).toEqual(["30", "15"]);            // record home = M.p1 → no flip
+      // in-place update: the strip node identity survives the next tick
+      const strip = root.querySelector(".match-strip")!;
+      game = { home: "40", away: "15" };
+      await vi.advanceTimersByTimeAsync(8_000);
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "40") throw new Error("tick not applied"); });
+      expect(root.querySelector(".match-strip")).toBe(strip);
+    });
+
+    it("shows the chip when the point is a set point", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      // baseRecord sets=[[6,4]] → current set reads 6-4; p1 at 40 wins 7-4 ⇒ SP (0 completed sets)
+      installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "40", away: "30" }));
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => {
+        const chip = root.querySelector<HTMLElement>(".ms-chip");
+        if (!chip || chip.hidden || chip.textContent !== "SP") throw new Error("no SP chip");
+      });
+    });
+
+    it("does not poll /api/pbp while nothing is selected", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      const pbpCalls = installPbpNet(() => baseRecord, () => ({ home: "0", away: "0" }));
+      await mountApp();
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(pbpCalls()).toBe(0);
+    });
+
+    it("does not poll /api/pbp while the tab is hidden", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "30", away: "15" }));
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (pbpCalls() === 0) throw new Error("no immediate pbp kick"); });
+      Object.defineProperty(document, "hidden", { value: true, configurable: true });
+      const before = pbpCalls();
+      await vi.advanceTimersByTimeAsync(24_000);
+      expect(pbpCalls()).toBe(before);
+    });
+
+    it("keeps the last shown points when a pbp fetch fails", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      let ok = true;
+      installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "30", away: "15" }), () => ok);
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (ptsText(root)[0] !== "30") throw new Error("points not applied"); });
+      ok = false;
+      await vi.advanceTimersByTimeAsync(9_000);
+      expect(ptsText(root)).toEqual(["30", "15"]);
+    });
+  });
 });
 
 describe("freshness chip", () => {
