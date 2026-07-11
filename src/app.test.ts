@@ -1363,7 +1363,7 @@ describe("live score overlay (/api/live)", () => {
   describe("point-by-point (/api/pbp)", () => {
     /** installLiveNet + an /api/pbp route. `game` is re-read per request; `pbpOk` can kill the route. */
     function installPbpNet(record: () => unknown, game: () => unknown, pbpOk: () => boolean = () => true) {
-      installLiveNet(record);
+      const liveCalls = installLiveNet(record);
       const base = globalThis.fetch;
       let pbpCalls = 0;
       globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
@@ -1374,11 +1374,29 @@ describe("live score overlay (/api/live)", () => {
         }
         return base(url);
       }) as unknown as typeof fetch;
-      return () => pbpCalls;
+      const counter = (() => pbpCalls) as (() => number) & { live: () => number };
+      counter.live = liveCalls;
+      return counter;
     }
     const liveArc = (root: HTMLElement) => root.querySelector<HTMLElement>(`path.arc[data-match="${M.id}"]`)!;
     const ptsText = (root: HTMLElement) =>
       [...root.querySelectorAll<HTMLElement>(".ms-game .ms-pts")].map((el) => el.textContent);
+
+    it("kicks an immediate games refetch when the points reset at a game boundary", async () => {
+      // The points path (8s) sees a game end (pair resets to 0-0) long before the games path
+      // (15s tick + 10s cache) — without the kick the strip shows OLD games beside NEW 0-0 points.
+      vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+      let game: unknown = { home: "0", away: "40" };
+      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => game);
+      const root = await mountApp();
+      await vi.advanceTimersByTimeAsync(50);
+      click(liveArc(root));
+      await vi.waitFor(() => { if (ptsText(root)[1] !== "40") throw new Error("points not applied"); });
+      const before = pbpCalls.live();
+      game = { home: "0", away: "0" };           // game over -> points reset
+      await vi.advanceTimersByTimeAsync(8_100);  // one pbp tick, still inside the 15s live tick
+      expect(pbpCalls.live()).toBeGreaterThan(before);
+    });
 
     it("selecting the live match kicks an immediate /api/pbp fetch and fills the points in place", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });

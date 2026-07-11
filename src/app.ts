@@ -1061,8 +1061,17 @@ export function createApp(root: HTMLElement): () => void {
     if (seq !== pbpSeq) return;                          // a newer request started — only the most-recently-started may write
     const cur = pbpTarget();
     if (cur?.flash?.id !== mid) return;                  // selection changed mid-fetch
+    // A points RESET (non-zero pair → 0-0 on the same match) marks a game boundary. The games
+    // score rides the slower /api/live path (15s tick + 10s edge cache), so kick it now —
+    // otherwise the strip pairs the OLD games with the NEW game's 0-0 for up to ~25s
+    // ("2-4 0·0" while the court says 2-5). Fires once per boundary by construction: the next
+    // tick's previous pair is already 0-0.
+    const gameEnded = lastPbp?.mid === mid
+      && (lastPbp.game.home !== "0" || lastPbp.game.away !== "0")
+      && game.home === "0" && game.away === "0";
     lastPbp = { mid, game, at: Date.now() };
     applyPbp(cur);
+    if (gameEnded) void loadLive();
   };
   const pbpTimer = window.setInterval(() => { void pbpTick(); }, PBP_POLL_MS);
   signal.addEventListener("abort", () => clearInterval(pbpTimer));
