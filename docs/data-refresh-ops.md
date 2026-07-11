@@ -126,8 +126,8 @@ Score/status freshness for the in-play slam does **not** go through the Mac refr
 A stateless Vercel Node function, `api/live.ts`, fetches Flashscore's global livescore feed
 (`https://global.flashscore.ninja/2/x/feed/f_2_0_3_en_1`, header `x-fsign: SW9D1eZo`), parses it
 (`ingest/flashscore.ts` → `parseLiveFeed`) down to the requested slam's main-draw singles, and
-returns `{ matches }` with `Cache-Control: s-maxage=25, stale-while-revalidate=60`. The client
-(`src/live.ts` + `src/app.ts`) polls `/api/live` every ~30s while viewing a LIVE slam, joins
+returns `{ matches }` with `Cache-Control: s-maxage=10, stale-while-revalidate=10`. The client
+(`src/live.ts` + `src/app.ts`) polls `/api/live` every ~15s while viewing a LIVE slam, joins
 records to the snapshot by surname-pair (`sigKey`/`flashSigKey`), and overlays live/finished
 status + score + winner onto the immutable snapshot at render time — the snapshot itself is never
 mutated.

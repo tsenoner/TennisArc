@@ -15,7 +15,7 @@ describe("/api/live handler", () => {
     await handler({ query: { tour: "atp", slam: "wimbledon" } } as any, res as any);
     expect(res.statusCode).toBe(200);
     expect((res.body as any).matches.map((m: any) => m.id)).toEqual(["aaa1", "aaa2", "aaa3", "aaa4"]);
-    expect(res.headers["Cache-Control"]).toContain("s-maxage=25");
+    expect(res.headers["Cache-Control"]).toContain("s-maxage=10");
   });
   it("400s when params are missing", async () => {
     const res = fakeRes();

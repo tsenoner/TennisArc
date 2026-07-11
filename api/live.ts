@@ -19,7 +19,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const r = await fetchFeed("f_2_0_3_en_1");
     if (r.ok) {
       const body = await r.text();
-      res.setHeader("Cache-Control", "public, s-maxage=25, stale-while-revalidate=60");
+      // Short cache + short SWR: with few viewers, stale-while-revalidate serves the STALE copy
+      // to each poll while revalidating behind it, so a long SWR window becomes a sustained lag
+      // (measured ~a game behind during the 2026 WTA final with 25/60). 10/10 keeps the games
+      // score within ~15-20s of the feed at one upstream fetch per ~10s worst case.
+      res.setHeader("Cache-Control", "public, s-maxage=10, stale-while-revalidate=10");
       res.status(200).json({ matches: parseLiveFeed(body, { tour: tour as Tour, slam }) });
       return;
     }
