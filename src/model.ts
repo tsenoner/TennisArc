@@ -73,9 +73,8 @@ export interface Match {
   live: { set: number; game: string; server: "p1" | "p2" } | null;
   /** Transient live-overlay fields (set by src/live.ts overlayLive on in-play matches only) —
    *  never present in snapshot JSON, gone the moment the overlay marks the match finished.
-   *  flashId keys the /api/pbp per-match feed; flashHomeIsP1 orients its home/away values. */
-  flashId?: string;
-  flashHomeIsP1?: boolean;
+   *  flash keys the /api/pbp per-match feed (id) and orients its home/away values (homeIsP1). */
+  flash?: { id: string; homeIsP1: boolean };
   serving?: "p1" | "p2";
   durationSec: number | null; // Σ per-set seconds (provisional while live)
   durationProvisional: boolean;

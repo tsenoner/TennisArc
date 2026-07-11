@@ -1,6 +1,7 @@
 import type { LiveRecord, Match, SetScore, Snapshot, Tour } from "./model";
 import { tryFetch } from "./api";
 import { flashSigKey, sigKey, sortedPairKey } from "./names";
+import { bestOfForTour, setsToWin } from "./points";
 
 /** Fetch the same-origin live overlay for a view. Null on any failure (dev server has no function,
  *  network error, non-JSON) → the caller simply applies no overlay. Always same-origin (the Vercel
@@ -47,7 +48,7 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
     if (k) index.set(k, index.has(k) ? null : m);
   }
 
-  const setsToWin = snap.tour === "ATP" ? 3 : 2;
+  const toWin = setsToWin(bestOfForTour(snap.tour));
   const out: Record<string, Partial<Match>> = {};
   for (const r of records) {
     if (r.stage !== 2 && r.stage !== 3) continue;
@@ -64,14 +65,16 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
       score: score.length ? score : null,
     };
     if (r.stage === 2) {
-      patch.flashId = r.id;
-      patch.flashHomeIsP1 = homeIsP1;
-      if (r.srv) patch.serving = (r.srv === 1) === homeIsP1 ? "p1" : "p2";
+      patch.flash = { id: r.id, homeIsP1 };
+      if (r.srv) {
+        const homeServes = r.srv === 1;
+        patch.serving = homeServes ? (homeIsP1 ? "p1" : "p2") : (homeIsP1 ? "p2" : "p1");
+      }
     }
     if (r.stage === 3) {
       const [p1Won, p2Won] = homeIsP1 ? r.setsWon : [r.setsWon[1], r.setsWon[0]];
-      if (p1Won >= setsToWin) patch.winner = "p1";
-      else if (p2Won >= setsToWin) patch.winner = "p2";
+      if (p1Won >= toWin) patch.winner = "p1";
+      else if (p2Won >= toWin) patch.winner = "p2";
       // else: leave winner to the snapshot (retirement/walkover)
     }
     out[m.id] = patch;

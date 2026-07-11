@@ -14,7 +14,7 @@ import type { Match, Player, SlamIndex, Snapshot, Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
 import { fetchLive, fetchPbp, overlayLive, applyLivePatch, samePatch, type CurrentGame } from "./live";
-import { deriveContext, pointState } from "./points";
+import { deriveContext, pointState, bestOfForTour } from "./points";
 
 const SIZE = 700;
 const snapKey = (tour: Tour, year: number, slam: string) => `${tour}:${year}:${slam}`;
@@ -1008,20 +1008,18 @@ export function createApp(root: HTMLElement): () => void {
     const raw = state.snapshots[k]?.matches[state.selectedMatchId];
     if (!raw) return undefined;
     const m = { ...raw, ...state.livePatch[k]?.[state.selectedMatchId] };
-    return m.status === "live" && m.flashId ? m : undefined;
+    return m.status === "live" && m.flash ? m : undefined;
   };
-  const applyPbp = (): void => {
-    if (!lastPbp) return;
-    const m = pbpTarget();
-    if (!m || m.flashId !== lastPbp.mid) return;
+  const applyPbp = (m = pbpTarget()): void => {
+    if (!lastPbp || !m?.flash || m.flash.id !== lastPbp.mid) return;
     const gameEl = root.querySelector<HTMLElement>(".ms-game");
     if (!gameEl) return;
-    const homeIsP1 = m.flashHomeIsP1 !== false;
+    const homeIsP1 = m.flash.homeIsP1;
     const pts = {
       p1: homeIsP1 ? lastPbp.game.home : lastPbp.game.away,
       p2: homeIsP1 ? lastPbp.game.away : lastPbp.game.home,
     };
-    const st = pointState({ pts, serving: m.serving, ...deriveContext(m.score), bestOf: state.tour === "ATP" ? 5 : 3 });
+    const st = pointState({ pts, serving: m.serving, ...deriveContext(m.score), bestOf: bestOfForTour(state.tour) });
     for (const side of ["p1", "p2"] as const) {
       const el = gameEl.querySelector<HTMLElement>(`.ms-pts[data-side="${side}"]`);
       if (el) el.textContent = pts[side];
@@ -1034,12 +1032,14 @@ export function createApp(root: HTMLElement): () => void {
   const pbpTick = async (): Promise<void> => {
     if (document.hidden) return;
     const m = pbpTarget();
-    if (!m?.flashId) return;
-    const game = await fetchPbp(m.flashId);
+    if (!m?.flash) return;
+    const mid = m.flash.id;
+    const game = await fetchPbp(mid);
     if (!game) return;                                  // keep the last shown values; retry next tick
-    if (pbpTarget()?.flashId !== m.flashId) return;     // selection changed mid-fetch
-    lastPbp = { mid: m.flashId, game };
-    applyPbp();
+    const cur = pbpTarget();
+    if (cur?.flash?.id !== mid) return;                  // selection changed mid-fetch
+    lastPbp = { mid, game };
+    applyPbp(cur);
   };
   const pbpTimer = window.setInterval(() => { void pbpTick(); }, PBP_POLL_MS);
   signal.addEventListener("abort", () => clearInterval(pbpTimer));

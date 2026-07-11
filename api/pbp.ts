@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 // .js extensions REQUIRED: unbundled ESM function (see api/live.ts for the full rule).
-import { FEED_HOST, UA, X_FSIGN } from "./_flashscore.js";
+import { fetchFeed } from "./_flashscore.js";
 import { parseCurrentGame } from "../ingest/flashscore.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -10,7 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
   try {
-    const r = await fetch(`${FEED_HOST}/df_mhs_1_${mid}`, { headers: { "x-fsign": X_FSIGN, "user-agent": UA } });
+    const r = await fetchFeed(`df_mhs_1_${mid}`);
     if (r.ok) {
       // No current game (finished / not started) parses to null → {}. The client treats {} as
       // "nothing to show" and keeps its last value; same 200-with-empty posture as /api/live.

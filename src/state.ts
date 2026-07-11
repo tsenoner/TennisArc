@@ -664,8 +664,8 @@ export function matchInsight(
     p1, p2, badges, upset, eloLine,
     aces: m.stats?.aces ?? null, doubleFaults: m.stats?.doubleFaults ?? null,
     scheduled: scheduledInfo(m, nowSec, s.tournament.slam),
-    live: m.status === "live" && m.flashId != null && m.flashHomeIsP1 != null
-      ? { flashId: m.flashId, homeIsP1: m.flashHomeIsP1, ...(m.serving ? { serving: m.serving } : {}) }
+    live: m.status === "live" && m.flash != null
+      ? { flashId: m.flash.id, homeIsP1: m.flash.homeIsP1, serving: m.serving }
       : null,
   };
 }

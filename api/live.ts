@@ -6,9 +6,7 @@ import type { Tour } from "../src/model";
 // down the whole runtime import chain (ingest/flashscore.ts → ingest/names.ts → src/names.ts).
 import { parseLiveFeed } from "../ingest/flashscore.js";
 // .js extension REQUIRED here too (same ESM rule as the parseLiveFeed import below).
-import { FEED_HOST, UA, X_FSIGN } from "./_flashscore.js";
-
-const FEED = `${FEED_HOST}/f_2_0_3_en_1`;
+import { fetchFeed } from "./_flashscore.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const tour = String(req.query.tour ?? "").toUpperCase();
@@ -18,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
   try {
-    const r = await fetch(FEED, { headers: { "x-fsign": X_FSIGN, "user-agent": UA } });
+    const r = await fetchFeed("f_2_0_3_en_1");
     if (r.ok) {
       const body = await r.text();
       res.setHeader("Cache-Control", "public, s-maxage=25, stale-while-revalidate=60");

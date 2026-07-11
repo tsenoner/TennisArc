@@ -1,4 +1,8 @@
-import type { SetScore } from "./model";
+import type { SetScore, Tour } from "./model";
+
+/** ATP slams are best-of-5, WTA best-of-3 — the single home of the tour→format rule. */
+export const bestOfForTour = (tour: Tour): 3 | 5 => (tour === "ATP" ? 5 : 3);
+export const setsToWin = (bestOf: 3 | 5): 2 | 3 => (bestOf === 5 ? 3 : 2);
 
 /** Live current-game rules for the match strip: tiebreak detection and the single BP/SP/MP
  *  chip. Inputs are the RAW feed point strings ("0"|"15"|"30"|"40"|"A", digits in tiebreaks);
@@ -16,7 +20,7 @@ const RANK: Record<string, number> = { "0": 0, "15": 1, "30": 2, "40": 3, "A": 4
 const other = (s: "p1" | "p2"): "p1" | "p2" => (s === "p1" ? "p2" : "p1");
 
 export function pointState(i: PointStateInput): PointState {
-  const toWin = i.bestOf === 5 ? 3 : 2;
+  const toWin = setsToWin(i.bestOf);
   const finalSet = i.sets.p1 + i.sets.p2 === i.bestOf - 1;
   const tb = i.games.p1 === i.games.p2 && i.games.p1 >= 6;
   // Winning the current SET: MP if it completes the match for that side, else SP.

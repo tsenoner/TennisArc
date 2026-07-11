@@ -1363,6 +1363,8 @@ describe("live score overlay (/api/live)", () => {
   describe("point-by-point (/api/pbp)", () => {
     /** installLiveNet + an /api/pbp route. `game` is re-read per request; `pbpOk` can kill the route. */
     function installPbpNet(record: () => unknown, game: () => unknown, pbpOk: () => boolean = () => true) {
+      installLiveNet(record);
+      const base = globalThis.fetch;
       let pbpCalls = 0;
       globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
         const u = String(url);
@@ -1370,9 +1372,7 @@ describe("live score overlay (/api/live)", () => {
           pbpCalls++;
           return { ok: pbpOk(), status: pbpOk() ? 200 : 500, json: async () => game() } as Response;
         }
-        if (u.includes("/api/live")) return { ok: true, json: async () => ({ matches: [record()] }) } as Response;
-        const body = u.includes("index.json") ? LIVE_INDEX_2 : (u.includes("roland-garros") || u.includes("wimbledon")) ? LIVE_SNAP : null;
-        return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
+        return base(url);
       }) as unknown as typeof fetch;
       return () => pbpCalls;
     }

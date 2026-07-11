@@ -5,3 +5,7 @@
 export const FEED_HOST = "https://global.flashscore.ninja/2/x/feed";
 export const X_FSIGN = "SW9D1eZo";
 export const UA = "TennisArc/1.0 (+https://tennisarc.vercel.app)";
+
+/** Fetch one feed by code with the standard auth headers. */
+export const fetchFeed = (code: string): Promise<Response> =>
+  fetch(`${FEED_HOST}/${code}`, { headers: { "x-fsign": X_FSIGN, "user-agent": UA } });
