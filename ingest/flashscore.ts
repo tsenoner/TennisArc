@@ -84,18 +84,22 @@ export function parseLiveFeed(text: string, opts: { tour: Tour; slam: string }):
  * display strings ("0" | "15" | "30" | "40" | "A"; plain digits during a tiebreak) — callers
  * render them verbatim. Structure: TS/TE-delimited blocks where each score cell is
  * `PT÷PT ¬ PV÷<playerNo> ¬ PT÷VA ¬ PV÷<value>`; a PT÷VA with no pending player (the
- * "Current game" header) must not capture. Pairing state is scoped to each block: TS/TE
- * tokens reset player and pending so values cannot span block boundaries. The FIRST complete
- * pair wins — scanning stops there, so later SC-shaped sections of a fuller feed variant
- * (stats/history tabs) can never overwrite the current game. Captured values must look like
- * point values (A or 1–2 digits); anything else means the shape drifted → null, never wrong-loud.
+ * "Current game" header or a BB/SB break-/set-ball marker row) must not capture. Pairing
+ * state is scoped to each block: TS/TE tokens reset player and pending so values cannot span
+ * block boundaries. The LAST pair wins: an IN-PLAY feed is the current game's full point
+ * progression in chronological order (0-15, 0-30, … 40-40 — verified live at the 2026
+ * Wimbledon final), so the current score is the final pair. Blocks can arrive `~`-glued
+ * ("¬~TS÷…"), so a leading `~` is stripped before key matching. Captured values must look
+ * like point values (A or 1–2 digits); anything else means the shape drifted → null, never
+ * wrong-loud.
  */
 const POINT_VALUE = /^(?:A|\d{1,2})$/;
 export function parseCurrentGame(text: string): CurrentGame | null {
   let player: string | null = null;
   let pending: "player" | "value" | null = null;
   const vals: Record<string, string> = {};
-  for (const p of text.split("¬")) {
+  for (const raw of text.split("¬")) {
+    const p = raw.startsWith("~") ? raw.slice(1) : raw; // "~" glues a new sub-record to a block start
     const i = p.indexOf("÷");
     if (i <= 0) continue;
     const k = p.slice(0, i), v = p.slice(i + 1);
@@ -105,10 +109,7 @@ export function parseCurrentGame(text: string): CurrentGame | null {
     if (k === "PT") { pending = v === "PT" ? "player" : v === "VA" && player != null ? "value" : null; continue; }
     if (k === "PV") {
       if (pending === "player") player = v;
-      else if (pending === "value" && player != null) {
-        vals[player] = v; player = null;
-        if (vals["1"] != null && vals["2"] != null) break; // first complete pair wins
-      }
+      else if (pending === "value" && player != null) { vals[player] = v; player = null; } // last pair wins
       pending = null;
     }
   }
