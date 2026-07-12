@@ -20,6 +20,20 @@ const INDEX: SlamIndex = {
     surface: "Grass", status: "upcoming", generatedAt: "2026-06-07T00:00:00.000Z", drawSize: 8,
   }],
 };
+// INDEX with the first slam flipped live — every live-gated flow (polling, /api/live overlay,
+// the both-contenders highlight) shares this one copy.
+const LIVE_INDEX: SlamIndex = { ...INDEX, slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]] };
+/** Flashscore's "Surname F." short-name shape — what the /api/live name-join parses. */
+const short = (full: string) => { const t = full.split(" "); return `${t[t.length - 1]} ${t[0][0]}.`; };
+// The /api/live name-join needs REAL names: the fixture's "Player N" names all collapse to one
+// surname-pair key ("player:p"), so the join calls them ambiguous. Tests rename one match's pair
+// to these names and serve JOIN_RECORD as the matching Flashscore live record.
+const JOIN_NAMES = ["Novak Djokovic", "Rafael Nadal"] as const;
+const JOIN_RECORD = {
+  id: "fs1", stage: 2 as const,
+  home: short(JOIN_NAMES[0]), away: short(JOIN_NAMES[1]),
+  setsWon: [1, 0] as [number, number], sets: [[6, 4]] as Array<[number, number]>,
+};
 
 /** This jsdom build exposes no localStorage (Node's experimental global shadows it); theme.ts
  *  reads it at mount, so install a fresh in-memory Storage shim on every test. */
@@ -62,13 +76,15 @@ beforeEach(() => {
  *  globalThis.fetch and call this to bring the network back. Returns a counter of
  *  roland-garros snapshot fetches (the live-score endpoint's own query string names the slam
  *  too, e.g. "/api/live?tour=atp&slam=roland-garros" — excluded so it isn't double-counted). It
- *  answers /api/live with an empty overlay so live-gated tests here don't spuriously redraw. */
-function installFetchStub(overrides: { index?: () => unknown; snap?: () => unknown } = {}): () => number {
+ *  answers /api/live with `live` (default: an empty overlay, so live-gated tests here don't
+ *  spuriously redraw). */
+function installFetchStub(overrides: { index?: () => unknown; snap?: () => unknown; live?: () => unknown } = {}): () => number {
   const index = overrides.index ?? (() => INDEX);
   const snap = overrides.snap ?? (() => SNAP);
+  const live = overrides.live ?? (() => ({ matches: [] }));
   const fn = vi.fn(async (url: string | URL | Request) => {
     const u = String(url);
-    if (u.includes("/api/live")) return { ok: true, status: 200, json: async () => ({ matches: [] }) } as Response;
+    if (u.includes("/api/live")) return { ok: true, status: 200, json: async () => live() } as Response;
     const body = u.includes("index.json") ? index()
       : u.includes("roland-garros") || u.includes("wimbledon") ? snap() : null;
     return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
@@ -210,6 +226,111 @@ describe("arc tap → pin + match strip (one grammar on every input)", () => {
 
     click(root.querySelector(".chart svg")!);            // truly-empty chart region still unpins
     expect(litArcs(root).length).toBe(0);
+  });
+});
+
+describe("selecting an in-play match lights BOTH contenders' paths", () => {
+  /** Round 0 decided, later rounds scheduled — then flip the first semifinal in-play, so the
+   *  selected arc has two REAL contenders while its occupant is only the projected favourite. */
+  function inPlaySnap(status: "live" | "suspended" = "live") {
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
+    const m = s.matches["1-0"];
+    m.status = status;
+    m.score = [{ p1: 4, p2: 3 }];
+    m.live = { set: 1, game: "30-15", server: "p1" };
+    return s;
+  }
+  const litOccs = (root: HTMLElement) =>
+    new Set([...litArcs(root)].map((a) => (a as HTMLElement).dataset.occupant));
+  /** Serve `s`, mount, and select the semifinal by tapping its arc. */
+  async function mountAndSelect(s = inPlaySnap()) {
+    installFetchStub({ snap: () => s });
+    const root = await mountApp();
+    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    return { root, m: s.matches["1-0"] };
+  }
+
+  for (const status of ["live", "suspended"] as const) {
+    it(`${status}: an arc tap lights the paths of both players, not just the ELO favourite's`, async () => {
+      const { root, m } = await mountAndSelect(inPlaySnap(status));
+      expect(root.querySelector(".match-strip")).not.toBeNull();
+      expect(litOccs(root)).toEqual(new Set([m.p1!, m.p2!]));
+    });
+  }
+
+  it("hovering the selected in-play arc keeps both paths (no collapse to the favourite)", async () => {
+    const { root, m } = await mountAndSelect();
+    // the pointer is still ON the arc just clicked — the very next move must not drop a path
+    root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!
+      .dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(litOccs(root)).toEqual(new Set([m.p1!, m.p2!]));
+  });
+
+  it("hovering elsewhere previews that player alone; leaving restores both contenders", async () => {
+    const { root, m } = await mountAndSelect();
+    const other = [...root.querySelectorAll<HTMLElement>(".sunburst path.arc[data-occupant]")]
+      .find((a) => a.dataset.occupant && a.dataset.occupant !== m.p1 && a.dataset.occupant !== m.p2)!;
+    other.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+    expect(litOccs(root)).toEqual(new Set([other.dataset.occupant])); // hover preview: that player only
+
+    root.dispatchEvent(new Event("pointerleave"));                    // off-target: the selection re-lights
+    expect(litOccs(root)).toEqual(new Set([m.p1!, m.p2!]));
+  });
+
+  it("a DECIDED match keeps the single-path highlight (the loser's run is over)", async () => {
+    const root = await mountApp();                       // default SNAP: fully played
+    const arc = pickArc(root);
+    click(arc);
+    const occs = litOccs(root);
+    expect(occs).toEqual(new Set([arc.dataset.occupant]));
+  });
+
+  it("a data-lag match (winner set, status still 'live') counts as decided: single path", async () => {
+    const s = inPlaySnap();
+    s.matches["1-0"].winner = "p1"; // SofaScore sets the winner before flipping the status code
+    const { root, m } = await mountAndSelect(s);
+    const occs = litOccs(root);
+    expect(occs).toEqual(new Set([m.p1])); // the decided arc pins its winner — loser stays unlit
+  });
+
+  it("re-pinning a CONTENDER row keeps the pair lit — the selection, not the pin, owns pair mode", async () => {
+    const { root, m } = await mountAndSelect();
+    // the arc tap pinned the projected favourite; re-pin the OTHER contender via their row
+    const arc = root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!;
+    const underdog = arc.dataset.occupant === m.p1 ? m.p2! : m.p1!;
+    click(root.querySelector<HTMLElement>(`.leaderboard [data-hl-path][data-occupant="${underdog}"]`)!);
+
+    expect(root.querySelector(".match-strip")).not.toBeNull();
+    expect(litOccs(root)).toEqual(new Set([m.p1, m.p2]));
+  });
+
+  it("re-pinning a NON-contender row while the in-play match stays selected lights only them", async () => {
+    const { root, m } = await mountAndSelect();
+    const row = [...root.querySelectorAll<HTMLElement>(".leaderboard [data-hl-path][data-occupant]")]
+      .find((r) => r.dataset.occupant !== m.p1 && r.dataset.occupant !== m.p2)!;
+    click(row);
+
+    expect(root.querySelector(".match-strip")).not.toBeNull(); // the selection survives the re-pin
+    const occs = litOccs(root);
+    expect(occs).toEqual(new Set([row.dataset.occupant]));     // …but only the new pin's path lights
+  });
+
+  it("the /api/live overlay path (production shape) lights both contenders too", async () => {
+    // The raw snapshot still says "scheduled"; only the Flashscore overlay (applyLivePatch in
+    // draw) flips the match live — pinnedPathIds must read the PATCHED snapshot, not the raw one.
+    const s = makeSyntheticSnapshot({ tour: "ATP", drawSize: 8, seed: 3, completedRounds: 1 });
+    const m = s.matches["1-0"];
+    s.players[m.p1!] = { ...s.players[m.p1!], name: JOIN_NAMES[0] }; // make the name-join resolve (see JOIN_NAMES)
+    s.players[m.p2!] = { ...s.players[m.p2!], name: JOIN_NAMES[1] };
+    installFetchStub({ index: () => LIVE_INDEX, snap: () => s, live: () => ({ matches: [JOIN_RECORD] }) });
+
+    const root = await mountApp();
+    await vi.waitFor(() => { // the mount-time loadLive() has applied the overlay once the arc hatches
+      if (!root.querySelector('.sunburst path.arc.live[data-match="1-0"]')) throw new Error("overlay not applied yet");
+    }, { timeout: 2000 });
+
+    click(root.querySelector<HTMLElement>('.sunburst path.arc[data-match="1-0"]')!);
+    expect(litOccs(root)).toEqual(new Set([m.p1!, m.p2!]));
   });
 });
 
@@ -1224,10 +1345,6 @@ describe("load failure", () => {
 });
 
 describe("live polling", () => {
-  const LIVE_INDEX: SlamIndex = {
-    ...INDEX,
-    slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]],
-  };
   // Fake-timer base pinned to noon UTC: seeding from real-now would let the app's midnight
   // timer land inside an advanced window when the suite runs within ~91s of 00:00 UTC, swapping
   // the DOM mid-assertion — a daily flake window.
@@ -1291,48 +1408,39 @@ describe("live polling", () => {
 });
 
 describe("live score overlay (/api/live)", () => {
-  const LIVE_INDEX_2: SlamIndex = { ...INDEX, slams: [{ ...INDEX.slams[0], status: "live" as const }, INDEX.slams[1]] };
   const NOON2 = new Date("2026-06-15T12:00:00.000Z");
-  const short = (full: string) => { const t = full.split(" "); return `${t[t.length - 1]} ${t[0][0]}.`; };
-  // a real synthetic match with two known players → build a matching Flashscore record. The
-  // fixture names them "Player N" — nameTokens() strips the trailing digit, so EVERY player
-  // collapses to the same surname-pair key ("player:p") and the join always calls it ambiguous.
-  // Give this one match's pair real names (only in this describe's snapshot) so the join is
-  // deterministic without touching the shared SNAP used by every other test in this file.
+  // One real synthetic match renamed to JOIN_NAMES (only in this describe's snapshot), so the
+  // Flashscore join resolves it while the shared SNAP stays untouched for every other test.
   const M = Object.values(SNAP.matches).find((x) => x.p1 && x.p2)!;
   const LIVE_SNAP: Snapshot = {
     ...SNAP,
     players: {
       ...SNAP.players,
-      [M.p1!]: { ...SNAP.players[M.p1!], name: "Novak Djokovic" },
-      [M.p2!]: { ...SNAP.players[M.p2!], name: "Rafael Nadal" },
+      [M.p1!]: { ...SNAP.players[M.p1!], name: JOIN_NAMES[0] },
+      [M.p2!]: { ...SNAP.players[M.p2!], name: JOIN_NAMES[1] },
     },
   };
-  const baseRecord = {
-    id: "fs1", stage: 2 as const,
-    home: short(LIVE_SNAP.players[M.p1!].name), away: short(LIVE_SNAP.players[M.p2!].name),
-    setsWon: [1, 0] as [number, number], sets: [[6, 4]] as Array<[number, number]>,
-  };
 
+  /** installFetchStub preset for this describe — live manifest + the real-names snapshot, with a
+   *  counted /api/live route serving `record` (re-read per request, so tests can mutate it). */
   function installLiveNet(record: () => unknown): () => number {
     let liveCalls = 0;
-    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-      const u = String(url);
-      if (u.includes("/api/live")) { liveCalls++; return { ok: true, json: async () => ({ matches: [record()] }) } as Response; }
-      const body = u.includes("index.json") ? LIVE_INDEX_2 : (u.includes("roland-garros") || u.includes("wimbledon")) ? LIVE_SNAP : null;
-      return { ok: body != null, status: body != null ? 200 : 404, json: async () => body } as Response;
-    }) as unknown as typeof fetch;
+    installFetchStub({
+      index: () => LIVE_INDEX,
+      snap: () => LIVE_SNAP,
+      live: () => { liveCalls++; return { matches: [record()] }; },
+    });
     return () => liveCalls;
   }
 
   it("polls /api/live and overlays a changing live score onto the draw", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-    let served: unknown = { ...baseRecord };
+    let served: unknown = { ...JOIN_RECORD };
     const liveCalls = installLiveNet(() => served);
     const root = await mountApp();
     const marker = root.querySelector(".chart")!;
     // the score advances → the next 30s tick produces a different patch → a redraw
-    served = { ...baseRecord, sets: [[6, 4], [3, 0]] };
+    served = { ...JOIN_RECORD, sets: [[6, 4], [3, 0]] };
     await vi.advanceTimersByTimeAsync(30_000);
     expect(liveCalls()).toBeGreaterThan(0);
     await vi.waitFor(() => {
@@ -1342,7 +1450,7 @@ describe("live score overlay (/api/live)", () => {
 
   it("does not poll /api/live while the tab is hidden", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-    const liveCalls = installLiveNet(() => baseRecord);
+    const liveCalls = installLiveNet(() => JOIN_RECORD);
     await mountApp();
     await vi.advanceTimersByTimeAsync(50);                                              // let the mount-time kick settle
     Object.defineProperty(document, "hidden", { value: true, configurable: true });
@@ -1387,7 +1495,7 @@ describe("live score overlay (/api/live)", () => {
       // (15s tick + 10s cache) — without the kick the strip shows OLD games beside NEW 0-0 points.
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
       let game: unknown = { home: "0", away: "40" };
-      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => game);
+      const pbpCalls = installPbpNet(() => ({ ...JOIN_RECORD, srv: 1 }), () => game);
       const root = await mountApp();
       await vi.advanceTimersByTimeAsync(50);
       click(liveArc(root));
@@ -1401,7 +1509,7 @@ describe("live score overlay (/api/live)", () => {
     it("selecting the live match kicks an immediate /api/pbp fetch and fills the points in place", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
       let game: unknown = { home: "30", away: "15" };
-      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => game);
+      const pbpCalls = installPbpNet(() => ({ ...JOIN_RECORD, srv: 1 }), () => game);
       const root = await mountApp();
       await vi.advanceTimersByTimeAsync(50);
       click(liveArc(root));
@@ -1418,7 +1526,7 @@ describe("live score overlay (/api/live)", () => {
 
     it("re-tapping the already-selected live arc does not fire an extra immediate /api/pbp call", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "30", away: "15" }));
+      const pbpCalls = installPbpNet(() => ({ ...JOIN_RECORD, srv: 1 }), () => ({ home: "30", away: "15" }));
       const root = await mountApp();
       await vi.advanceTimersByTimeAsync(50);
       click(liveArc(root));
@@ -1433,9 +1541,9 @@ describe("live score overlay (/api/live)", () => {
 
     it("shows the chip when the point is a set point, with side attribution and an accessible name", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-      // an actually-IN-PROGRESS set (baseRecord's 6-4 is decided → the stale-context guard
+      // an actually-IN-PROGRESS set (JOIN_RECORD's 6-4 is decided → the stale-context guard
       // suppresses chips): at 5-4 p1's 40-30 wins the set 6-4 ⇒ SP for p1 (0 completed sets)
-      installPbpNet(() => ({ ...baseRecord, setsWon: [0, 0], sets: [[5, 4]], srv: 1 }), () => ({ home: "40", away: "30" }));
+      installPbpNet(() => ({ ...JOIN_RECORD, setsWon: [0, 0], sets: [[5, 4]], srv: 1 }), () => ({ home: "40", away: "30" }));
       const root = await mountApp();
       await vi.advanceTimersByTimeAsync(50);
       click(liveArc(root));
@@ -1450,7 +1558,7 @@ describe("live score overlay (/api/live)", () => {
 
     it("does not poll /api/pbp while nothing is selected", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-      const pbpCalls = installPbpNet(() => baseRecord, () => ({ home: "0", away: "0" }));
+      const pbpCalls = installPbpNet(() => JOIN_RECORD, () => ({ home: "0", away: "0" }));
       await mountApp();
       await vi.advanceTimersByTimeAsync(20_000);
       expect(pbpCalls()).toBe(0);
@@ -1458,7 +1566,7 @@ describe("live score overlay (/api/live)", () => {
 
     it("does not poll /api/pbp while the tab is hidden", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-      const pbpCalls = installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "30", away: "15" }));
+      const pbpCalls = installPbpNet(() => ({ ...JOIN_RECORD, srv: 1 }), () => ({ home: "30", away: "15" }));
       const root = await mountApp();
       await vi.advanceTimersByTimeAsync(50);
       click(liveArc(root));
@@ -1472,7 +1580,7 @@ describe("live score overlay (/api/live)", () => {
     it("keeps the last shown points when a pbp fetch fails", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
       let ok = true;
-      installPbpNet(() => ({ ...baseRecord, srv: 1 }), () => ({ home: "30", away: "15" }), () => ok);
+      installPbpNet(() => ({ ...JOIN_RECORD, srv: 1 }), () => ({ home: "30", away: "15" }), () => ok);
       const root = await mountApp();
       await vi.advanceTimersByTimeAsync(50);
       click(liveArc(root));
@@ -1484,7 +1592,7 @@ describe("live score overlay (/api/live)", () => {
 
     it("ignores an out-of-order /api/pbp response (an older request resolving after a newer one)", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
-      installLiveNet(() => ({ ...baseRecord, srv: 1 }));
+      installLiveNet(() => ({ ...JOIN_RECORD, srv: 1 }));
       const base = globalThis.fetch;
       // /api/pbp requests hang until the test resolves them explicitly, in any order
       const pending: Array<(g: unknown) => void> = [];
@@ -1513,7 +1621,7 @@ describe("live score overlay (/api/live)", () => {
     it("re-renders placeholders (not minutes-old points) when the last pbp value outlives the live-poll cycle", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
       let ok = true;
-      let served: unknown = { ...baseRecord, setsWon: [0, 0], sets: [[5, 4]], srv: 1 };
+      let served: unknown = { ...JOIN_RECORD, setsWon: [0, 0], sets: [[5, 4]], srv: 1 };
       const pbpCalls = installPbpNet(() => served, () => ({ home: "30", away: "15" }), () => ok);
       const root = await mountApp();
       await vi.advanceTimersByTimeAsync(50);
@@ -1523,7 +1631,7 @@ describe("live score overlay (/api/live)", () => {
       ok = false;                                               // upstream pbp dies for good
       await vi.advanceTimersByTimeAsync(32_000);                // ticks keep failing → lastPbp ages past 30s
       expect(pbpCalls()).toBeGreaterThan(before);
-      served = { ...baseRecord, setsWon: [0, 0], sets: [[5, 5]], srv: 1 }; // overlay change → next 30s live tick redraws
+      served = { ...JOIN_RECORD, setsWon: [0, 0], sets: [[5, 5]], srv: 1 }; // overlay change → next 30s live tick redraws
       await vi.advanceTimersByTimeAsync(30_000);
       await vi.waitFor(() => { if (ptsText(root)[0] !== "–") throw new Error("stale points still shown"); });
       expect(ptsText(root)).toEqual(["–", "–"]);                // placeholders are more honest than minutes-old points

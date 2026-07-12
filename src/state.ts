@@ -1,5 +1,5 @@
 import type { Match, MatchStatus, Player, Round, SetScore, Snapshot } from "./model";
-import { isPlaceholderPlayer, isInProgress, isUpcoming } from "./model";
+import { isPlaceholderPlayer, isInProgress, isUpcoming, winnerId } from "./model";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -41,12 +41,6 @@ export interface SunNode {
   suspended: boolean;         // this node's match is paused mid-play (rain/bad light/curfew)
   depth: number;              // 0 = champion (centre)
   children: SunNode[];
-}
-
-export function winnerId(m: Match): string | null {
-  if (m.winner === "p1") return m.p1;
-  if (m.winner === "p2") return m.p2;
-  return null;
 }
 
 export function finalMatch(s: Snapshot): Match {
@@ -123,10 +117,11 @@ export function buildSunburst(s: Snapshot): SunNode {
           { id: `${id}.0`, matchId: m.id, occupant: m.p1, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
           { id: `${id}.1`, matchId: m.id, occupant: m.p2, projected: false, live: false, suspended: false, depth: depth + 1, children: [] },
         ];
-    // `live` requires no decided result yet (SunNode.live = "in progress, no winner"). A data-lag
+    // `live` requires no decided result yet (SunNode.live = "in progress, no winner"): a data-lag
     // match — winner already set while status still reads "live" — must NOT be both decided and
     // live, or render would draw it named + heat-filled AND hatched/breathing (and possibly .out).
-    // `suspended` mirrors `live` but for a paused match (its own arc treatment, no breathing hatch).
+    // Same decided-wins-over-status rule as isUndecidedInPlay (model.ts); the per-status equality
+    // here is deliberate — live and suspended get distinct visual tiers.
     const undecided = decided === null;
     return {
       id, matchId: m.id, occupant, projected: undecided,

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { makeSyntheticSnapshot } from "./fixtures/synthetic";
-import { buildSunburst, winnerId, timeOnCourt, timeLeaderboard, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, type SunNode } from "./state";
 import { surfaceElo, projectFavorite, winProbability } from "./state";
-import type { Player } from "./model";
+import { winnerId, type Player } from "./model";
 
 const mkPlayer = (o: Partial<Player>): Player => ({
   id: "x", name: "X", country: "", seed: null, entry: null, ranking: null, sofaSlug: null, elo: null, birthdate: null, ...o,
