@@ -67,6 +67,24 @@ descendant set *before* killing, so reparenting after the first kill can't stran
 (`gtimeout` also isn't installed on the Mac, and this approach needs zero extra deps — it works
 as-is on the Pi too.)
 
+### The dead-man ping (added 2026-07-10)
+
+The watchdog bounds a *single* stuck run, but a schedule that stops entirely (agent unloaded,
+laptop asleep for days, repeated failures) is invisible unless someone looks. The runner therefore
+reports each cycle to a [healthchecks.io](https://healthchecks.io) check when one is configured:
+success pings the check URL, failure pings `<url>/fail` (immediate alert, no grace-period wait).
+Ping failures never fail the run.
+
+Setup: create a check (schedule: every 30 min, grace ≥ 45 min — a full slam-day ingest can run
+long) and put its ping URL in **one** of:
+
+- the file `~/Library/Application Support/TennisArc/healthcheck-url` (one line; preferred — the
+  URL is semi-secret and must stay out of the repo), or
+- the `TENNISARC_HEALTHCHECK_URL` env var in the launchd plist / systemd unit.
+
+No URL configured → the runner behaves exactly as before. Remember the runner executes as a
+**snapshot** — re-copy after changing `scripts/refresh-runner.sh` (see below).
+
 ## Runbook — is it healthy, and how to unstick it
 
 ```bash

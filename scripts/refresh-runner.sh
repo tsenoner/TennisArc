@@ -67,4 +67,21 @@ wait "$JOB" || STATUS=$?         # `|| ...` stops `set -e` bailing before we rea
 # before we exit (so launchd can't reap a half-finished kill).
 pkill -P "$WATCHDOG" 2>/dev/null || true
 wait "$WATCHDOG" 2>/dev/null || true
+
+# Dead-man ping (optional). A wedged or dying schedule is invisible from the outside — the data
+# branch just quietly stops moving (it once froze for 3 days). If a healthchecks.io-style URL is
+# configured, report each cycle: success pings the bare URL, failure pings <url>/fail so the alert
+# fires immediately instead of waiting out the missed-ping grace period. The URL is semi-secret
+# (anyone holding it can silence the alarm), so it lives OUTSIDE the repo: env var wins, else a
+# one-line file next to the runner's clone. Ping problems never fail the run itself.
+HC_URL="${TENNISARC_HEALTHCHECK_URL:-}"
+HC_FILE="$(dirname "$CLONE")/healthcheck-url"
+if [ -z "$HC_URL" ] && [ -f "$HC_FILE" ]; then HC_URL="$(head -n1 "$HC_FILE" | tr -d '[:space:]')"; fi
+if [ -n "$HC_URL" ]; then
+  if [ "$STATUS" -eq 0 ]; then
+    curl -fsS -m 10 --retry 3 "$HC_URL" >/dev/null || true
+  else
+    curl -fsS -m 10 --retry 3 "$HC_URL/fail" >/dev/null || true
+  fi
+fi
 exit "$STATUS"
