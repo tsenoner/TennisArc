@@ -311,7 +311,7 @@ export function renderSunburst(
         const st = labels.sched(a.matchId);
         if (st) {
           if (a.y0 > 0) {
-            emitFitted(a, st.base, " arc-sched", st.short, st.full);
+            emitFitted(a, st.base, st.resume ? " arc-sched arc-resume" : " arc-sched", st.short, st.full);
           } else if (a.depth === 0) {
             // The unfocused ROOT — the final's slot. A focused hub (y0 === 0 under zoom,
             // original depth > 0) keeps its centre pill and crumbs instead.

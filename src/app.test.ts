@@ -1433,6 +1433,43 @@ describe("live score overlay (/api/live)", () => {
     return () => liveCalls;
   }
 
+  it("a live view's FIRST paint already carries the overlay — the pre-stoppage time is never painted", async () => {
+    // Reload during a rain hold: the snapshot still holds SofaScore's ORIGINAL slot (12:30) while
+    // the Flashscore record carries the resume slot (15:00). Fetched in series, the bracket painted
+    // 12:30 for a whole round-trip and then visibly corrected itself. Nothing may paint 12:30.
+    // (TZ is pinned to UTC for tests in vite.config.ts, so these are the literal rendered times.)
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
+    const nowSec = Math.floor(NOON2.getTime() / 1000);
+    const ORIG = nowSec + 1800, RESUME = nowSec + 3 * 3600;
+    installFetchStub({
+      index: () => LIVE_INDEX,
+      snap: () => ({
+        ...LIVE_SNAP,
+        matches: {
+          ...LIVE_SNAP.matches,
+          // undecided, so the arc is projected and actually carries an order-of-play tag
+          [M.id]: { ...LIVE_SNAP.matches[M.id], status: "scheduled" as const, winner: null, score: null,
+                    scheduledStart: ORIG, scheduledPrecise: true },
+        },
+      }),
+      live: () => ({ matches: [{ ...JOIN_RECORD, stage: 3 as const, interrupted: true as const, resumesAt: RESUME }] }),
+    });
+
+    document.body.innerHTML = `<div id="app"></div>`;
+    const root = document.getElementById("app")!;
+    const painted: string[] = [];
+    const obs = new MutationObserver(() => painted.push(root.innerHTML));
+    obs.observe(root, { childList: true, subtree: true });
+    mounted.push(createApp(root));
+    await vi.waitFor(() => {
+      if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not rendered yet");
+    }, { timeout: 2000 });
+    obs.disconnect();
+
+    expect(root.innerHTML).toContain("15:00");                        // the resume slot is what shows
+    expect(painted.some((h) => h.includes("12:30"))).toBe(false);     // and the original NEVER did
+  });
+
   it("polls /api/live and overlays a changing live score onto the draw", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true, now: NOON2 });
     let served: unknown = { ...JOIN_RECORD };

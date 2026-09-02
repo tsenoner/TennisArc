@@ -277,6 +277,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    compound (0,4,0) beats :root[data-theme="light"] .arc-label (0,3,0). */
 .arc-label.arc-sched { fill: var(--teal-text); font-weight: 600; }
 :root[data-theme="light"] .arc-label.arc-sched { fill: var(--teal-text); }
+/* A RESUME slot (suspended match, held over) takes the amber of its own arc outline, so a paused
+   arc tells ONE colour story instead of two — and teal keeps its single meaning, "an upcoming
+   start", which makes the two kinds of tag tellable apart at a glance. Specificity: needs the
+   :root compound in light theme to beat :root[data-theme="light"] .arc-label.arc-sched (0,4,0). */
+.arc-label.arc-sched.arc-resume { fill: var(--amber); }
+:root[data-theme="light"] .arc-label.arc-sched.arc-resume { fill: var(--amber); }
 .arc-radial { font-weight: 500; }   /* outer spokes (R128/R64): same halo thickness as the rest, for even legibility */
 /* round axis (R128 … Final) pinned to 12 o'clock on each ring */
 .ring-label { fill: var(--dim); font-weight: 700; letter-spacing: .03em; paint-order: stroke;
@@ -312,7 +318,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
    from the grey pending tier) but is marked by a static amber dashed outline — no breathing pulse,
    because nothing is happening right now. Distinct hue (amber) and motion (none) from live's teal
    pulse, so the two in-progress states never read alike. */
-.arc.suspended { opacity: .62; stroke: var(--amber); stroke-width: 1px; stroke-dasharray: 2.5 2; }
+/* Weight and dash match .arc.projected's scaffold so the outline reads as a quiet annotation next
+   to its neighbours rather than a hard box; the AMBER HUE is what carries the meaning, and that is
+   untouched — it stays the non-motion, distinct-hue cue that never reads like live's teal pulse. */
+.arc.suspended { opacity: .62; stroke: var(--amber); stroke-width: .8px; stroke-dasharray: 2 2; }
 
 /* quarter-owner corner labels — quiet cartographic annotations in the circle-in-square
    dead corners, doubling as tap-to-focus quarter handles. No chip/box chrome on purpose;
