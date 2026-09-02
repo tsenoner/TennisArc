@@ -132,10 +132,15 @@ export interface LiveRecord {
   setsWon: [number, number];     // [home, away]
   sets: Array<[number, number]>; // per-set games [home, away], in order
   srv?: 1 | 2;                   // current server (CX), live records only — 1 home, 2 away
-  /** Stage-3 record whose sub-stage (AC) is 36: play stopped mid-match (rain/curfew) and held
+  /** Stage-3 record whose sub-stage (AC) says play stopped mid-match (rain/curfew) and was held
    *  over — partial sets, start rewritten to the resume slot. A pause, NOT a result: the client
    *  overlays it as `suspended`, never `finished`. Absent on every genuinely finished record. */
   interrupted?: true;
+  /** The held-over match's RESUME slot (AD, Unix seconds), on `interrupted` records only. The
+   *  stoppage and the resume time then come from one source: SofaScore's own stamp is absent
+   *  entirely for a match it classifies as suspended (the ingest stamps scheduledStart only for an
+   *  UPCOMING match), so without this the resume tag disappears exactly when both feeds agree. */
+  resumesAt?: number;
 }
 
 /** The selected live match's current-game point values (Flashscore df_mhs feed, home/away order).

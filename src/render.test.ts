@@ -434,6 +434,19 @@ describe("renderSunburst — on-arc scheduled labels", () => {
     expect(html).not.toContain("<textPath");   // straight horizontal text — never a full-circle path
   });
 
+  it("names a SUSPENDED final's slot as a RESUME in the chart's accessible name", () => {
+    // The amber paused arc is the sighted cue; AT gets only this text, so without the word the
+    // resume slot is announced as the final's start time.
+    const root = arc({ id: "r", depth: 0, y0: 0, y1: 42, x0: 0, x1: Math.PI * 2, suspended: true });
+    const resume = labels(() => ({ ...pair("Today 19:50", "Sun 12 Jul 19:50"), resume: true as const }));
+    expect(renderSunburst([root], color, 700, resume))
+      .toContain('aria-label="Tournament bracket sunburst — 1 match in progress — final resumes Sun 12 Jul 19:50"');
+    // a plain upcoming final keeps the bare slot — "resumes" is not spent on every tag
+    const start = labels(() => pair("Today 19:50", "Sun 12 Jul 19:50"));
+    expect(renderSunburst([arc({ id: "r", depth: 0, y0: 0, y1: 42, x0: 0, x1: Math.PI * 2 })], color, 700, start))
+      .toContain("— final Sun 12 Jul 19:50\"");
+  });
+
   it("upgrades to the full form (with date) when the arc has one-line room, compact otherwise", () => {
     const sched = labels(() => pair("Mon 12:00", "Mon 6 Jul 12:00"));
     const wide = renderSunburst([arc({ x0: 0, x1: 1.2 })], color, 700, sched);

@@ -34,9 +34,13 @@ export async function fetchPbp(mid: string): Promise<CurrentGame | null> {
  * resolved per record. Ambiguous pairs — two matches sharing a key — are dropped rather than
  * mis-joined. Winner is set on a FINISHED match ONLY when a side reached the sets-to-win threshold
  * (ATP best-of-5 → 3, WTA best-of-3 → 2); otherwise it is left to the snapshot (the
- * retirement/walkover shape). A suspended record never awards one.
+ * retirement/walkover shape). A suspended record never awards one, and carries its RESUME slot
+ * (Flashscore AD) onto the match when that slot is still ahead. `nowSec` is the wall-clock
+ * reference for that one guard.
  */
-export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<string, Partial<Match>> {
+export function overlayLive(
+  snap: Snapshot, records: LiveRecord[], nowSec = Math.floor(Date.now() / 1000),
+): Record<string, Partial<Match>> {
   const keyOf = (m: Match): string | null => {
     const n1 = m.p1 ? snap.players[m.p1]?.name : undefined;
     const n2 = m.p2 ? snap.players[m.p2]?.name : undefined;
@@ -72,6 +76,15 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
     const status: Match["status"] =
       r.stage === 2 ? "live" : r.interrupted && m.winner == null ? "suspended" : "finished";
     const patch: Partial<Match> = { status, score: score.length ? score : null };
+    if (status === "suspended" && r.resumesAt != null && r.resumesAt > nowSec) {
+      // The resume slot rides on the record that reported the stoppage (see LiveRecord.resumesAt),
+      // which is the only source for it on a match SofaScore itself calls suspended — the ingest
+      // stamps scheduledStart for UPCOMING matches only, so that snapshot arrives with no slot.
+      // FUTURE-ONLY, deliberately: a resume time is by definition ahead, so this can only ever add
+      // a slot or replace a stale one — never overwrite a good SofaScore stamp with a past value.
+      patch.scheduledStart = r.resumesAt;
+      patch.scheduledPrecise = true; // a published order-of-play slot, not a nominal round-day default
+    }
     if (r.stage === 2) {
       patch.flash = { id: r.id, homeIsP1 };
       // Tiebreak (last set reads e.g. 6-6, or the rare 12-12+): CX (r.srv) rotates every two

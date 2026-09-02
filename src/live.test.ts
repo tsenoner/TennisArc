@@ -68,6 +68,28 @@ describe("overlayLive", () => {
     const r = rec({ home: "Alcaraz C.", away: "Sinner J.", stage: 3, interrupted: true, setsWon: [2, 0], sets: [[6, 3], [6, 2]] });
     expect(overlayLive(s, [r])["0-0"]!.status).toBe("finished"); // the snapshot's ✓ is never paired with "suspended"
   });
+  it("carries a held-over record's RESUME slot onto the match — the only source when SofaScore stamped none", () => {
+    // The gap this closes: normalize stamps scheduledStart for UPCOMING matches only, so a match
+    // SofaScore itself calls suspended reaches the client with no slot at all and no tag to show.
+    const NOW = 1_800_000_000;
+    const s = snap("ATP", [player("a", "Zizou Bergs"), player("b", "Carlos Taberner")], [match("0-0", "a", "b")]);
+    const r = rec({ home: "Bergs Z.", away: "Taberner C.", stage: 3, interrupted: true, resumesAt: NOW + 3600, sets: [[6, 3]] });
+    expect(overlayLive(s, [r], NOW)["0-0"]).toMatchObject({ scheduledStart: NOW + 3600, scheduledPrecise: true });
+  });
+  it("ignores a resume slot that is not still ahead — it can only add a slot, never clobber a good one", () => {
+    const NOW = 1_800_000_000;
+    const s = snap("ATP", [player("a", "Zizou Bergs"), player("b", "Carlos Taberner")], [match("0-0", "a", "b")]);
+    const r = rec({ home: "Bergs Z.", away: "Taberner C.", stage: 3, interrupted: true, resumesAt: NOW - 60, sets: [[6, 3]] });
+    expect("scheduledStart" in overlayLive(s, [r], NOW)["0-0"]!).toBe(false);
+  });
+  it("never carries a resume slot off a record that is not a pause", () => {
+    const NOW = 1_800_000_000;
+    const s = snap("ATP", [player("a", "Rafael Nadal"), player("b", "Novak Djokovic")], [match("0-0", "a", "b")]);
+    const r = rec({ home: "Nadal R.", away: "Djokovic N.", stage: 3, resumesAt: NOW + 3600, setsWon: [3, 0] });
+    const patch = overlayLive(s, [r], NOW)["0-0"]!;
+    expect(patch.status).toBe("finished");
+    expect("scheduledStart" in patch).toBe(false);
+  });
   it("skips scheduled (stage 1) records", () => {
     const s = snap("ATP", [player("a", "Daniil Medvedev"), player("b", "Holger Rune")], [match("0-0", "a", "b")]);
     expect(overlayLive(s, [rec({ home: "Medvedev D.", away: "Rune H.", stage: 1 })])).toEqual({});

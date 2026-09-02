@@ -156,9 +156,9 @@ describe("renderMatchDetail", () => {
     expect(html).toContain("subject to change");
   });
 
-  it("words a SUSPENDED match's slot as the resume time, not as 'scheduled'", () => {
+  it("words a RESUME slot as such, not as 'scheduled' — read off the slot, not re-derived from status", () => {
     const ins: MatchInsight = { ...base, status: "suspended", winner: null, durationSec: null,
-      scheduled: { start: NOW + 3600, court: "Court 12" } };
+      scheduled: { start: NOW + 3600, court: "Court 12", resume: true } };
     const html = renderMatchDetail(ins, null, rounds, NOW);
     expect(html).toContain("mi-sched");
     expect(html).toContain("Court 12");

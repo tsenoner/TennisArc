@@ -49,7 +49,13 @@ export interface SunburstLabels {
  *  calendar date ("Mon 6 Jul 12:00"), `base` is the compact shape ("Mon 12:00" / "12 Jul 17:00"),
  *  `short` the day/date alone ("Mon" / "12 Jul") — the fit ladder's last resort. Built by
  *  formatScheduledArc so renderers never parse tag strings back apart. */
-export interface ArcSched { base: string; full: string; short: string; }
+export interface ArcSched {
+  base: string; full: string; short: string;
+  /** The slot is a RESUME time, not a start (a suspended match, held over) — carried from
+   *  ScheduledInfo.resume. Visually the amber arc already says paused, so only the chart's
+   *  accessible name spends words on it; the on-arc tag stays compact. */
+  resume?: true;
+}
 
 /** Inline flag <img> from the bundled flag-icons set (identical on every platform);
  *  falls back to the emoji pair for codes outside the asset set. flag-icons are 4:3.
@@ -311,7 +317,10 @@ export function renderSunburst(
             // original depth > 0) keeps its centre pill and crumbs instead.
             const tag = renderCenterSched(a, st);
             if (tag) texts.push(tag);
-            centerSched = st.full;   // AT-visible via the svg aria-label even when the tag can't fit
+            // AT-visible via the svg aria-label even when the tag can't fit. "resumes" is spelled
+            // out only here: a sighted user reads the amber paused arc, an AT user has just this
+            // text, and without the word a resume slot is announced as the final's start time.
+            centerSched = st.resume ? `resumes ${st.full}` : st.full;
           }
         }
       }
@@ -831,7 +840,7 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
   const dur = ins.durationSec != null ? `⏱ ${formatDuration(ins.durationSec)}${durTag}` : "";
   const sched = ins.scheduled
     ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec, full: true }))}` +
-      ` <span class="mi-prov">· ${ins.status === "suspended" ? "resumes" : "scheduled"}, subject to change</span></div>`
+      ` <span class="mi-prov">· ${ins.scheduled.resume ? "resumes" : "scheduled"}, subject to change</span></div>`
     : "";
   const link = sofaUrl
     ? `<a class="mi-link" href="${escapeHtml(sofaUrl)}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";

@@ -503,7 +503,11 @@ export function timeLeaderboard(s: Snapshot, time: Map<string, PlayerTime>, limi
     .slice(0, limit);
 }
 
-export interface ScheduledInfo { start: number; court: string | null; }
+/** `resume` marks a slot that is a RESUME time, not a start: the match is suspended, paused
+ *  mid-play and held over. Set where the decision is already made (scheduledInfo's suspended
+ *  tier), so consumers read the value's own meaning instead of each re-deriving it from status —
+ *  the detail panel's wording and the chart's accessible name both hang off this. */
+export interface ScheduledInfo { start: number; court: string | null; resume?: true; }
 
 // The precise/nominal split governs HIDE RULES ONLY — display is uniform (render.ts
 // formatScheduled shows date + provisional time for every tier, viewer-local). PRECISE = the
@@ -527,12 +531,25 @@ const SLAM_TZ: Record<string, string> = {
   "us-open": "America/New_York",
 };
 
+// One formatter per venue zone, built on first use and kept — Intl.DateTimeFormat construction is
+// costly (render.ts hoists its own for the same reason), while format() still resolves each date's
+// offset, DST included. It matters here because the caller is per-arc, per-draw: a full 128 draw
+// asks for the nominal tier's day-end on every future arc, twice each (venueDayEnd queries the
+// offset a second time to correct for a DST transition), so a fresh construction per call would
+// mean hundreds per redraw. There are four zones, so the cache is bounded by construction.
+const zoneFmt = new Map<string, Intl.DateTimeFormat>();
+
 /** `zone`'s UTC offset (seconds) at epoch-seconds `sec`, via Intl — DST resolves per date. */
 function zoneOffsetSec(sec: number, zone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: zone, hourCycle: "h23",
-    year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric",
-  }).formatToParts(new Date(sec * 1000));
+  let fmt = zoneFmt.get(zone);
+  if (fmt === undefined) {
+    fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone, hourCycle: "h23",
+      year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric",
+    });
+    zoneFmt.set(zone, fmt);
+  }
+  const parts = fmt.formatToParts(new Date(sec * 1000));
   const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
   return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second")) / 1000 - sec;
 }
@@ -553,6 +570,24 @@ export function msToVenueMidnight(nowMs: number, slam: string): number | null {
   return zone ? venueDayEnd(Math.floor(nowMs / 1000), zone) * 1000 - nowMs : null;
 }
 
+/** Ms from `nowMs` until the next scheduled-slot hide gate flips ON ITS OWN — i.e. the earliest
+ *  suspended match's resume instant, the moment `scheduledInfo` starts returning null for it.
+ *  Null when no suspended match has a slot still ahead. The other two tiers need no such timer:
+ *  a precise slot lingers 6h past and a nominal one flips at the venue midnight app.ts already
+ *  times, whereas a resume time flips the instant it passes — with nothing else scheduled to
+ *  redraw (the live poll skips an unchanged patch, and a still-paused match produces an identical
+ *  one every tick), the arc would keep advertising a resume time minutes or hours in the past. */
+export function msToNextResumeFlip(snap: Snapshot, nowMs: number): number | null {
+  const nowSec = Math.floor(nowMs / 1000);
+  let earliest = Infinity;
+  for (const m of Object.values(snap.matches)) {
+    if (m.status === "suspended" && m.scheduledStart != null && m.scheduledStart > nowSec) {
+      earliest = Math.min(earliest, m.scheduledStart);
+    }
+  }
+  return earliest === Infinity ? null : earliest * 1000 - nowMs;
+}
+
 /** The order-of-play info to display for a not-yet-played match, or null when there is nothing
  *  trustworthy to show. `nowSec` is the WALL-CLOCK reference (Unix seconds) — never derive it from
  *  the snapshot's generatedAt, which can lag hours when the refresh wedges. `slam` (the snapshot's
@@ -560,8 +595,9 @@ export function msToVenueMidnight(nowMs: number, slam: string): number | null {
 export function scheduledInfo(m: Match, nowSec: number, slam?: string): ScheduledInfo | null {
   if (!showsScheduledSlot(m.status) || m.scheduledStart == null) return null; // walkover/retired never leak a time
   const dt = m.scheduledStart - nowSec;
+  const resume = m.status === "suspended";
   // Three hide tiers, one per kind of stamp — each answers "when has this slot gone stale?".
-  if (m.status === "suspended") {
+  if (resume) {
     // Suspended: paused mid-play and held over, so only a FUTURE stamp means anything — that is its
     // resume slot. The stamp is a second source (SofaScore's) from the one that reported the stoppage
     // (Flashscore's `interrupted`), so it can lag; a past stamp is just where play stopped.
@@ -574,7 +610,9 @@ export function scheduledInfo(m: Match, nowSec: number, slam?: string): Schedule
       : (Math.floor(m.scheduledStart / 86400) + 1) * 86400;
     if (nowSec >= dayEnd) return null; // nominal: its venue day is over
   }
-  return { start: m.scheduledStart, court: m.scheduledCourt ?? null };
+  const info: ScheduledInfo = { start: m.scheduledStart, court: m.scheduledCourt ?? null };
+  if (resume) info.resume = true;
+  return info;
 }
 
 export interface InsightSide {
