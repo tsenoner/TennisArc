@@ -138,6 +138,26 @@ kickstarted. The recovery run published live Wimbledon scores (ATP 25 / WTA 14 m
 from 0) and force-pushed the `data` branch. Total downtime would have been unbounded without the
 guard.
 
+## The manifest guard — "the files are there but the tab is greyed out"
+
+`index.json` (the manifest) is what the app's slam tabs read; the per-slam snapshots are only
+reachable through it. `publish-data.sh` rebuilds it from every snapshot on disk (`pnpm reindex`,
+step 3) and then **asserts** the two agree (`scripts/check-manifest.sh public/data`, step 3.5): a
+snapshot on disk that the manifest doesn't list aborts the publish with
+`manifest mismatch: … lists N slams but M snapshots are on disk — did reindex run?`.
+
+Why it exists: from June to September 2026 `pnpm reindex` exited 0 in this clone **without doing
+anything**. Its CLI main-guard compared `import.meta.url` (which percent-encodes spaces —
+`Application%20Support`) with `process.argv[1]` (raw), so under
+`~/Library/Application Support/TennisArc/refresh` it never matched. The carry-forward kept every
+snapshot, but the manifest reverted to the committed seed's the first refresh after each slam's
+window closed — Wimbledon 2026 vanished from the tabs on 2026-07-14 while both its files sat intact on
+the `data` branch. The guard is now `isMain()` in `ingest/cli.ts` (real-path comparison; covered by
+`ingest/reindex-cli.test.ts`, which runs the CLI through a path containing a space).
+
+If the assertion ever fires: run `pnpm reindex` by hand in the clone and check its output lists every
+`slams/{year}/*.json`; if it prints nothing, the entry guard is broken again.
+
 ## Live scores (Flashscore) — not part of this chain
 
 Score/status freshness for the in-play slam does **not** go through the Mac refresh chain above.

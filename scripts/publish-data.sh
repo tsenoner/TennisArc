@@ -103,6 +103,13 @@ pnpm backfill-durations "$(date -u +%Y)" || echo "duration pass failed; publishi
 # 3. Rebuild the manifest from every per-slam snapshot now on disk (seed + active + carried).
 pnpm reindex
 
+# 3.5 Prove it. The manifest is what the app's slam tabs read, and `pnpm reindex` once exited 0
+#     having done nothing (its CLI main-guard failed on this clone's path — "Application Support"
+#     has a space; see ingest/cli.ts): every snapshot was carried forward, but the manifest reverted
+#     to the seed's and Wimbledon 2026 silently disappeared from the tabs for weeks. A snapshot on
+#     disk that index.json doesn't list is a pipeline bug — refuse to publish rather than hide data.
+scripts/check-manifest.sh public/data
+
 # 4. Snapshot the full data set before touching branches.
 cp "$REPO_ROOT"/public/data/index.json "$STAGING/"
 [ -d "$REPO_ROOT"/public/data/slams ] && cp -R "$REPO_ROOT"/public/data/slams "$STAGING/slams"
