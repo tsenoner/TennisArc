@@ -413,10 +413,15 @@ describe("renderSunburst — on-arc scheduled labels", () => {
     expect(html).toContain("Tmrw");
   });
 
-  it("never emits one for live, suspended, or decided arcs, nor for a focused hub", () => {
+  it("emits one for a SUSPENDED (paused) arc too — its slot is the resume time, the one thing worth reading there", () => {
+    const html = renderSunburst([arc({ suspended: true })], color, 700, labels(() => pair("Today 19:50")));
+    expect(html).toContain("arc-label arc-sched");
+    expect(html).toContain("19:50");
+  });
+
+  it("never emits one for live or decided arcs, nor for a focused hub", () => {
     const sched = labels(() => pair("Tmrw 14:30"));
     expect(renderSunburst([arc({ live: true })], color, 700, sched)).not.toContain("arc-sched");
-    expect(renderSunburst([arc({ suspended: true })], color, 700, sched)).not.toContain("arc-sched");
     expect(renderSunburst([arc({ projected: false, occupant: "p9" })], color, 700, sched)).not.toContain("arc-sched");
     expect(renderSunburst([arc({ depth: 2, y0: 0, y1: 120, x0: 0, x1: Math.PI * 2 })], color, 700, sched)).not.toContain("arc-sched"); // focused hub (original depth preserved, y0===0, id ≠ "r")
   });

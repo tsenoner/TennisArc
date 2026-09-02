@@ -295,9 +295,11 @@ export function renderSunburst(
         const label = labels.text(a.occupant);
         if (label) emitFitted(a, label);
         } // end image/text branch
-      } else if (labels?.sched && a.projected && !a.live && !a.suspended) {
+      } else if (labels?.sched && a.projected && !a.live) {
         // Upcoming match: the always-on order-of-play tag, in the same label slot a winner's surname
-        // will occupy once decided. Space-adaptive richness: emitFitted upgrades to the full form
+        // will occupy once decided. A SUSPENDED arc keeps it too — scheduledInfo only serves a paused
+        // match a FUTURE slot, i.e. its resume time, which is the one thing worth reading on a paused
+        // arc (a live arc never gets one). Space-adaptive richness: emitFitted upgrades to the full form
         // (day + date + time) when it fits the ring's one-line budget at the preferred font, then
         // runs its shared ladder (two lines → shrink → shortForm — day/date alone, never a
         // meaningless bare digit).
@@ -829,7 +831,7 @@ export function renderMatchDetail(ins: MatchInsight, sofaUrl: string | null, rou
   const dur = ins.durationSec != null ? `⏱ ${formatDuration(ins.durationSec)}${durTag}` : "";
   const sched = ins.scheduled
     ? `<div class="mi-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec, full: true }))}` +
-      ` <span class="mi-prov">· scheduled, subject to change</span></div>`
+      ` <span class="mi-prov">· ${ins.status === "suspended" ? "resumes" : "scheduled"}, subject to change</span></div>`
     : "";
   const link = sofaUrl
     ? `<a class="mi-link" href="${escapeHtml(sofaUrl)}" target="_blank" rel="noopener noreferrer">Open in SofaScore ↗</a>` : "";

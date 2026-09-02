@@ -49,6 +49,11 @@ describe("overlayLive", () => {
     const patch = overlayLive(s, [rec({ home: "Swiatek I.", away: "Sabalenka A.", stage: 3, setsWon: [2, 1], sets: [] })]);
     expect(patch["0-0"]!.winner).toBe("p1");
   });
+  it("overlays an interrupted record as SUSPENDED with the partial score and no winner — a pause, not a result", () => {
+    const s = snap("ATP", [player("a", "Zizou Bergs"), player("b", "Carlos Taberner")], [match("0-0", "a", "b")]);
+    const r = rec({ home: "Bergs Z.", away: "Taberner C.", stage: 3, interrupted: true, setsWon: [2, 0], sets: [[6, 3], [6, 2]], srv: 1 });
+    expect(overlayLive(s, [r])["0-0"]).toEqual({ status: "suspended", score: [{ p1: 6, p2: 3 }, { p1: 6, p2: 2 }] });
+  });
   it("skips scheduled (stage 1) records", () => {
     const s = snap("ATP", [player("a", "Daniil Medvedev"), player("b", "Holger Rune")], [match("0-0", "a", "b")]);
     expect(overlayLive(s, [rec({ home: "Medvedev D.", away: "Rune H.", stage: 1 })])).toEqual({});

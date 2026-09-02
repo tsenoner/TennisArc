@@ -558,8 +558,14 @@ export function msToVenueMidnight(nowMs: number, slam: string): number | null {
  *  the snapshot's generatedAt, which can lag hours when the refresh wedges. `slam` (the snapshot's
  *  slam key) selects the venue zone for the nominal tier's day-end; omitted/unknown → UTC proxy. */
 export function scheduledInfo(m: Match, nowSec: number, slam?: string): ScheduledInfo | null {
-  if (!isUpcoming(m.status) || m.scheduledStart == null) return null; // allowlist: walkover/retired never leak a time
+  // Allowlist: upcoming matches, plus a SUSPENDED one (paused mid-play, held over) — walkover/retired
+  // never leak a time. For a suspended match only a FUTURE slot means anything: that's its resume time
+  // (the live overlay maps Flashscore's "interrupted" onto the snapshot, whose stamp SofaScore has
+  // already rewritten to the resumption). A past stamp is just where play stopped — hide it.
+  const suspended = m.status === "suspended";
+  if (!(isUpcoming(m.status) || suspended) || m.scheduledStart == null) return null;
   const dt = m.scheduledStart - nowSec;
+  if (suspended && dt <= 0) return null;
   const precise = m.scheduledPrecise === true;
   if (precise) {
     if (dt < -SCHED_STALE_BEHIND_SEC) return null;

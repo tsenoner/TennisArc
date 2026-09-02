@@ -582,6 +582,14 @@ describe("scheduledInfo", () => {
   const DAY = 86400;
   const NOW = 20_000 * DAY + 12 * 3600; // noon UTC on an arbitrary day — pure arithmetic either way
 
+  it("suspended: a FUTURE slot is the resume time → shown", () => {
+    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW + 3600, scheduledPrecise: true, scheduledCourt: "Court 12" }), NOW))
+      .toEqual({ start: NOW + 3600, court: "Court 12" });
+  });
+  it("suspended: a PAST slot is where play stopped, not where it resumes → hidden", () => {
+    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW - 1800, scheduledPrecise: true }), NOW)).toBeNull();
+    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW - 1800 }), NOW)).toBeNull(); // nominal too
+  });
   it("precise: flagged slot within 36h → start + court", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 3600, scheduledPrecise: true, scheduledCourt: "Court 2" }), NOW))
       .toEqual({ start: NOW + 3600, court: "Court 2" });
@@ -643,8 +651,8 @@ describe("scheduledInfo", () => {
       .toEqual({ start, court: null });                          // 23:00 AEDT — venue day not over yet
   });
 
-  it("allowlist: no other status leaks a time, even with stray fields", () => {
-    for (const status of ["finished", "live", "suspended", "retired", "walkover"] as const) {
+  it("allowlist: no other status leaks a time, even with stray fields (suspended is the one exception — its future slot is the resume time)", () => {
+    for (const status of ["finished", "live", "retired", "walkover"] as const) {
       expect(scheduledInfo(schedMatch({ status, scheduledStart: NOW + 3600, scheduledPrecise: true }), NOW)).toBeNull();
     }
   });

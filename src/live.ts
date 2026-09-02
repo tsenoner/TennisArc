@@ -60,8 +60,12 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
     const p1name = m.p1 ? snap.players[m.p1]?.name : undefined;
     const homeIsP1 = p1name != null && hk === sigKey(p1name);
     const score: SetScore[] = r.sets.map(([h, a]) => (homeIsP1 ? { p1: h, p2: a } : { p1: a, p2: h }));
+    // A stage-3 record flagged `interrupted` is a match paused mid-play and held over (rain/curfew):
+    // it carries the partial score but no result, so it overlays as SUSPENDED — the snapshot's own
+    // in-progress-but-paused status (amber tier, resume-time tag) — never as a winnerless "finished".
+    const interrupted = r.stage === 3 && r.interrupted === true;
     const patch: Partial<Match> = {
-      status: r.stage === 2 ? "live" : "finished",
+      status: r.stage === 2 ? "live" : interrupted ? "suspended" : "finished",
       score: score.length ? score : null,
     };
     if (r.stage === 2) {
@@ -76,7 +80,7 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
         patch.serving = homeServes ? (homeIsP1 ? "p1" : "p2") : (homeIsP1 ? "p2" : "p1");
       }
     }
-    if (r.stage === 3) {
+    if (r.stage === 3 && !interrupted) {
       const [p1Won, p2Won] = homeIsP1 ? r.setsWon : [r.setsWon[1], r.setsWon[0]];
       if (p1Won >= toWin) patch.winner = "p1";
       else if (p2Won >= toWin) patch.winner = "p2";

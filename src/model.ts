@@ -125,6 +125,10 @@ export interface LiveRecord {
   setsWon: [number, number];     // [home, away]
   sets: Array<[number, number]>; // per-set games [home, away], in order
   srv?: 1 | 2;                   // current server (CX), live records only — 1 home, 2 away
+  /** Stage-3 record whose sub-stage (AC) is 36: play stopped mid-match (rain/curfew) and held
+   *  over — partial sets, start rewritten to the resume slot. A pause, NOT a result: the client
+   *  overlays it as `suspended`, never `finished`. Absent on every genuinely finished record. */
+  interrupted?: true;
 }
 
 /** The selected live match's current-game point values (Flashscore df_mhs feed, home/away order).

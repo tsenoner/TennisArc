@@ -66,6 +66,11 @@ export function parseLiveFeed(text: string, opts: { tour: Tour; slam: string }):
       setsWon: [num(f.get("AG") ?? ""), num(f.get("AH") ?? "")],
       sets,
     };
+    // AC is the sub-stage. AB=3 covers everything "neither scheduled nor live": a genuine result
+    // (AC 3), but also a match stopped mid-play by rain/curfew and held over (AC 36 — partial sets,
+    // AD rewritten to the resume slot; seen on US Open 2026 day 3). Flag the latter so the client
+    // overlays it as SUSPENDED instead of a winnerless "finished" that blanks the arc.
+    if (stage === 3 && num(f.get("AC") ?? "") === 36) record.interrupted = true;
     // CX names the current server, but it PERSISTS on finished records (last server) — only a
     // live record's value means "serving now". Exact match against the record's own names.
     if (stage === 2) {

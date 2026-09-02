@@ -30,6 +30,17 @@ describe("parseLiveFeed", () => {
     const live = parseLiveFeed(feed, { tour: "ATP", slam: "wimbledon" }).find((m) => m.id === "aaa1")!;
     expect(Object.keys(live)).toEqual(["id", "stage", "home", "away", "setsWon", "sets"]);
   });
+  it("flags an interrupted record (AB 3 + AC 36: stopped mid-match, to be resumed) so it is not read as a result", () => {
+    // Real shape from US Open 2026 R1 (rain): AB=3 like a finished match, but AC=36 and a partial score.
+    const feed =
+      "ZA÷ATP - SINGLES: Wimbledon (United Kingdom), grass¬ZB÷5724¬~" +
+      "AA÷int1¬AB÷3¬AC÷36¬AE÷Bergs Z.¬AF÷Taberner C.¬AG÷2¬AH÷0¬BA÷6¬BB÷3¬BC÷6¬BD÷2¬~" +
+      "AA÷fin1¬AB÷3¬AC÷3¬AE÷Cerundolo J. M.¬AF÷Gea A.¬AG÷2¬AH÷3¬~";
+    const [int, fin] = parseLiveFeed(feed, { tour: "ATP", slam: "wimbledon" });
+    expect(int).toMatchObject({ id: "int1", stage: 3, interrupted: true, setsWon: [2, 0], sets: [[6, 3], [6, 2]] });
+    expect(fin.stage).toBe(3);
+    expect("interrupted" in fin).toBe(false); // a genuinely finished record carries no flag
+  });
   it("emits srv from CX on a live record (1 = home, 2 = away)", () => {
     const feed =
       "ZA÷ATP - SINGLES: Wimbledon (United Kingdom), grass¬ZB÷5724¬~" +

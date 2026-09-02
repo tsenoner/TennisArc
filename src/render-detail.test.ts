@@ -156,6 +156,16 @@ describe("renderMatchDetail", () => {
     expect(html).toContain("subject to change");
   });
 
+  it("words a SUSPENDED match's slot as the resume time, not as 'scheduled'", () => {
+    const ins: MatchInsight = { ...base, status: "suspended", winner: null, durationSec: null,
+      scheduled: { start: NOW + 3600, court: "Court 12" } };
+    const html = renderMatchDetail(ins, null, rounds, NOW);
+    expect(html).toContain("mi-sched");
+    expect(html).toContain("Court 12");
+    expect(html).toContain("resumes");
+    expect(html).not.toContain("scheduled, subject to change");
+  });
+
   it("omits the scheduled line for a match with no scheduled info", () => {
     expect(renderMatchDetail(base, null, rounds, NOW)).not.toContain("mi-sched");
   });
