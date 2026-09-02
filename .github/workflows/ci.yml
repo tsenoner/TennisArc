@@ -1,0 +1,35 @@
+name: CI
+# Typecheck + test on every PR commit and every push to main. This is the ONLY workflow that runs
+# the test suite: durations.yml and refresh.yml are scheduled/dispatch data jobs, and the Vercel
+# check on a PR only proves the app compiles. Until this existed, a PR could go green with a
+# failing suite — which is how a silently no-op'ing `pnpm reindex` shipped and dropped a slam from
+# the manifest for seven weeks (see docs/data-refresh-ops.md).
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  # Per-ref, and NOT the refresh-data group the data workflows share — a cancelled test run is
+  # harmless, a cancelled publish is not.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # Covers the shell guards too: scripts/check-manifest.test.ts runs the script through its
+      # shebang (so the executable bit is exercised) and asserts the committed public/data seed's
+      # manifest lists exactly the snapshots on disk.
+      - run: pnpm test
