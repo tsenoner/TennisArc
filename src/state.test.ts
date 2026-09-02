@@ -569,7 +569,7 @@ describe("suspended-match handling", () => {
   });
 });
 
-import { msToNextResumeFlip, scheduledInfo, msToVenueMidnight } from "./state";
+import { msToNextSchedFlip, scheduledInfo, msToVenueMidnight } from "./state";
 import type { Match as SchedMatch } from "./model";
 
 const schedMatch = (o: Partial<SchedMatch> = {}): SchedMatch => ({
@@ -578,24 +578,34 @@ const schedMatch = (o: Partial<SchedMatch> = {}): SchedMatch => ({
   durationSec: null, durationProvisional: false, sofaEventId: 1, sofaCustomId: null, stats: null, ...o,
 });
 
-describe("msToNextResumeFlip", () => {
+describe("msToNextSchedFlip", () => {
   const NOW_MS = 1_800_000_000_000;
   const nowSec = NOW_MS / 1000;
+  const STALE = 6 * 3600; // SCHED_STALE_BEHIND_SEC
   const snapWith = (matches: SchedMatch[]) =>
-    ({ matches: Object.fromEntries(matches.map((m, i) => [`${i}`, m])) }) as unknown as Parameters<typeof msToNextResumeFlip>[0];
+    ({ matches: Object.fromEntries(matches.map((m, i) => [`${i}`, m])) }) as unknown as Parameters<typeof msToNextSchedFlip>[0];
 
-  it("returns the EARLIEST suspended resume instant still ahead", () => {
+  it("returns the EARLIEST moment a published slot goes stale (start + 6h)", () => {
     const s = snapWith([
-      schedMatch({ status: "suspended", scheduledStart: nowSec + 7200 }),
+      schedMatch({ scheduledStart: nowSec + 7200, scheduledPrecise: true }),
       schedMatch({ status: "suspended", scheduledStart: nowSec + 600 }),
     ]);
-    expect(msToNextResumeFlip(s, NOW_MS)).toBe(600_000);
+    expect(msToNextSchedFlip(s, NOW_MS)).toBe((600 + STALE) * 1000);
   });
-  it("ignores a resume instant already passed — the gate has flipped, there is nothing left to time", () => {
-    expect(msToNextResumeFlip(snapWith([schedMatch({ status: "suspended", scheduledStart: nowSec - 60 })]), NOW_MS)).toBeNull();
+  it("times a suspended slot that has already passed — it still shows, so it still has a flip ahead", () => {
+    // The whole point of the linger: a resume time 9 min in the past is still on the arc, and the
+    // moment it stops being is what needs the redraw.
+    expect(msToNextSchedFlip(snapWith([schedMatch({ status: "suspended", scheduledStart: nowSec - 540 })]), NOW_MS))
+      .toBe((STALE - 540) * 1000);
   });
-  it("ignores non-suspended matches: their gates are day boundaries, already timed", () => {
-    expect(msToNextResumeFlip(snapWith([schedMatch({ scheduledStart: nowSec + 600 })]), NOW_MS)).toBeNull();
+  it("ignores a slot already stale — the gate has flipped, there is nothing left to time", () => {
+    expect(msToNextSchedFlip(snapWith([schedMatch({ status: "suspended", scheduledStart: nowSec - STALE - 60 })]), NOW_MS)).toBeNull();
+  });
+  it("ignores NOMINAL slots: their gate is the venue midnight the day timer already owns", () => {
+    expect(msToNextSchedFlip(snapWith([schedMatch({ scheduledStart: nowSec + 600 })]), NOW_MS)).toBeNull();
+  });
+  it("ignores statuses that never show a slot at all", () => {
+    expect(msToNextSchedFlip(snapWith([schedMatch({ status: "finished", scheduledStart: nowSec + 600, scheduledPrecise: true })]), NOW_MS)).toBeNull();
   });
 });
 
@@ -613,9 +623,16 @@ describe("scheduledInfo", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 3600, scheduledPrecise: true }), NOW))
       .toEqual({ start: NOW + 3600, court: null });
   });
-  it("suspended: a PAST slot is where play stopped, not where it resumes → hidden", () => {
-    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW - 1800, scheduledPrecise: true }), NOW)).toBeNull();
-    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW - 1800 }), NOW)).toBeNull(); // nominal too
+  it("suspended: a slot that has JUST PASSED still shows — a rain hold slips, and blanking the arc there is the bug", () => {
+    // Real shape (US Open 2026): resume slot 18:30, still paused at 18:39. Hiding it left an amber
+    // arc with no text — indistinguishable from a withdrawal, which is what this path exists to stop.
+    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW - 540, scheduledPrecise: true }), NOW))
+      .toEqual({ start: NOW - 540, court: null, resume: true });
+    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW - 540 }), NOW))
+      .toEqual({ start: NOW - 540, court: null, resume: true }); // a resume slot lingers whether or not it is flagged precise
+  });
+  it("suspended: a slot 6h stale is dropped, same rule as any published slot", () => {
+    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW - 6 * 3600 - 60 }), NOW)).toBeNull();
   });
   it("precise: flagged slot within 36h → start + court", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 3600, scheduledPrecise: true, scheduledCourt: "Court 2" }), NOW))

@@ -52,10 +52,15 @@ export interface SunburstLabels {
 export interface ArcSched {
   base: string; full: string; short: string;
   /** The slot is a RESUME time, not a start (a suspended match, held over) — carried from
-   *  ScheduledInfo.resume. Visually the amber arc already says paused, so only the chart's
-   *  accessible name spends words on it; the on-arc tag stays compact. */
+   *  ScheduledInfo.resume. It tints the tag amber to match its arc's outline (schedClass) and adds
+   *  the word "resumes" to the chart's accessible name; the on-arc TEXT stays compact either way. */
   resume?: true;
 }
+
+/** The class list for one order-of-play tag. Every emitter goes through here — the on-arc tag and
+ *  both centre-disc forms — so a resume tag can never be amber on one and teal on another. */
+const schedClass = (st: ArcSched, extra = ""): string =>
+  `arc-label arc-sched${extra}${st.resume ? " arc-resume" : ""}`;
 
 /** Inline flag <img> from the bundled flag-icons set (identical on every platform);
  *  falls back to the emoji pair for codes outside the asset set. flag-icons are 4:3.
@@ -311,7 +316,7 @@ export function renderSunburst(
         const st = labels.sched(a.matchId);
         if (st) {
           if (a.y0 > 0) {
-            emitFitted(a, st.base, " arc-sched", st.short, st.full);
+            emitFitted(a, st.base, " arc-sched" + (st.resume ? " arc-resume" : ""), st.short, st.full);
           } else if (a.depth === 0) {
             // The unfocused ROOT — the final's slot. A focused hub (y0 === 0 under zoom,
             // original depth > 0) keeps its centre pill and crumbs instead.
@@ -365,7 +370,7 @@ function renderCenterSched(a: LayoutArc, st: ArcSched): string {
   const fit = (txt: string) => Math.min(12, w / (txt.length * 0.58));
   // .arc-label sets dominant-baseline: central, so a vertically-centred single line sits at y=0
   const line = (txt: string, f: number) =>
-    `<text class="arc-label arc-sched arc-center" x="0" y="0" text-anchor="middle" font-size="${f.toFixed(1)}">${escapeHtml(txt)}</text>`;
+    `<text class="${schedClass(st, " arc-center")}" x="0" y="0" text-anchor="middle" font-size="${f.toFixed(1)}">${escapeHtml(txt)}</text>`;
   const f1 = fit(st.full);
   if (f1 >= 8.5) return line(st.full, f1);
   for (const txt of [st.full, st.base]) {          // two lines: day/date over time
@@ -374,7 +379,7 @@ function renderCenterSched(a: LayoutArc, st: ArcSched): string {
     const [l1, l2] = [txt.slice(0, i), txt.slice(i + 1)];
     const f2 = Math.min(fit(l1), fit(l2));
     if (f2 >= 7.5) {
-      return `<text class="arc-label arc-sched arc-center" text-anchor="middle" font-size="${f2.toFixed(1)}">` +
+      return `<text class="${schedClass(st, " arc-center")}" text-anchor="middle" font-size="${f2.toFixed(1)}">` +
         `<tspan x="0" y="${(-f2 * 0.6).toFixed(1)}">${escapeHtml(l1)}</tspan>` +
         `<tspan x="0" y="${(f2 * 0.6).toFixed(1)}">${escapeHtml(l2)}</tspan></text>`;
     }

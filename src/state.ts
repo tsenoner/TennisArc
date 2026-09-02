@@ -570,20 +570,30 @@ export function msToVenueMidnight(nowMs: number, slam: string): number | null {
   return zone ? venueDayEnd(Math.floor(nowMs / 1000), zone) * 1000 - nowMs : null;
 }
 
-/** Ms from `nowMs` until the next scheduled-slot hide gate flips ON ITS OWN — i.e. the earliest
- *  suspended match's resume instant, the moment `scheduledInfo` starts returning null for it.
- *  Null when no suspended match has a slot still ahead. The other two tiers need no such timer:
- *  a precise slot lingers 6h past and a nominal one flips at the venue midnight app.ts already
- *  times, whereas a resume time flips the instant it passes — with nothing else scheduled to
- *  redraw (the live poll skips an unchanged patch, and a still-paused match produces an identical
- *  one every tick), the arc would keep advertising a resume time minutes or hours in the past. */
-export function msToNextResumeFlip(snap: Snapshot, nowMs: number): number | null {
+/** A PUBLISHED slot — a real order-of-play time rather than a round-day default: a
+ *  `scheduledPrecise` start, or a SUSPENDED match's stamp, which is its resume slot. Both hide by
+ *  the same rule (6h past); the nominal tier hides at its venue day-end instead. One predicate, two
+ *  readers — scheduledInfo's hide rule and msToNextSchedFlip, whose whole contract is to fire when
+ *  that rule flips. Written twice they drift silently: the arc keeps a retired tag and no test fails.
+ *  A suspended stamp must NOT vanish the moment it passes — a rain hold slips routinely and the arc
+ *  has nothing else to say, so blanking it there recreates the "reads as a withdrawal" cell this
+ *  path exists to prevent; what it MEANS travels on ScheduledInfo.resume instead. */
+const isPublishedSlot = (m: Match): boolean => m.status === "suspended" || m.scheduledPrecise === true;
+
+/** Ms from `nowMs` until the next PUBLISHED slot (precise or resume) goes stale — the moment
+ *  `scheduledInfo` starts returning null for it, 6h past its start. Null when none is pending.
+ *  The nominal tier needs no entry here: it flips at the venue midnight app.ts already times.
+ *  Without this the flip has nothing to redraw it — the live poll skips an unchanged patch, and a
+ *  still-paused match produces an identical one every tick — so a long-lived tab keeps showing a
+ *  slot the hide rule has already retired. */
+export function msToNextSchedFlip(snap: Snapshot, nowMs: number): number | null {
   const nowSec = Math.floor(nowMs / 1000);
   let earliest = Infinity;
   for (const m of Object.values(snap.matches)) {
-    if (m.status === "suspended" && m.scheduledStart != null && m.scheduledStart > nowSec) {
-      earliest = Math.min(earliest, m.scheduledStart);
-    }
+    // nominal slots are skipped: the venue-midnight timer owns their flip
+    if (m.scheduledStart == null || !showsScheduledSlot(m.status) || !isPublishedSlot(m)) continue;
+    const stale = m.scheduledStart + SCHED_STALE_BEHIND_SEC;
+    if (stale > nowSec) earliest = Math.min(earliest, stale);
   }
   return earliest === Infinity ? null : earliest * 1000 - nowMs;
 }
@@ -594,16 +604,8 @@ export function msToNextResumeFlip(snap: Snapshot, nowMs: number): number | null
  *  slam key) selects the venue zone for the nominal tier's day-end; omitted/unknown → UTC proxy. */
 export function scheduledInfo(m: Match, nowSec: number, slam?: string): ScheduledInfo | null {
   if (!showsScheduledSlot(m.status) || m.scheduledStart == null) return null; // walkover/retired never leak a time
-  const dt = m.scheduledStart - nowSec;
-  const resume = m.status === "suspended";
-  // Three hide tiers, one per kind of stamp — each answers "when has this slot gone stale?".
-  if (resume) {
-    // Suspended: paused mid-play and held over, so only a FUTURE stamp means anything — that is its
-    // resume slot. The stamp is a second source (SofaScore's) from the one that reported the stoppage
-    // (Flashscore's `interrupted`), so it can lag; a past stamp is just where play stopped.
-    if (dt <= 0) return null;
-  } else if (m.scheduledPrecise === true) {
-    if (dt < -SCHED_STALE_BEHIND_SEC) return null; // precise: a published slot lingers 6h past
+  if (isPublishedSlot(m)) {
+    if (m.scheduledStart < nowSec - SCHED_STALE_BEHIND_SEC) return null; // lingers 6h past, then stale
   } else {
     const zone = slam ? SLAM_TZ[slam] : undefined;
     const dayEnd = zone ? venueDayEnd(m.scheduledStart, zone)
@@ -611,7 +613,7 @@ export function scheduledInfo(m: Match, nowSec: number, slam?: string): Schedule
     if (nowSec >= dayEnd) return null; // nominal: its venue day is over
   }
   const info: ScheduledInfo = { start: m.scheduledStart, court: m.scheduledCourt ?? null };
-  if (resume) info.resume = true;
+  if (m.status === "suspended") info.resume = true;
   return info;
 }
 

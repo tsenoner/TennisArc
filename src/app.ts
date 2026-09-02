@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, msToNextResumeFlip, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, msToNextSchedFlip, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -10,7 +10,7 @@ import { flagAssetUrl } from "./flags";
 import { loadTheme, saveTheme, applyTheme, nextTheme, type Theme } from "./theme";
 import { fetchSnapshot, fetchIndex } from "./api";
 import { pickDefaultSlam, availableYears, slamsForYear, statusFor } from "./slams";
-import { isUndecidedInPlay, type Match, type Player, type SlamIndex, type Snapshot, type Tour } from "./model";
+import { isUndecidedInPlay, type LiveRecord, type Match, type Player, type SlamIndex, type Snapshot, type Tour } from "./model";
 import { sofascoreMatchUrl } from "./deeplink";
 import { parseRoute, buildRoute, type Route } from "./route";
 import { fetchLive, fetchPbp, overlayLive, applyLivePatch, samePatch, type CurrentGame } from "./live";
@@ -511,7 +511,11 @@ export function createApp(root: HTMLElement): () => void {
   // Single-flight per snapshot key: coincident callers (poll tick, visibility refetch, the chip,
   // Retry, view switches) share one fetch, so two responses for the same view can never resolve
   // out of order and clobber newer data. Resolves true when the fetch produced a snapshot.
-  const load = (tour: Tour, year: number, slam: string): Promise<boolean> => {
+  /** `deferDraw` suppresses only the SUCCESS redraw — the caller promises to draw itself. The
+   *  failure path still draws its Retry state, which has nothing to wait for. Honoured only by the
+   *  call that actually STARTS the fetch: a caller joining an in-flight load gets the starter's
+   *  promise, and with it the starter's choice. */
+  const load = (tour: Tour, year: number, slam: string, deferDraw = false): Promise<boolean> => {
     const k = snapKey(tour, year, slam);
     const pending = inflight.get(k);
     if (pending) return pending;
@@ -539,7 +543,7 @@ export function createApp(root: HTMLElement): () => void {
         state.loadFailed = false;
         // redraw only when the data actually moved — polling must not wipe panel scroll /
         // in-flight interactions every 90s just to repaint identical bytes
-        if (!prev || (!regressed && prev.generatedAt !== fresh.generatedAt)) draw();
+        if (!deferDraw && (!prev || (!regressed && prev.generatedAt !== fresh.generatedAt))) draw();
       }
       return true;
     })().finally(() => inflight.delete(k));
@@ -550,19 +554,28 @@ export function createApp(root: HTMLElement): () => void {
   const loadCurrent = (): Promise<boolean> => load(state.tour, state.year, state.slam);
 
   const LIVE_SCORE_POLL_MS = 15_000;
+  // Cap on how long a live view's first paint waits for the overlay before painting without it.
+  const LIVE_FIRST_PAINT_MS = 1200;
+  /** Join fetched live records onto the CURRENT snapshot and store the patch. Returns whether the
+   *  patch actually moved; the caller decides whether to redraw. */
+  const storeLivePatch = (records: LiveRecord[]): boolean => {
+    const k = snapKey(state.tour, state.year, state.slam);
+    const raw = state.snapshots[k];
+    if (!raw) return false; // nothing to join against yet
+    const patch = overlayLive(raw, records, Math.floor(Date.now() / 1000));
+    if (samePatch(state.livePatch[k] ?? {}, patch)) return false;
+    state.livePatch[k] = patch;
+    return true;
+  };
   // Fast score overlay from Flashscore (src/live.ts) — independent of the 90s snapshot poll. Joins
   // to the CURRENT snapshot's players; redraws only when the computed patch actually changes.
   const loadLive = async (): Promise<void> => {
     const k = snapKey(state.tour, state.year, state.slam);
-    const raw = state.snapshots[k];
-    if (!raw) return; // nothing to join against yet
+    if (!state.snapshots[k]) return; // nothing to join against yet
     const records = await fetchLive(state.tour, state.slam);
     if (!records) return;
     if (snapKey(state.tour, state.year, state.slam) !== k) return; // view changed mid-fetch
-    const patch = overlayLive(raw, records, Math.floor(Date.now() / 1000));
-    if (samePatch(state.livePatch[k] ?? {}, patch)) return;
-    state.livePatch[k] = patch;
-    draw();
+    if (storeLivePatch(records)) draw();
   };
 
   const LIVE_POLL_MS = 90_000;
@@ -1139,9 +1152,9 @@ export function createApp(root: HTMLElement): () => void {
       startOfLocalDay(now, 1) - now.getTime(),                                     // next local midnight
       msToVenueMidnight(now.getTime(), state.slam)                                 // next venue midnight (hide-gate flip)
         ?? (Math.floor(now.getTime() / 86_400_000) + 1) * 86_400_000 - now.getTime(), // unknown slam: UTC fallback
-      // A suspended match's resume instant — the one hide gate that flips on a per-match time
-      // rather than a day boundary, and the one nothing else would redraw for (see state.ts).
-      snap ? msToNextResumeFlip(snap, now.getTime()) ?? Infinity : Infinity,
+      // A published slot going stale — the hide gate that flips on a per-match time rather than a
+      // day boundary, and the one nothing else would redraw for (see state.ts).
+      snap ? msToNextSchedFlip(snap, now.getTime()) ?? Infinity : Infinity,
     );
     clearTimeout(gateTimer);
     gateTimer = window.setTimeout(() => { draw(); armGate(); }, msToTick + 1000);
@@ -1171,8 +1184,34 @@ export function createApp(root: HTMLElement): () => void {
       if (state.year) history.replaceState(null, "", buildUrl());
     }
     if (!state.year) { state.loadFailed = true; draw(); return; } // no manifest → Retry state
-    await loadCurrent();
-    if (isLiveView()) void loadLive();
+    // Fetch the live overlay ALONGSIDE the snapshot and fold it into the FIRST paint. The two are
+    // independent requests — fetchLive needs no snapshot, only the join does — but running them in
+    // series made a reload paint SofaScore's PRE-STOPPAGE time for a whole extra round-trip before
+    // the overlay corrected it to the resume slot: a visible flash on every reload during a rain
+    // hold. Capped, so a slow or failing /api/live can never hold the bracket hostage — past the
+    // cap the snapshot paints alone and the overlay joins as soon as it does arrive.
+    const live = isLiveView() ? fetchLive(state.tour, state.slam) : null;
+    // The cap is armed HERE, beside the fetch it is capping, so it burns down DURING the snapshot
+    // round-trip rather than starting afresh once that resolves — otherwise the worst case is
+    // snapshot + 1.2s instead of max(snapshot, 1.2s), and the cap stops being free.
+    let capTimer = 0;
+    const capped = live && new Promise<null>((r) => { capTimer = window.setTimeout(() => r(null), LIVE_FIRST_PAINT_MS); });
+    await load(state.tour, state.year, state.slam, live != null);
+    if (live && capped) {
+      const records = await Promise.race([live, capped]);
+      clearTimeout(capTimer);
+      if (records) storeLivePatch(records);   // no snapshot to join yet → storeLivePatch no-ops
+      draw();                                 // the deferred snapshot paint, overlay included
+      // Cap expired: keep the ORIGINAL request rather than firing a second one at the same endpoint.
+      // Guarded like loadLive: a late arrival must not be joined onto whatever view is current by
+      // then, or a tour/slam switch during the wait gets the OTHER draw's records.
+      const liveKey = snapKey(state.tour, state.year, state.slam);
+      if (!records) void live.then((r) => {
+        if (!r || signal.aborted) return;
+        if (snapKey(state.tour, state.year, state.slam) !== liveKey) return; // view changed mid-fetch
+        if (storeLivePatch(r)) draw();
+      });
+    }
     // Warm the other tour's same-or-default slam in the background.
     const other: Tour = state.tour === "ATP" ? "WTA" : "ATP";
     if (state.index) {

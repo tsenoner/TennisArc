@@ -447,6 +447,17 @@ describe("renderSunburst — on-arc scheduled labels", () => {
       .toContain("— final Sun 12 Jul 19:50\"");
   });
 
+  it("tints the ROOT DISC's resume tag amber too — one emitter decided the class, all three read it", () => {
+    // The centre disc has its own two label forms; both used to hardcode their class list, so a
+    // suspended final's tag stayed teal while every other resume tag went amber.
+    const root = arc({ id: "r", depth: 0, y0: 0, y1: 42, x0: 0, x1: Math.PI * 2 });
+    const resume = labels(() => ({ ...pair("Today 19:50", "Sun 12 Jul 19:50"), resume: true as const }));
+    expect(renderSunburst([root], color, 700, resume)).toContain("arc-resume");
+    // and a plain upcoming final stays teal
+    expect(renderSunburst([root], color, 700, labels(() => pair("Today 19:50", "Sun 12 Jul 19:50"))))
+      .not.toContain("arc-resume");
+  });
+
   it("upgrades to the full form (with date) when the arc has one-line room, compact otherwise", () => {
     const sched = labels(() => pair("Mon 12:00", "Mon 6 Jul 12:00"));
     const wide = renderSunburst([arc({ x0: 0, x1: 1.2 })], color, 700, sched);
