@@ -147,7 +147,7 @@ and again at step 8.5 on the tree about to be pushed): a snapshot on disk that t
 list aborts the publish with
 `manifest mismatch: on disk but not in the manifest: ATP/2026/wimbledon — did reindex run?`.
 The comparison is by identity (`TOUR/year/slam`), not by count, so a stale manifest that happens to
-be the right length is caught too.
+be the right length is caught too — as is one that lists the same slam twice (a duplicate tab).
 
 Why it exists: from June to September 2026 `pnpm reindex` exited 0 in this clone **without doing
 anything**. Its CLI main-guard compared `import.meta.url` (which percent-encodes spaces —

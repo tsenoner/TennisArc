@@ -30,6 +30,7 @@ describe("reindex CLI", () => {
         [join(linked, "ingest", "reindex.ts")],
         { cwd, encoding: "utf8" },
       );
+      if (r.error) throw r.error; // e.g. tsx not installed — say that, don't fail on a null status
       expect(r.status).toBe(0);
       const idx = JSON.parse(await readFile(join(cwd, "public", "data", "index.json"), "utf8"));
       expect(idx.slams.map((s: { tour: string; year: number; slam: string }) => `${s.tour}/${s.year}/${s.slam}`))

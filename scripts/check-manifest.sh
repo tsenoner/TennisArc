@@ -12,8 +12,8 @@
 # Compares IDENTITIES (tour/year/slam), not just counts: the snapshot filename encodes the same
 # identity the manifest entry carries, so a stale manifest that happens to be the right length, or
 # a snapshot whose contents disagree with its filename, would both slip past a count check while
-# still dropping or duplicating a tab. It also makes the failure name the slam, which is the
-# sentence an operator needs in an unattended log.
+# still dropping or duplicating a tab (a repeat is counted, not set-collapsed). It also makes the
+# failure name the slam, which is the sentence an operator needs in an unattended log.
 #
 # Usage: check-manifest.sh <data-dir>      (e.g. public/data)   exit 0 = consistent, 1 = mismatch
 set -euo pipefail
@@ -39,15 +39,27 @@ node -e '
     const m = /slams\/(\d{4})\/(atp|wta)-([a-z0-9-]+)\.json$/.exec(p);
     return m && `${m[2].toUpperCase()}/${m[1]}/${m[3]}`;
   };
+  // A globbed file whose name does not parse is not a mismatch — reindex ignores it too (the same
+  // rule, ingest/reindex.ts SNAP_RE) — but it IS a snapshot no tab can reach. Say so rather than
+  // dropping it silently, which is the failure mode this whole guard exists to end.
+  const unnamed = files.filter((p) => !id(p));
+  if (unnamed.length) console.error(`manifest check: ${unnamed.length} file(s) neither the manifest nor reindex can see: ${unnamed.join(", ")}`);
   const disk = new Set(files.map(id).filter(Boolean));
   const idx = JSON.parse(fs.readFileSync(manifest, "utf8"));
-  const listed = new Set((Array.isArray(idx.slams) ? idx.slams : []).map((s) => `${s.tour}/${s.year}/${s.slam}`));
+  const entries = (Array.isArray(idx.slams) ? idx.slams : []).map((s) => `${s.tour}/${s.year}/${s.slam}`);
+  const listed = new Set(entries);
+  // Sets hide repeats, so count them separately: a slam listed twice renders a duplicate tab, and
+  // set-vs-set comparison alone would call that manifest consistent.
+  const seen = new Map();
+  for (const e of entries) seen.set(e, (seen.get(e) ?? 0) + 1);
+  const dupes = [...seen].filter(([, n]) => n > 1).map(([e]) => e).sort();
   const only = (a, b) => [...a].filter((x) => !b.has(x)).sort();
   const missing = only(disk, listed), extra = only(listed, disk);
-  if (missing.length || extra.length) {
+  if (missing.length || extra.length || dupes.length) {
     const parts = [];
     if (missing.length) parts.push(`on disk but not in the manifest: ${missing.join(", ")}`);
     if (extra.length) parts.push(`in the manifest but not on disk: ${extra.join(", ")}`);
+    if (dupes.length) parts.push(`listed more than once in the manifest: ${dupes.join(", ")}`);
     console.error(`manifest mismatch: ${parts.join("; ")} — did reindex run?`);
     process.exit(1);
   }
