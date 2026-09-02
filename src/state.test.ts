@@ -569,7 +569,7 @@ describe("suspended-match handling", () => {
   });
 });
 
-import { scheduledInfo, msToVenueMidnight } from "./state";
+import { msToNextResumeFlip, scheduledInfo, msToVenueMidnight } from "./state";
 import type { Match as SchedMatch } from "./model";
 
 const schedMatch = (o: Partial<SchedMatch> = {}): SchedMatch => ({
@@ -578,10 +578,45 @@ const schedMatch = (o: Partial<SchedMatch> = {}): SchedMatch => ({
   durationSec: null, durationProvisional: false, sofaEventId: 1, sofaCustomId: null, stats: null, ...o,
 });
 
+describe("msToNextResumeFlip", () => {
+  const NOW_MS = 1_800_000_000_000;
+  const nowSec = NOW_MS / 1000;
+  const snapWith = (matches: SchedMatch[]) =>
+    ({ matches: Object.fromEntries(matches.map((m, i) => [`${i}`, m])) }) as unknown as Parameters<typeof msToNextResumeFlip>[0];
+
+  it("returns the EARLIEST suspended resume instant still ahead", () => {
+    const s = snapWith([
+      schedMatch({ status: "suspended", scheduledStart: nowSec + 7200 }),
+      schedMatch({ status: "suspended", scheduledStart: nowSec + 600 }),
+    ]);
+    expect(msToNextResumeFlip(s, NOW_MS)).toBe(600_000);
+  });
+  it("ignores a resume instant already passed — the gate has flipped, there is nothing left to time", () => {
+    expect(msToNextResumeFlip(snapWith([schedMatch({ status: "suspended", scheduledStart: nowSec - 60 })]), NOW_MS)).toBeNull();
+  });
+  it("ignores non-suspended matches: their gates are day boundaries, already timed", () => {
+    expect(msToNextResumeFlip(snapWith([schedMatch({ scheduledStart: nowSec + 600 })]), NOW_MS)).toBeNull();
+  });
+});
+
 describe("scheduledInfo", () => {
   const DAY = 86400;
   const NOW = 20_000 * DAY + 12 * 3600; // noon UTC on an arbitrary day — pure arithmetic either way
 
+  it("suspended: a FUTURE slot is the resume time → shown, and FLAGGED as a resume", () => {
+    // `resume` is what lets the detail wording and the chart's accessible name say "resumes"
+    // without either of them re-deriving it from status.
+    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW + 3600, scheduledPrecise: true, scheduledCourt: "Court 12" }), NOW))
+      .toEqual({ start: NOW + 3600, court: "Court 12", resume: true });
+  });
+  it("a start time is never flagged as a resume", () => {
+    expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 3600, scheduledPrecise: true }), NOW))
+      .toEqual({ start: NOW + 3600, court: null });
+  });
+  it("suspended: a PAST slot is where play stopped, not where it resumes → hidden", () => {
+    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW - 1800, scheduledPrecise: true }), NOW)).toBeNull();
+    expect(scheduledInfo(schedMatch({ status: "suspended", scheduledStart: NOW - 1800 }), NOW)).toBeNull(); // nominal too
+  });
   it("precise: flagged slot within 36h → start + court", () => {
     expect(scheduledInfo(schedMatch({ scheduledStart: NOW + 3600, scheduledPrecise: true, scheduledCourt: "Court 2" }), NOW))
       .toEqual({ start: NOW + 3600, court: "Court 2" });
@@ -643,8 +678,8 @@ describe("scheduledInfo", () => {
       .toEqual({ start, court: null });                          // 23:00 AEDT — venue day not over yet
   });
 
-  it("allowlist: no other status leaks a time, even with stray fields", () => {
-    for (const status of ["finished", "live", "suspended", "retired", "walkover"] as const) {
+  it("allowlist: no other status leaks a time, even with stray fields (suspended is the one exception — its future slot is the resume time)", () => {
+    for (const status of ["finished", "live", "retired", "walkover"] as const) {
       expect(scheduledInfo(schedMatch({ status, scheduledStart: NOW + 3600, scheduledPrecise: true }), NOW)).toBeNull();
     }
   });

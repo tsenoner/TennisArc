@@ -3,6 +3,15 @@ import { TOURNEY } from "./names.js"; // .js ext: this module is reached by the 
 
 const num = (v: string): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
+/** AB=3 ("not in play") is a BUCKET, not a status: a genuine result shares it with every kind of
+ *  non-result ending. These are the AC sub-stages that mean "stopped mid-match, to be resumed" —
+ *  the ones that must NOT overlay as a winnerless "finished" (which blanks the arc, reading as a
+ *  withdrawal). 36 = interrupted, the only member verified against the live feed (US Open 2026
+ *  day 3, four matches). Postponed/cancelled/abandoned/awarded codes live in the same bucket and
+ *  are still unmapped — add one here once its number is confirmed against a real record, never
+ *  from a guess: mapping the wrong code would silently pause a match that actually ended. */
+const HELD_OVER_SUB_STAGES = new Set([36]);
+
 /** Value of a `¬`-joined `key÷value` pair, or "" when absent. */
 function field(rec: string, key: string): string {
   for (const p of rec.split("¬")) {
@@ -66,6 +75,17 @@ export function parseLiveFeed(text: string, opts: { tour: Tour; slam: string }):
       setsWon: [num(f.get("AG") ?? ""), num(f.get("AH") ?? "")],
       sets,
     };
+    // AC is the sub-stage. AB=3 covers everything "neither scheduled nor live": a genuine result
+    // (AC 3), but also a match stopped mid-play and held over (HELD_OVER_SUB_STAGES). Flagging the
+    // latter is what lets overlayLive tell a pause from a result. AD is the record's start, but on a
+    // held-over record Flashscore REWRITES it to the resume slot (AO keeps the original) — that is
+    // the resume time carried by the very source that reported the stoppage, so take it here rather
+    // than hoping SofaScore's independent stamp agrees.
+    if (stage === 3 && HELD_OVER_SUB_STAGES.has(num(f.get("AC") ?? ""))) {
+      record.interrupted = true;
+      const ad = num(f.get("AD") ?? "");
+      if (ad > 0) record.resumesAt = ad;
+    }
     // CX names the current server, but it PERSISTS on finished records (last server) — only a
     // live record's value means "serving now". Exact match against the record's own names.
     if (stage === 2) {

@@ -1,4 +1,4 @@
-import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
+import { buildSunburst, timeOnCourt, timeLeaderboard, labelAnchors, surfaceElo, seedProgress, countryBreakdown, nationOf, matchInsight, ageOn, birthdayInWindow, formatBirthday, sectionTitle, quarterOwners, eliminatedSet, scheduledInfo, msToVenueMidnight, msToNextResumeFlip, type NationRow, type PlayerTime, type SeedSort, type SunNode } from "./state";
 import { layout } from "./layout";
 import { colorScale, type ColorDim } from "./color";
 import {
@@ -361,7 +361,8 @@ export function createApp(root: HTMLElement): () => void {
         s = formatScheduledArc(info.start, nowSec);
         schedFmt.set(info.start, s);
       }
-      return s;
+      // `resume` is per-MATCH, not per-start, so it rides outside the start-keyed memo.
+      return info.resume ? { ...s, resume: true } : s;
     };
     // Quarter-owner corner labels (drawn top seed; dimmed once out — quarterOwners). Hidden
     // entirely while focused: the corners become free space and the crumbs name the section.
@@ -502,6 +503,7 @@ export function createApp(root: HTMLElement): () => void {
       root.querySelector(`[data-hl-path][data-occupant="${CSS.escape(pinned)}"]`)?.classList.add("row-pinned");
     } else hlCurrent = ""; // fresh DOM, nothing lit — seed the memo so the first off-target move is a hit
     applyPbp(); // restore the last known point-by-point values into the freshly-rendered strip
+    armGate();  // retime the hide-gate tick against the data this draw just rendered
   };
 
   let lastLoadMs = 0; // last snapshot fetch that actually RETURNED data for the current view (visibility refetch throttle)
@@ -557,7 +559,7 @@ export function createApp(root: HTMLElement): () => void {
     const records = await fetchLive(state.tour, state.slam);
     if (!records) return;
     if (snapKey(state.tour, state.year, state.slam) !== k) return; // view changed mid-fetch
-    const patch = overlayLive(raw, records);
+    const patch = overlayLive(raw, records, Math.floor(Date.now() / 1000));
     if (samePatch(state.livePatch[k] ?? {}, patch)) return;
     state.livePatch[k] = patch;
     draw();
@@ -1127,18 +1129,25 @@ export function createApp(root: HTMLElement): () => void {
     if (label && snap) label.textContent = freshnessLabel(snap);
   }, 60_000);
   signal.addEventListener("abort", () => clearInterval(labelTimer));
-  let midnightTimer = 0;
-  const armMidnight = () => {
+  let gateTimer = 0;
+  // Re-armed after every draw, not just after it fires: the resume instant below comes from the
+  // CURRENT data, so a newly suspended match (or a rewritten resume slot) must retime the tick.
+  const armGate = () => {
     const now = new Date();
+    const snap = state.snapshots[snapKey(state.tour, state.year, state.slam)];
     const msToTick = Math.min(
       startOfLocalDay(now, 1) - now.getTime(),                                     // next local midnight
       msToVenueMidnight(now.getTime(), state.slam)                                 // next venue midnight (hide-gate flip)
         ?? (Math.floor(now.getTime() / 86_400_000) + 1) * 86_400_000 - now.getTime(), // unknown slam: UTC fallback
+      // A suspended match's resume instant — the one hide gate that flips on a per-match time
+      // rather than a day boundary, and the one nothing else would redraw for (see state.ts).
+      snap ? msToNextResumeFlip(snap, now.getTime()) ?? Infinity : Infinity,
     );
-    midnightTimer = window.setTimeout(() => { draw(); armMidnight(); }, msToTick + 1000);
+    clearTimeout(gateTimer);
+    gateTimer = window.setTimeout(() => { draw(); armGate(); }, msToTick + 1000);
   };
-  armMidnight();
-  signal.addEventListener("abort", () => clearTimeout(midnightTimer));
+  armGate();
+  signal.addEventListener("abort", () => clearTimeout(gateTimer));
 
   // ZOOM deep-link restore is deliberately NOT implemented (zoom is session-only): a
   // pre-existing #focus hash (a reloaded or shared URL) would lie about the unfocused first

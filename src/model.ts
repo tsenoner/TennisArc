@@ -11,10 +11,17 @@ export const isInProgress = (status: MatchStatus): boolean =>
   status === "live" || status === "suspended";
 
 /** The not-yet-played statuses: a match with a known slot ("scheduled") or one still fed by
- *  placeholders ("notstarted"). The single source of truth for the order-of-play surfaces —
- *  scheduledInfo's display allowlist and normalize's coarse-stamp gate must never drift apart. */
+ *  placeholders ("notstarted"). The single source of truth for the WRITE side of order-of-play —
+ *  normalize's coarse-stamp gate. The display allowlist is showsScheduledSlot, which is wider. */
 export const isUpcoming = (status: MatchStatus): boolean =>
   status === "scheduled" || status === "notstarted";
+
+/** The statuses whose scheduled stamp is worth DISPLAYING: the not-yet-played ones, plus a
+ *  suspended match — paused mid-play, its stamp rewritten to the resume slot. Deliberately wider
+ *  than isUpcoming (which still gates whether a stamp is written at all), so the two do not drift
+ *  silently: walkover/retired/live/finished never leak a time on any order-of-play surface. */
+export const showsScheduledSlot = (status: MatchStatus): boolean =>
+  isUpcoming(status) || status === "suspended";
 
 export interface SetScore { p1: number; p2: number; tb?: number; }
 
@@ -119,12 +126,21 @@ export const isUndecidedInPlay = (m: Match): boolean =>
  *  Flashscore's surname-first short form ("Fritz T."). */
 export interface LiveRecord {
   id: string;
-  stage: 1 | 2 | 3;              // 1 scheduled, 2 live, 3 finished
+  stage: 1 | 2 | 3;              // 1 scheduled, 2 live, 3 not in play: a result, or a held-over pause (`interrupted`)
   home: string;
   away: string;
   setsWon: [number, number];     // [home, away]
   sets: Array<[number, number]>; // per-set games [home, away], in order
   srv?: 1 | 2;                   // current server (CX), live records only — 1 home, 2 away
+  /** Stage-3 record whose sub-stage (AC) says play stopped mid-match (rain/curfew) and was held
+   *  over — partial sets, start rewritten to the resume slot. A pause, NOT a result: the client
+   *  overlays it as `suspended`, never `finished`. Absent on every genuinely finished record. */
+  interrupted?: true;
+  /** The held-over match's RESUME slot (AD, Unix seconds), on `interrupted` records only. The
+   *  stoppage and the resume time then come from one source: SofaScore's own stamp is absent
+   *  entirely for a match it classifies as suspended (the ingest stamps scheduledStart only for an
+   *  UPCOMING match), so without this the resume tag disappears exactly when both feeds agree. */
+  resumesAt?: number;
 }
 
 /** The selected live match's current-game point values (Flashscore df_mhs feed, home/away order).
