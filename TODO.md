@@ -1,6 +1,61 @@
 # TODO
 
-## [BACKGROUND IDEA] Data refresh → move off the Mac to an always-on residential runner
+> Ordered **by importance** on 2026-09-02, from the multi-agent audit that produced epic [#184](https://github.com/tsenoner/TennisArc/issues/184) and issues #185–#212. Each open issue carries a matching `P0`–`P3` label on GitHub, so the tracker sorts the same way. Size: S = an evening, M = a few sessions, L = a multi-week track. Importance is not execution order — #184 lists the order (tests + tokens first, so the CSS rewrite has a safety net).
+
+## P0 — correctness bugs, small, do now
+
+- [ ] **#208** `ingest/config.ts` hard-codes 2026 windows → from 2027 every refresh is a silent no-op. Hard deadline: before the AO 2027 draw (~14 Jan). *S*
+- [ ] **#185** Flashscore name join fails for two-initial / compound names → those live matches show a 30-min-old score under a pulsing "live" dot. Happening now (US Open). *S*
+- [ ] **#189** `WSF1`/`WQF` placeholder teams leak into players; the final's card reads "🏳 WSF1 — WSF2". One regex + read-time guard. *S*
+- [ ] **#204** 2019 ATP US Open has 30 mirrored R1 results (Nadal "lost" to Millman, then reaches the final; +1 in 2015 AO, 2022 RG). Fix `enrich` home/away orientation, add an integrity check to the publish path, re-backfill. *M*
+
+## P1 — the core asks: match card, phones, links, search, Elo honesty
+
+- [ ] **#187** Google-style scoreboard card (two player rows, per-set columns, tiebreak superscripts, live points, serve dot, stats table inside the card) replacing strip + Details — with **#68**'s dock so the wheel never shrinks. *L*
+- [ ] **#199** Playwright e2e + screenshot suite — do before any CSS rewrite. *M*
+- [ ] **#190** One design-token source (app.css / color.ts / index.html / theme.ts / manifest). *M*
+- [ ] **#196** Phone layout mode: section view + pager + list fallback, reclaim the dead bands, live-now rail, native pinch. *L*
+- [ ] **#194** Wheel labels: device-aware size floors (today 4.7 px on a phone), no ellipsis / mid-word splits, axis collisions, sched-tag tiers, proper surnames. *M*
+- [ ] **#195** Round-depth filter `?from=r32` (default on phones); settle the ring/arc grammar first. *M*
+- [ ] **#186** Flashscore + SofaScore links in the card, player-page links. *S* (after #185)
+- [ ] **#197** Player search (name / country / seed → reveal path + latest match). *M*
+- [ ] **#198** `?p=` / `?match=` route params so a pinned player or match is shareable. *S*
+- [ ] **#203** Elo freshness contract: live slam = TA weekly board, past slams = frozen replay, 2026 mixes both; label it and pick one semantics. *M*
+- [ ] **#209** Say when data is degraded (silent Flashscore failure, silent seed fallback that redirects a US Open link to Wimbledon, "updated 1219h ago"). *M*
+- [ ] **#67** Mobile checklist (touch targets, strip layout shift, landscape) — extended by the audit comment. *M*
+
+## P2 — next: visual system, data polish, ops, tour expansion groundwork
+
+- [ ] **#191** Colour semantics + WCAG contrast (light theme fails AA in several places). *M*
+- [ ] **#192** Lens colour scales per theme (heat ramp through grey, seed bands invisible, country wheel = page). *M*
+- [ ] **#193** Shared component primitives (buttons, cards, chips, icons, 44 px targets). *M*
+- [ ] **#188** Retirements / walkovers marked in the card. *S*
+- [ ] **#205** 27 snapshots name rounds "1/32 · 1/16 · 1/8". *S*
+- [ ] **#206** Entry-type + country gaps in 14 / 2009–2011 snapshots (prerequisite for #1 / #2). *M*
+- [ ] **#207** Refresh ops: healthcheck channel + slam-window gating (110 auto-issues), partial-failure exit codes, force-with-lease publish, dead `refresh.yml`. *M*
+- [ ] **#65** WTA Elo replay silently disabled by the Sackmann 404 (audit comment). *M*
+- [ ] **#211** Split `app.ts` / `render.ts` along their seams, derive per-draw data once — before #1 / #3 grow them. *M*
+- [ ] **#3** More tournaments (umbrella; data-model spec in the audit comment) → **#200** event registry *S*, **#201** manifest v3 + season navigator *L*, **#202** multi-event ingest scheduler *L*.
+- [ ] **#28** Own Elo engine — the prerequisite for per-match Elo (id bridge first, see comment). *L*
+- [ ] **#2** Entry-type badges (Q / WC / LL / seeded). *S* (after #206)
+- [ ] **#210** Docs drift: HELP.md stale since June, README / TODO / RESEARCH, attribution, LICENSE. *S*
+- [ ] **#66** PWA phase-2 removal (trigger has passed). *S*
+
+## P3 — backlog
+
+- [ ] **#212** Repo hygiene: linter, split tsconfig, research code out of `ingest/`, escapeHtml bypasses, 0.8 MB flags. *M*
+- [ ] **#1** Qualifying rounds (model + geometry proposal in the audit comment; needs #206, #195). *L*
+- [ ] **#4** Historic data views (shares `players.json` with #197 phase 2). *L*
+- [ ] **#5** Keyboard / screen-reader bracket · **#22** phone sheet focus containment · **#43** live-transition announcements. *M*
+- [ ] **#56** UTR ranking (open question). *?*
+- [ ] **#26 #27 #29** own data pipeline / points engine / DB restructuring. *L*
+- [ ] **#31 #32 #33 #34 #35 #36** Elo / points-engine follow-ups from #25. *S–M*
+
+---
+
+## Background — data refresh runner (unchanged; the scheduler + alerting work is now #202 / #207)
+
+### [BACKGROUND IDEA] Data refresh → move off the Mac to an always-on residential runner
 
 > **Status 2026-06-12: backgrounded, not planned.** Historical slams (2009–2026) are now
 > pre-fetched and static, so the runner only matters for live freshness during the ~8 slam
@@ -156,15 +211,3 @@ chmod +x ~/TennisArc/scripts/cron-refresh.sh
 - [ ] A residential or mobile proxy wired into `ingest/sofascore.ts` (Playwright `launch({ proxy: { server, username, password } })`) would let the existing **manual** GitHub Actions workflow — or a Cloudflare Worker — ingest from anywhere (~$1–5/mo). Trades the Pi's one-time cost + home-network dependency for a recurring proxy bill and an extra failure point. Only worth it if a home runner isn't viable.
 
 ---
-
-## UX overhaul — follow-ups (tracked as GitHub issues)
-
-The overhaul (write-once labels, centre readout, 3 lens panels, match insight, multi-slam, surface ELO, birthdates) shipped to `main` + production on 2026-06-09. The deferred, non-blocking items the final cross-plan review surfaced are tracked as issues:
-
-- [#5](https://github.com/tsenoner/TennisArc/issues/5) — a11y: keyboard + screen-reader access for the bracket
-- [#6](https://github.com/tsenoner/TennisArc/issues/6) — bundle SVG flags (Windows emoji-flag gap)
-- [#7](https://github.com/tsenoner/TennisArc/issues/7) — country-lens nation summary in the centre readout — **done, PR #55**
-- [#8](https://github.com/tsenoner/TennisArc/issues/8) — guard match insight on projected/TBD arcs
-- [#9](https://github.com/tsenoner/TennisArc/issues/9) — retire `Player.ageYears` — **done, PR #55**
-- [#10](https://github.com/tsenoner/TennisArc/issues/10) — `slamStatus` "upcoming"
-- [#11](https://github.com/tsenoner/TennisArc/issues/11) — small cleanups (deep-link URL escaping, `winProbability` assertions) — **done, PR #55**
