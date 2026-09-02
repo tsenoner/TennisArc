@@ -83,6 +83,35 @@ describe("check-manifest.sh", () => {
     expect(r.stderr).toContain("listed more than once in the manifest: ATP/2026/wimbledon");
   });
 
+  it("names the offending file path, not just the identity", async () => {
+    await snapshots("atp-wimbledon.json", "wta-wimbledon.json");
+    await manifest("ATP/2026/wimbledon");
+    const r = run();
+    expect(r.status).toBe(1);
+    // A bare identity says what is wrong but not which file to fix — and a misnamed snapshot is
+    // only fixable by path.
+    expect(r.stderr).toContain(join(dir, "slams", "2026", "wta-wimbledon.json"));
+  });
+
+  // The guard sits in front of the live-score publish. Fatal by default, but one malformed
+  // snapshot carried forward from the data branch must not wedge every subsequent refresh.
+  it("publishes anyway when ALLOW_MANIFEST_MISMATCH is set, still reporting the mismatch", async () => {
+    await snapshots("atp-wimbledon.json", "wta-wimbledon.json");
+    await manifest("ATP/2026/wimbledon");
+    const r = spawnSync(SCRIPT, [dir], { encoding: "utf8", env: { ...process.env, ALLOW_MANIFEST_MISMATCH: "1" } });
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("on disk but not in the manifest");
+    expect(r.stderr).toContain("ALLOW_MANIFEST_MISMATCH is set");
+  });
+
+  it("keeps a missing index.json fatal even with ALLOW_MANIFEST_MISMATCH set", async () => {
+    await snapshots("atp-wimbledon.json");
+    const r = spawnSync(SCRIPT, [dir], { encoding: "utf8", env: { ...process.env, ALLOW_MANIFEST_MISMATCH: "1" } });
+    // No manifest at all means the published tree has no manifest — never publishable.
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("manifest missing");
+  });
+
   it("fails with a legible message when index.json is missing", async () => {
     await snapshots("atp-wimbledon.json");
     const r = run();

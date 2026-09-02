@@ -163,7 +163,21 @@ source file reintroduces the old string comparison; `ingest/reindex-cli.test.ts`
 `reindex` CLI with `argv[1]` pointing through a path containing a space.
 
 If the assertion ever fires: run `pnpm reindex` by hand in the clone and check its output lists every
-`slams/{year}/*.json`; if it prints nothing, the entry guard is broken again.
+`slams/{year}/*.json`; if it prints nothing, the entry guard is broken again. The message names the
+offending file path, so a snapshot whose contents disagree with its filename (it shows up as both
+missing and extra) can be found and renamed.
+
+**Unwedging a refresh during a slam.** The assertion is fatal, and it runs before anything is
+published — so a single malformed snapshot carried forward from the `data` branch would otherwise
+abort every 30-minute tick and freeze live scores. To ship scores while you fix the snapshot:
+
+```sh
+ALLOW_MANIFEST_MISMATCH=1 scripts/publish-data.sh
+```
+
+That publishes despite the mismatch, still logging it. It is a stopgap, not a setting — a manifest
+that omits a snapshot is a hidden tab, which is the outage this guard exists to prevent. A missing
+`index.json` stays fatal regardless, since a tree with no manifest is never publishable.
 
 ## Live scores (Flashscore) — not part of this chain
 

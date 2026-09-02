@@ -44,7 +44,12 @@ node -e '
   // dropping it silently, which is the failure mode this whole guard exists to end.
   const unnamed = files.filter((p) => !id(p));
   if (unnamed.length) console.error(`manifest check: ${unnamed.length} file(s) neither the manifest nor reindex can see: ${unnamed.join(", ")}`);
-  const disk = new Set(files.map(id).filter(Boolean));
+  // Keep each identity'"'"'s path: a bare "ATP/2026/wimbledon" tells an operator what is wrong but
+  // not which file to look at, and a misnamed snapshot is only fixable by path.
+  const pathOf = new Map();
+  for (const p of files) { const i = id(p); if (i && !pathOf.has(i)) pathOf.set(i, p); }
+  const withPath = (i) => `${i} (${pathOf.get(i)})`;
+  const disk = new Set(pathOf.keys());
   const idx = JSON.parse(fs.readFileSync(manifest, "utf8"));
   const entries = (Array.isArray(idx.slams) ? idx.slams : []).map((s) => `${s.tour}/${s.year}/${s.slam}`);
   const listed = new Set(entries);
@@ -57,11 +62,22 @@ node -e '
   const missing = only(disk, listed), extra = only(listed, disk);
   if (missing.length || extra.length || dupes.length) {
     const parts = [];
-    if (missing.length) parts.push(`on disk but not in the manifest: ${missing.join(", ")}`);
+    if (missing.length) parts.push(`on disk but not in the manifest: ${missing.map(withPath).join(", ")}`);
     if (extra.length) parts.push(`in the manifest but not on disk: ${extra.join(", ")}`);
     if (dupes.length) parts.push(`listed more than once in the manifest: ${dupes.join(", ")}`);
     console.error(`manifest mismatch: ${parts.join("; ")} — did reindex run?`);
     process.exit(1);
   }
   console.log(`manifest ok: ${disk.size} slams`);
-' "$dir/index.json" ${files[@]+"${files[@]}"}
+' "$dir/index.json" ${files[@]+"${files[@]}"} && exit 0
+
+# The check failed. It is fatal by default — a guard that only warns is how the original no-op
+# survived seven weeks — but it sits in front of the live-score publish, so a single malformed
+# snapshot carried forward from the data branch must not be able to wedge every subsequent refresh.
+# ALLOW_MANIFEST_MISMATCH=1 ships the data anyway, for an operator who has seen the message above
+# and would rather have current scores than a correct manifest while they fix the snapshot.
+if [ -n "${ALLOW_MANIFEST_MISMATCH:-}" ]; then
+  echo "ALLOW_MANIFEST_MISMATCH is set — publishing despite the mismatch above" >&2
+  exit 0
+fi
+exit 1
