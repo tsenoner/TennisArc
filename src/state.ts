@@ -1,5 +1,5 @@
 import type { Match, MatchStatus, Player, Round, SetScore, Snapshot } from "./model";
-import { isPlaceholderPlayer, isInProgress, isUpcoming, winnerId } from "./model";
+import { isPlaceholderPlayer, isInProgress, showsScheduledSlot, winnerId } from "./model";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -558,14 +558,14 @@ export function msToVenueMidnight(nowMs: number, slam: string): number | null {
  *  the snapshot's generatedAt, which can lag hours when the refresh wedges. `slam` (the snapshot's
  *  slam key) selects the venue zone for the nominal tier's day-end; omitted/unknown → UTC proxy. */
 export function scheduledInfo(m: Match, nowSec: number, slam?: string): ScheduledInfo | null {
-  // Allowlist: upcoming matches, plus a SUSPENDED one (paused mid-play, held over) — walkover/retired
-  // never leak a time. For a suspended match only a FUTURE slot means anything: that's its resume time
-  // (the live overlay maps Flashscore's "interrupted" onto the snapshot, whose stamp SofaScore has
-  // already rewritten to the resumption). A past stamp is just where play stopped — hide it.
-  const suspended = m.status === "suspended";
-  if (!(isUpcoming(m.status) || suspended) || m.scheduledStart == null) return null;
+  if (!showsScheduledSlot(m.status) || m.scheduledStart == null) return null; // walkover/retired never leak a time
+  // A SUSPENDED match is paused mid-play and held over, so only a FUTURE stamp means anything: that
+  // is its resume slot. The stamp is a second source (SofaScore's) from the one that reported the
+  // stoppage (Flashscore's `interrupted`), so it can lag — a past stamp is just where play stopped,
+  // and is hidden. Neither staleness tier below applies: both ask when a PAST slot goes stale.
+  if (m.status === "suspended")
+    return m.scheduledStart > nowSec ? { start: m.scheduledStart, court: m.scheduledCourt ?? null } : null;
   const dt = m.scheduledStart - nowSec;
-  if (suspended && dt <= 0) return null;
   const precise = m.scheduledPrecise === true;
   if (precise) {
     if (dt < -SCHED_STALE_BEHIND_SEC) return null;

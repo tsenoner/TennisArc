@@ -11,10 +11,17 @@ export const isInProgress = (status: MatchStatus): boolean =>
   status === "live" || status === "suspended";
 
 /** The not-yet-played statuses: a match with a known slot ("scheduled") or one still fed by
- *  placeholders ("notstarted"). The single source of truth for the order-of-play surfaces —
- *  scheduledInfo's display allowlist and normalize's coarse-stamp gate must never drift apart. */
+ *  placeholders ("notstarted"). The single source of truth for the WRITE side of order-of-play —
+ *  normalize's coarse-stamp gate. The display allowlist is showsScheduledSlot, which is wider. */
 export const isUpcoming = (status: MatchStatus): boolean =>
   status === "scheduled" || status === "notstarted";
+
+/** The statuses whose scheduled stamp is worth DISPLAYING: the not-yet-played ones, plus a
+ *  suspended match — paused mid-play, its stamp rewritten to the resume slot. Deliberately wider
+ *  than isUpcoming (which still gates whether a stamp is written at all), so the two do not drift
+ *  silently: walkover/retired/live/finished never leak a time on any order-of-play surface. */
+export const showsScheduledSlot = (status: MatchStatus): boolean =>
+  isUpcoming(status) || status === "suspended";
 
 export interface SetScore { p1: number; p2: number; tb?: number; }
 

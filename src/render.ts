@@ -297,9 +297,8 @@ export function renderSunburst(
         } // end image/text branch
       } else if (labels?.sched && a.projected && !a.live) {
         // Upcoming match: the always-on order-of-play tag, in the same label slot a winner's surname
-        // will occupy once decided. A SUSPENDED arc keeps it too — scheduledInfo only serves a paused
-        // match a FUTURE slot, i.e. its resume time, which is the one thing worth reading on a paused
-        // arc (a live arc never gets one). Space-adaptive richness: emitFitted upgrades to the full form
+        // will occupy once decided. A SUSPENDED arc keeps it — the sched provider hands a paused match
+        // only a future slot, its resume time. Space-adaptive richness: emitFitted upgrades to the full form
         // (day + date + time) when it fits the ring's one-line budget at the preferred font, then
         // runs its shared ladder (two lines → shrink → shortForm — day/date alone, never a
         // meaningless bare digit).
