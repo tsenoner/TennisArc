@@ -8,6 +8,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Tour } from "../src/model";
+import { isMain } from "./cli";
 import { fetchMatchesCsv, fetchQualChallCsv, keepWtaQualItf } from "./durations";
 import {
   parseEloMatchesCsv,
@@ -118,7 +119,7 @@ async function calibrate(tour: Tour): Promise<void> {
 
 // Only run the (slow, network) grid search when invoked directly — importing this module (e.g. from the
 // regression fixture) must NOT kick off a calibration.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   (async () => {
     for (const tour of ["ATP", "WTA"] as const) await calibrate(tour);
   })().catch((e) => { console.error(e); process.exit(1); });

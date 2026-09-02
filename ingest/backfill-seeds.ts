@@ -2,6 +2,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Snapshot, Tour } from "../src/model";
 import { fetchMatchesCsv } from "./durations";
+import { isMain } from "./cli";
 import { applySeeds, distinctSeedCount, parseSeedsCsv, type SeedMap } from "./seeds";
 
 // Re-source missing player seeds from Jeff Sackmann's CSVs (winner_seed/loser_seed). Twelve slams
@@ -68,6 +69,6 @@ async function main(): Promise<void> {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }

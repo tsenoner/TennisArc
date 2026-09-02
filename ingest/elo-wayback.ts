@@ -10,6 +10,7 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Tour } from "../src/model";
+import { isMain } from "./cli";
 import { parseBoard as parseFullBoard } from "./elo-reverse/parse-boards";
 import { cdxTimestamps, fetchWaybackCapture } from "./elo-reverse/wayback";
 import { dedupeByDateKeepDeepest } from "./elo-reverse/lib";
@@ -68,7 +69,7 @@ function buildFixture(): void {
   console.log(`wrote ${OUT}`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   (async () => {
     if (process.argv.includes("--fetch")) await fetchCaptures();
     buildFixture();

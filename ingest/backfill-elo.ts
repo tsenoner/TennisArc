@@ -2,6 +2,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Snapshot, Tour } from "../src/model";
 import { fetchMatchesCsv, fetchQualChallCsv, keepWtaQualItf } from "./durations";
+import { isMain } from "./cli";
 import { TOURNEY } from "./names";
 import {
   applyHistoricalElo,
@@ -115,6 +116,6 @@ async function main(): Promise<void> {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   main().catch((err) => { console.error(err); process.exit(1); });
 }

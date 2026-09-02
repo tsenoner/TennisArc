@@ -2,6 +2,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import type { AvailableSlam, SlamIndex, Snapshot } from "../src/model";
 import { availableSlamOf } from "./manifest";
+import { isMain } from "./cli";
 
 const OUT_DIR = resolve(process.cwd(), "public/data");
 
@@ -52,6 +53,6 @@ async function main(): Promise<void> {
   console.log(`reindex: ${index.slams.length} slams → ${index.slams.map((s) => `${s.tour}/${s.year}/${s.slam}`).join(", ")}`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   main().catch((err) => { console.error("reindex failed:", err); process.exitCode = 1; });
 }
