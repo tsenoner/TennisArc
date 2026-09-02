@@ -1203,7 +1203,14 @@ export function createApp(root: HTMLElement): () => void {
       if (records) storeLivePatch(records);   // no snapshot to join yet → storeLivePatch no-ops
       draw();                                 // the deferred snapshot paint, overlay included
       // Cap expired: keep the ORIGINAL request rather than firing a second one at the same endpoint.
-      if (!records) void live.then((r) => { if (r && !signal.aborted && storeLivePatch(r)) draw(); });
+      // Guarded like loadLive: a late arrival must not be joined onto whatever view is current by
+      // then, or a tour/slam switch during the wait gets the OTHER draw's records.
+      const liveKey = snapKey(state.tour, state.year, state.slam);
+      if (!records) void live.then((r) => {
+        if (!r || signal.aborted) return;
+        if (snapKey(state.tour, state.year, state.slam) !== liveKey) return; // view changed mid-fetch
+        if (storeLivePatch(r)) draw();
+      });
     }
     // Warm the other tour's same-or-default slam in the background.
     const other: Tour = state.tour === "ATP" ? "WTA" : "ATP";
