@@ -64,6 +64,22 @@ export function hasSuspendedPeriod(time: Record<string, number | undefined>): bo
 }
 
 /**
+ * On-court seconds ALREADY PLAYED by a match still in progress — a held-over one, whose completed
+ * sets are measured but whose match is not over. Deliberately NOT recoverLocalDurationSec: that one
+ * ESTIMATES a suspension-inflated set as the mean of the clean ones, which is right for a finished
+ * match (every set was played in full) and wrong here — the set that was interrupted is partly
+ * played, so estimating it as a whole set overstates. This sums only the clean, completed periods
+ * and lets the interrupted one count as nothing, making the result an honest LOWER BOUND rather
+ * than a guess. Null when no period carries a plausible value.
+ */
+export function playedLocalDurationSec(time: Record<string, number | undefined>): number | null {
+  const clean = periodSeconds(time).filter((s) => s > 0 && s <= MAX_SET_SEC);
+  if (!clean.length) return null;
+  const total = clean.reduce((a, b) => a + b, 0);
+  return total > 0 && total <= MAX_LOCAL_SEC ? Math.round(total) : null;
+}
+
+/**
  * Best-estimate on-court seconds for a FINISHED/RETIRED match from SofaScore's per-set `time.periodN`,
  * healing the rain/curfew-suspension corruption. When play is suspended (e.g. the 11pm Wimbledon
  * curfew) and resumes the next day, the single set that spanned the stoppage absorbs the entire

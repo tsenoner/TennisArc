@@ -1,5 +1,5 @@
 import type { Match, MatchStats, MatchStatus, Player, SetScore } from "../src/model";
-import { MAX_LOCAL_SEC, MAX_SET_SEC, recoverLocalDurationSec, hasSuspendedPeriod } from "./durations";
+import { MAX_LOCAL_SEC, MAX_SET_SEC, recoverLocalDurationSec, playedLocalDurationSec, hasSuspendedPeriod } from "./durations";
 import { alpha3Of } from "./sofa-country";
 
 // A live match stops receiving point updates the moment play is paused: SofaScore stamps
@@ -127,11 +127,29 @@ export function enrichMatch(
   }
   // status === "suspended" → durationSec stays null: on-court time is unknown while play is paused.
 
+  // HELD OVER: a match stopped by rain/curfew and carried to another day comes back from SofaScore as
+  // "scheduled" — it has been RE-scheduled — while still carrying the sets already played. Taken at
+  // face value that is a match contradicting itself (not yet played, yet three sets in), and it falls
+  // through both duration branches above, so its arc paints HEAT(0): a 3-set match looks exactly like
+  // one that has not started. Play HAS happened, so classify it as the paused status the model already
+  // has and take the MEASURED time off its completed sets. Guarded on there being a real score and a
+  // usable period time, so an ordinary upcoming match can never be dragged in.
+  const score = buildScore(ev.homeScore, ev.awayScore);
+  const playedSec = status === "scheduled" && !winner ? playedLocalDurationSec(time) : null;
+  const heldOver = playedSec != null && score != null && score.length > 0;
+  if (heldOver) {
+    status = "suspended";
+    durationSec = playedSec;
+    // Provisional, like a live match's: the interrupted set is not counted, so this is a lower bound,
+    // and it ranks with a `*` until the finished pass (or Sackmann) supplies the whole match.
+    provisional = true;
+  }
+
   // Sticky suspension record: currently paused, OR a finished match whose per-set time still carries the
   // suspension-inflated set. Persistence across refreshes is carryForwardSuspended's job (below) — it ORs
   // any prior-refresh flag onto the freshly-normalized match so it survives once SofaScore drops the
   // finished event back to a plain code-100 with no stoppage marker.
-  const wasSuspended = currentlySuspended || suspensionHealed;
+  const wasSuspended = currentlySuspended || suspensionHealed || heldOver;
 
   const homeCountry = alpha3Of(ev.homeTeam);
   if (m.p1 && players[m.p1] && homeCountry) players[m.p1].country = homeCountry;
@@ -148,7 +166,10 @@ export function enrichMatch(
   // all — a data-shape property of SofaScore, not a guard here. Every other status passes the
   // normalize-set fields through untouched; the next refresh's normalize drops them once the
   // match is no longer upcoming.
-  const scheduled = status === "scheduled";
+  // `heldOver` counts as publishing a slot: its startTimestamp is the RESUME time, and it is the only
+  // source for one on a match no longer classed "scheduled" — without it flipping the status above
+  // would silently strip the resume tag it exists to enable.
+  const scheduled = status === "scheduled" || heldOver;
   const scheduledStart = scheduled ? (ev.startTimestamp ?? m.scheduledStart) : m.scheduledStart;
   const scheduledPrecise = scheduled && ev.startTimestamp != null ? true : m.scheduledPrecise;
   // `||` not `??`: a blank venue name ("") should fall through to the stadium name, not stand as an
@@ -157,7 +178,7 @@ export function enrichMatch(
 
   return {
     ...m, status, winner,
-    score: buildScore(ev.homeScore, ev.awayScore),
+    score,
     durationSec, durationProvisional: provisional, wasSuspended,
     scheduledStart, scheduledPrecise, scheduledCourt,
     sofaCustomId: ev.customId ?? m.sofaCustomId,
