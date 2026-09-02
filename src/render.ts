@@ -784,7 +784,8 @@ export function renderMatchStrip(ins: MatchInsight, nodeId: string, opts: { expa
     : ins.status === "suspended"
     ? ` · <span class="ms-susp"><span class="ms-pause" aria-hidden="true"></span>suspended</span>` : "";
   // Upcoming match: a compact order-of-play tag in the caption — "Today 15:40 · Court 2" when
-  // imminent, weekday/date + provisional time for future rounds (uniform shape, every tier).
+  // imminent, weekday/date + provisional time for future rounds (uniform shape, every tier). A
+  // SUSPENDED match gets one too — scheduledInfo serves it only a future slot, its resume time.
   const schedTag = ins.scheduled
     ? ` · <span class="ms-sched">🗓 ${escapeHtml(formatScheduled(ins.scheduled.start, ins.scheduled.court, { nowSec: opts.nowSec }))}</span>` : "";
   // Zoom is the strip's permanent, accented action (the old ghost "Focus" button, promoted).

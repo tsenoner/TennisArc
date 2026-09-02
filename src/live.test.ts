@@ -54,6 +54,20 @@ describe("overlayLive", () => {
     const r = rec({ home: "Bergs Z.", away: "Taberner C.", stage: 3, interrupted: true, setsWon: [2, 0], sets: [[6, 3], [6, 2]], srv: 1 });
     expect(overlayLive(s, [r])["0-0"]).toEqual({ status: "suspended", score: [{ p1: 6, p2: 3 }, { p1: 6, p2: 2 }] });
   });
+  it("never awards a winner from an interrupted record, however complete its setsWon reads", () => {
+    // The realistic held-over record stops BELOW the sets-to-win threshold, so the winner gate needs
+    // its own pin: a threshold-crossing AC=36 record must still overlay as a pause, not as a result.
+    const s = snap("ATP", [player("a", "Carlos Alcaraz"), player("b", "Jannik Sinner")], [match("0-0", "a", "b")]);
+    const patch = overlayLive(s, [rec({ home: "Alcaraz C.", away: "Sinner J.", stage: 3, interrupted: true, setsWon: [3, 1], sets: [] })])["0-0"]!;
+    expect(patch.status).toBe("suspended");
+    expect("winner" in patch).toBe(false);
+  });
+  it("does not un-decide a match the snapshot has already resolved (stale interrupted record)", () => {
+    const s = snap("ATP", [player("a", "Carlos Alcaraz"), player("b", "Jannik Sinner")],
+      [match("0-0", "a", "b", { status: "finished", winner: "p1" })]);
+    const r = rec({ home: "Alcaraz C.", away: "Sinner J.", stage: 3, interrupted: true, setsWon: [2, 0], sets: [[6, 3], [6, 2]] });
+    expect(overlayLive(s, [r])["0-0"]!.status).toBe("finished"); // the snapshot's ✓ is never paired with "suspended"
+  });
   it("skips scheduled (stage 1) records", () => {
     const s = snap("ATP", [player("a", "Daniil Medvedev"), player("b", "Holger Rune")], [match("0-0", "a", "b")]);
     expect(overlayLive(s, [rec({ home: "Medvedev D.", away: "Rune H.", stage: 1 })])).toEqual({});

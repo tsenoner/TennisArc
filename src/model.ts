@@ -126,7 +126,7 @@ export const isUndecidedInPlay = (m: Match): boolean =>
  *  Flashscore's surname-first short form ("Fritz T."). */
 export interface LiveRecord {
   id: string;
-  stage: 1 | 2 | 3;              // 1 scheduled, 2 live, 3 finished
+  stage: 1 | 2 | 3;              // 1 scheduled, 2 live, 3 not in play: a result, or a held-over pause (`interrupted`)
   home: string;
   away: string;
   setsWon: [number, number];     // [home, away]

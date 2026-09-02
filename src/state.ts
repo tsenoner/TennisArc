@@ -559,16 +559,15 @@ export function msToVenueMidnight(nowMs: number, slam: string): number | null {
  *  slam key) selects the venue zone for the nominal tier's day-end; omitted/unknown → UTC proxy. */
 export function scheduledInfo(m: Match, nowSec: number, slam?: string): ScheduledInfo | null {
   if (!showsScheduledSlot(m.status) || m.scheduledStart == null) return null; // walkover/retired never leak a time
-  // A SUSPENDED match is paused mid-play and held over, so only a FUTURE stamp means anything: that
-  // is its resume slot. The stamp is a second source (SofaScore's) from the one that reported the
-  // stoppage (Flashscore's `interrupted`), so it can lag — a past stamp is just where play stopped,
-  // and is hidden. Neither staleness tier below applies: both ask when a PAST slot goes stale.
-  if (m.status === "suspended")
-    return m.scheduledStart > nowSec ? { start: m.scheduledStart, court: m.scheduledCourt ?? null } : null;
   const dt = m.scheduledStart - nowSec;
-  const precise = m.scheduledPrecise === true;
-  if (precise) {
-    if (dt < -SCHED_STALE_BEHIND_SEC) return null;
+  // Three hide tiers, one per kind of stamp — each answers "when has this slot gone stale?".
+  if (m.status === "suspended") {
+    // Suspended: paused mid-play and held over, so only a FUTURE stamp means anything — that is its
+    // resume slot. The stamp is a second source (SofaScore's) from the one that reported the stoppage
+    // (Flashscore's `interrupted`), so it can lag; a past stamp is just where play stopped.
+    if (dt <= 0) return null;
+  } else if (m.scheduledPrecise === true) {
+    if (dt < -SCHED_STALE_BEHIND_SEC) return null; // precise: a published slot lingers 6h past
   } else {
     const zone = slam ? SLAM_TZ[slam] : undefined;
     const dayEnd = zone ? venueDayEnd(m.scheduledStart, zone)

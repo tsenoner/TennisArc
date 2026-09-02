@@ -28,11 +28,13 @@ export async function fetchPbp(mid: string): Promise<CurrentGame | null> {
 
 /**
  * Join Flashscore live records onto snapshot matches by sorted surname-pair (unique within a live
- * singles draw). Returns matchId → Partial<Match> for LIVE (stage 2) and FINISHED (stage 3) records.
- * Orientation (which Flashscore side is p1) is resolved per record. Ambiguous pairs — two matches
- * sharing a key — are dropped rather than mis-joined. Winner is set on a finished match ONLY when a
- * side reached the sets-to-win threshold (ATP best-of-5 → 3, WTA best-of-3 → 2); otherwise it is
- * left to the snapshot (the retirement/walkover shape).
+ * singles draw). Returns matchId → Partial<Match> for LIVE (stage 2) and stage-3 records, the latter
+ * splitting into FINISHED and — where the record is flagged `interrupted` — SUSPENDED (paused
+ * mid-play and held over: partial score, no result). Orientation (which Flashscore side is p1) is
+ * resolved per record. Ambiguous pairs — two matches sharing a key — are dropped rather than
+ * mis-joined. Winner is set on a FINISHED match ONLY when a side reached the sets-to-win threshold
+ * (ATP best-of-5 → 3, WTA best-of-3 → 2); otherwise it is left to the snapshot (the
+ * retirement/walkover shape). A suspended record never awards one.
  */
 export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<string, Partial<Match>> {
   const keyOf = (m: Match): string | null => {
@@ -62,8 +64,13 @@ export function overlayLive(snap: Snapshot, records: LiveRecord[]): Record<strin
     const score: SetScore[] = r.sets.map(([h, a]) => (homeIsP1 ? { p1: h, p2: a } : { p1: a, p2: h }));
     // `interrupted` (see LiveRecord) is a match paused mid-play and held over: a partial score, no
     // result, so it overlays as SUSPENDED — never as a winnerless "finished" that blanks the arc.
-    // Decide the status once here; the winner block below reads it back rather than re-deriving.
-    const status: Match["status"] = r.stage === 2 ? "live" : r.interrupted ? "suspended" : "finished";
+    // Guarded on the snapshot not having DECIDED the match already — same invariant enrich.ts holds
+    // ("a match with a decided winner is never suspended"), so a stale interrupted record cannot drag
+    // a settled match back into the in-progress tier (amber arc, "N in progress", provisional totals)
+    // and pair a ✓ winner with a partial score. Decide the status once here; the winner block below
+    // reads it back rather than re-deriving.
+    const status: Match["status"] =
+      r.stage === 2 ? "live" : r.interrupted && m.winner == null ? "suspended" : "finished";
     const patch: Partial<Match> = { status, score: score.length ? score : null };
     if (r.stage === 2) {
       patch.flash = { id: r.id, homeIsP1 };
