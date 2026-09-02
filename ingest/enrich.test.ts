@@ -140,6 +140,38 @@ describe("enrichMatch", () => {
     expect(m.durationSec).toBeNull();
   });
 
+  it("reclassifies a HELD-OVER match as suspended and takes the measured time off its completed sets", () => {
+    // Rain stopped this one mid-4th-set and it was carried to another day, so SofaScore re-SCHEDULES
+    // it while still reporting the three sets already played. Left as "scheduled" it contradicts its
+    // own score, and — falling through both duration branches — its arc paints as if play had never
+    // started. Sets 1-3 are clean; the interrupted 4th absorbed the overnight gap and is excluded.
+    const ev = {
+      ...scheduledEventSample,
+      startTimestamp: 1783000000,                                  // the RESUME slot
+      time: { period1: 2546, period2: 3217, period3: 2890, period4: 65336 },
+      homeScore: { period1: 6, period2: 3, period3: 6, period4: 2 },
+      awayScore: { period1: 3, period2: 6, period3: 2, period4: 1 },
+    };
+    const m = enrichMatch(baseMatch({ status: "scheduled", winner: null, sofaEventId: 999 }), ev, null, players(), 0);
+    expect(m.status).toBe("suspended");
+    expect(m.durationSec).toBe(2546 + 3217 + 2890);   // clean sets only — the interrupted one is NOT estimated
+    expect(m.durationProvisional).toBe(true);          // a lower bound, so it ranks with a `*`
+    expect(m.wasSuspended).toBe(true);
+    expect(m.winner).toBeNull();
+    // flipping the status must NOT cost it the resume slot — that is the whole point of the tag
+    expect(m.scheduledStart).toBe(1783000000);
+    expect(m.scheduledPrecise).toBe(true);
+    expect(m.scheduledCourt).toBe("Court 2");
+    expect(m.stats).toBeNull();                        // partial play reads as final otherwise
+  });
+
+  it("leaves an ordinary upcoming match alone — no score, no periods, nothing to reclassify", () => {
+    const m = enrichMatch(baseMatch({ status: "scheduled", winner: null, sofaEventId: 999 }), scheduledEventSample, null, players(), 0);
+    expect(m.status).toBe("scheduled");
+    expect(m.durationSec).toBeNull();
+    expect(m.wasSuspended).toBe(false);
+  });
+
   it("keeps the cuptrees stamp (no precise flag) when the event carries no startTimestamp", () => {
     const ev = { ...scheduledEventSample, startTimestamp: undefined };
     const m = enrichMatch(baseMatch({ status: "scheduled", winner: null, scheduledStart: 1783000000 }), ev, null, players(), 0);
