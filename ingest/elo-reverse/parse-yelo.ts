@@ -11,6 +11,7 @@
 //   npx tsx ingest/elo-reverse/parse-yelo.ts
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { runMain } from "../main-guard";
 import { dedupeByDateKeepDeepest } from "./lib";
 
 const SRC = resolve(process.cwd(), "data/wayback/raw-full");
@@ -81,4 +82,4 @@ function build(): void {
   console.log(`wrote ${OUT}`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) build();
+runMain(import.meta.url, build);

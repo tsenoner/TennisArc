@@ -138,6 +138,47 @@ kickstarted. The recovery run published live Wimbledon scores (ATP 25 / WTA 14 m
 from 0) and force-pushed the `data` branch. Total downtime would have been unbounded without the
 guard.
 
+## The manifest guard — "the files are there but the tab is greyed out"
+
+`index.json` (the manifest) is what the app's slam tabs read; the per-slam snapshots are only
+reachable through it. `publish-data.sh` rebuilds it from every snapshot on disk (`pnpm reindex`,
+step 3) and then **asserts** the two agree (`scripts/check-manifest.sh`, step 3.5 on `public/data`
+and again at step 8.5 on the tree about to be pushed): a snapshot on disk that the manifest doesn't
+list aborts the publish with
+`manifest mismatch: on disk but not in the manifest: ATP/2026/wimbledon — did reindex run?`.
+The comparison is by identity (`TOUR/year/slam`), not by count, so a stale manifest that happens to
+be the right length is caught too — as is one that lists the same slam twice (a duplicate tab).
+
+Why it exists: from June to September 2026 `pnpm reindex` exited 0 in this clone **without doing
+anything**. Its CLI main-guard compared `import.meta.url` (which percent-encodes spaces —
+`Application%20Support`) with `process.argv[1]` (raw), so under
+`~/Library/Application Support/TennisArc/refresh` it never matched. The carry-forward kept every
+snapshot, but the manifest reverted to the committed seed's the first refresh after each slam's
+window closed — Wimbledon 2026 vanished from the tabs on 2026-07-14 while both its files sat intact on
+the `data` branch. The guard is now `isMain()` in `ingest/main-guard.ts`, which compares real
+filesystem paths instead of URL strings; entry scripts call `runMain(import.meta.url, main)` from
+the same module, which also gives every script one error path (message to stderr, `process.exitCode
+= 1` — never `process.exit()`, which can truncate that message on its way into the launchd log). `ingest/main-guard.test.ts` covers the percent-encoding directly and fails the build if any
+source file reintroduces the old string comparison; `ingest/reindex-cli.test.ts` runs the real
+`reindex` CLI with `argv[1]` pointing through a path containing a space.
+
+If the assertion ever fires: run `pnpm reindex` by hand in the clone and check its output lists every
+`slams/{year}/*.json`; if it prints nothing, the entry guard is broken again. The message names the
+offending file path, so a snapshot whose contents disagree with its filename (it shows up as both
+missing and extra) can be found and renamed.
+
+**Unwedging a refresh during a slam.** The assertion is fatal, and it runs before anything is
+published — so a single malformed snapshot carried forward from the `data` branch would otherwise
+abort every 30-minute tick and freeze live scores. To ship scores while you fix the snapshot:
+
+```sh
+ALLOW_MANIFEST_MISMATCH=1 scripts/publish-data.sh
+```
+
+That publishes despite the mismatch, still logging it. It is a stopgap, not a setting — a manifest
+that omits a snapshot is a hidden tab, which is the outage this guard exists to prevent. A missing
+`index.json` stays fatal regardless, since a tree with no manifest is never publishable.
+
 ## Live scores (Flashscore) — not part of this chain
 
 Score/status freshness for the in-play slam does **not** go through the Mac refresh chain above.

@@ -103,6 +103,11 @@ pnpm backfill-durations "$(date -u +%Y)" || echo "duration pass failed; publishi
 # 3. Rebuild the manifest from every per-slam snapshot now on disk (seed + active + carried).
 pnpm reindex
 
+# 3.5 Prove the rebuild actually happened: a snapshot on disk that index.json doesn't list is a
+#     pipeline bug, not a publishable state (why, and the outage that motivated it: the header of
+#     scripts/check-manifest.sh).
+scripts/check-manifest.sh public/data
+
 # 4. Snapshot the full data set before touching branches.
 cp "$REPO_ROOT"/public/data/index.json "$STAGING/"
 [ -d "$REPO_ROOT"/public/data/slams ] && cp -R "$REPO_ROOT"/public/data/slams "$STAGING/slams"
@@ -156,5 +161,9 @@ if [ "$HAVE_PUBLISHED" = 1 ] && \
   echo "data unchanged vs published branch; nothing to publish"
   exit 0
 fi
+# 8.5 Re-assert on the artifact itself: steps 4 and 6 rebuild the tree that ships, so the step-3.5
+#     check on public/data does not cover what is about to be force-pushed.
+scripts/check-manifest.sh "$WORKTREE_DIR"
+
 git -C "$WORKTREE_DIR" push -f "$REMOTE" data-pub:data
 echo "published data branch ($NEW_N snapshots)"
