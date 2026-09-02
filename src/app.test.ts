@@ -1455,15 +1455,12 @@ describe("live score overlay (/api/live)", () => {
       live: () => ({ matches: [{ ...JOIN_RECORD, stage: 3 as const, interrupted: true as const, resumesAt: RESUME }] }),
     });
 
-    document.body.innerHTML = `<div id="app"></div>`;
-    const root = document.getElementById("app")!;
+    // Observe BODY, not root: that lets the observer be installed before mountApp creates root, so
+    // this test keeps using the shared mount helper instead of re-implementing its ready contract.
     const painted: string[] = [];
-    const obs = new MutationObserver(() => painted.push(root.innerHTML));
-    obs.observe(root, { childList: true, subtree: true });
-    mounted.push(createApp(root));
-    await vi.waitFor(() => {
-      if (!root.querySelector(".sunburst path.arc")) throw new Error("bracket not rendered yet");
-    }, { timeout: 2000 });
+    const obs = new MutationObserver(() => painted.push(document.body.innerHTML));
+    obs.observe(document.body, { childList: true, subtree: true });
+    const root = await mountApp();
     obs.disconnect();
 
     expect(root.innerHTML).toContain("15:00");                        // the resume slot is what shows

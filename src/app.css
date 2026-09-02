@@ -315,12 +315,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 @media (prefers-reduced-motion: reduce) { .arc.live { animation: none; } }
 .sunburst.arc-dim-mode .arc.live { animation: none; }   /* let the hover-dim opacity take over */
 /* A suspended match is play-in-progress but PAUSED, so it keeps its heat fill (color.ts exempts it
-   from the grey pending tier) but is marked by a static amber dashed outline — no breathing pulse,
-   because nothing is happening right now. Distinct hue (amber) and motion (none) from live's teal
-   pulse, so the two in-progress states never read alike. */
-/* Weight and dash match .arc.projected's scaffold so the outline reads as a quiet annotation next
-   to its neighbours rather than a hard box; the AMBER HUE is what carries the meaning, and that is
-   untouched — it stays the non-motion, distinct-hue cue that never reads like live's teal pulse. */
+   from the grey pending tier) but is marked by a static amber dashed outline — stroke as light as
+   .arc.projected's scaffold (on a tighter dash), so it reads as a quiet annotation rather than a
+   hard box. No breathing pulse, because nothing is happening right now: distinct hue (amber) and
+   motion (none) from live's teal pulse, so the two in-progress states never read alike. */
 .arc.suspended { opacity: .62; stroke: var(--amber); stroke-width: .8px; stroke-dasharray: 2 2; }
 
 /* quarter-owner corner labels — quiet cartographic annotations in the circle-in-square

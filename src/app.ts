@@ -512,8 +512,9 @@ export function createApp(root: HTMLElement): () => void {
   // Retry, view switches) share one fetch, so two responses for the same view can never resolve
   // out of order and clobber newer data. Resolves true when the fetch produced a snapshot.
   /** `deferDraw` suppresses only the SUCCESS redraw — the caller promises to draw itself. The
-   *  failure path still draws its Retry state, which has nothing to wait for. Used by bootstrap so
-   *  a live view's first paint can already carry the overlay. */
+   *  failure path still draws its Retry state, which has nothing to wait for. Honoured only by the
+   *  call that actually STARTS the fetch: a caller joining an in-flight load gets the starter's
+   *  promise, and with it the starter's choice. */
   const load = (tour: Tour, year: number, slam: string, deferDraw = false): Promise<boolean> => {
     const k = snapKey(tour, year, slam);
     const pending = inflight.get(k);
@@ -553,13 +554,10 @@ export function createApp(root: HTMLElement): () => void {
   const loadCurrent = (): Promise<boolean> => load(state.tour, state.year, state.slam);
 
   const LIVE_SCORE_POLL_MS = 15_000;
-  // How long the first paint of a LIVE view will wait for the overlay before painting without it.
-  // Short enough to be invisible against the snapshot fetch it runs beside; long enough that the
-  // overlay normally wins and the bracket never shows a pre-stoppage time it is about to correct.
+  // Cap on how long a live view's first paint waits for the overlay before painting without it.
   const LIVE_FIRST_PAINT_MS = 1200;
   /** Join fetched live records onto the CURRENT snapshot and store the patch. Returns whether the
-   *  patch actually moved — the caller decides whether to redraw, so the bootstrap path can fold
-   *  the overlay into its FIRST paint instead of drawing twice. */
+   *  patch actually moved; the caller decides whether to redraw. */
   const storeLivePatch = (records: LiveRecord[]): boolean => {
     const k = snapKey(state.tour, state.year, state.slam);
     const raw = state.snapshots[k];
@@ -1191,17 +1189,21 @@ export function createApp(root: HTMLElement): () => void {
     // series made a reload paint SofaScore's PRE-STOPPAGE time for a whole extra round-trip before
     // the overlay corrected it to the resume slot: a visible flash on every reload during a rain
     // hold. Capped, so a slow or failing /api/live can never hold the bracket hostage — past the
-    // cap the snapshot paints alone and the overlay lands on the 15s tick, exactly as before.
+    // cap the snapshot paints alone and the overlay joins as soon as it does arrive.
     const live = isLiveView() ? fetchLive(state.tour, state.slam) : null;
-    const ok = await load(state.tour, state.year, state.slam, live != null);
-    if (live) {
-      const records = await Promise.race([
-        live,
-        new Promise<null>((r) => window.setTimeout(() => r(null), LIVE_FIRST_PAINT_MS)),
-      ]);
-      if (ok && records) storeLivePatch(records);
-      draw();                                  // the deferred snapshot paint, overlay included
-      if (!records) void loadLive();           // cap expired: chase it rather than wait for the tick
+    // The cap is armed HERE, beside the fetch it is capping, so it burns down DURING the snapshot
+    // round-trip rather than starting afresh once that resolves — otherwise the worst case is
+    // snapshot + 1.2s instead of max(snapshot, 1.2s), and the cap stops being free.
+    let capTimer = 0;
+    const capped = live && new Promise<null>((r) => { capTimer = window.setTimeout(() => r(null), LIVE_FIRST_PAINT_MS); });
+    await load(state.tour, state.year, state.slam, live != null);
+    if (live && capped) {
+      const records = await Promise.race([live, capped]);
+      clearTimeout(capTimer);
+      if (records) storeLivePatch(records);   // no snapshot to join yet → storeLivePatch no-ops
+      draw();                                 // the deferred snapshot paint, overlay included
+      // Cap expired: keep the ORIGINAL request rather than firing a second one at the same endpoint.
+      if (!records) void live.then((r) => { if (r && !signal.aborted && storeLivePatch(r)) draw(); });
     }
     // Warm the other tour's same-or-default slam in the background.
     const other: Tour = state.tour === "ATP" ? "WTA" : "ATP";
