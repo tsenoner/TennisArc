@@ -14,6 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { runMain } from "../main-guard";
 import { dedupeByDateKeepDeepest } from "./lib";
 
 // Raw archived boards live (gitignored) in data/wayback/raw, extracted from the COMMITTED tarball
@@ -141,4 +142,4 @@ function build(): void {
   console.log(`wrote ${OUT}`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) build();
+runMain(import.meta.url, build);

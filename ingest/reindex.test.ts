@@ -1,31 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { reindex } from "./reindex";
-import type { Match, Snapshot } from "../src/model";
-
-function snap(tour: "ATP" | "WTA", year: number, slam: string, name: string, surface: string, generatedAt: string, finalOver: Partial<Match> = {}): Snapshot {
-  const final: Match = {
-    id: "0", roundIndex: 0, slot: 0, nextMatchId: null, p1: "a", p2: "b",
-    status: "finished", winner: "p1", score: null, live: null, durationSec: null,
-    durationProvisional: false, sofaEventId: null, sofaCustomId: null, stats: null, ...finalOver,
-  };
-  return {
-    schemaVersion: 2, generatedAt, tour,
-    tournament: { slam, name, year, surface, sofaUniqueTournamentId: 1, sofaSeasonId: 1, drawSize: 128 },
-    players: {}, matches: { "0": final }, rounds: [],
-  };
-}
+import { snap, writeSnap } from "./fixtures/snapshot";
 
 let dir: string;
 beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "reindex-")); });
 afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
-
-async function writeSnap(dir: string, year: number, file: string, s: Snapshot): Promise<void> {
-  await mkdir(resolve(dir, "slams", String(year)), { recursive: true });
-  await writeFile(resolve(dir, "slams", String(year), file), JSON.stringify(s));
-}
 
 describe("reindex", () => {
   it("builds the manifest from slams/{year}/ snapshots, ignoring root-level files", async () => {
