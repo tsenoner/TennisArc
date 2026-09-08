@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
 import { SLAMS, activeSlam, eventWindow, slamConfig } from "./config";
 
 const SLAM_KEYS = Object.keys(SLAMS);
 const DAY = 86_400_000;
 /** Noon UTC on a month-day of `year` — mid-day so a boundary can never be a rounding artefact. */
 const at = (year: number, md: string): Date => new Date(`${year}-${md}T12:00:00.000Z`);
+/** `eventWindow` for a key that is definitely in SLAMS — its nullable contract is tested on its own
+ *  below, and asserting it away at every other call site only hides what the test is about. */
+const win = (slam: string, year: number): { from: number; to: number } => eventWindow(slam, year)!;
 
 // Every `activeSlam` call below passes an explicit override. The parameter defaults to
 // `process.env.SLAM`, so omitting it would let a developer with SLAM exported in their shell
@@ -14,8 +16,8 @@ const OFF = "";
 
 describe("eventWindow", () => {
   it("reparametrizes the configured month-day onto an arbitrary year", () => {
-    expect(eventWindow("roland-garros", 2021)).toEqual({ from: Date.UTC(2021, 4, 18), to: Date.UTC(2021, 5, 16) });
-    expect(eventWindow("us-open", 2020)).toEqual({ from: Date.UTC(2020, 7, 20), to: Date.UTC(2020, 8, 17) });
+    expect(win("roland-garros", 2021)).toEqual({ from: Date.UTC(2021, 4, 18), to: Date.UTC(2021, 5, 16) });
+    expect(win("us-open", 2020)).toEqual({ from: Date.UTC(2020, 7, 20), to: Date.UTC(2020, 8, 17) });
   });
   it("returns null for an unknown slam", () => {
     expect(eventWindow("not-a-slam", 2026)).toBeNull();
@@ -25,7 +27,7 @@ describe("eventWindow", () => {
     // snapshot would be written under the wrong year and the same-season scan below would miss it.
     for (const year of [2019, 2027, 2028, 2031]) {
       for (const slam of SLAM_KEYS) {
-        const w = eventWindow(slam, year)!;
+        const w = win(slam, year);
         expect(w.from).toBeLessThan(w.to);
         expect(new Date(w.from).getUTCFullYear()).toBe(year);
         expect(new Date(w.to - 1).getUTCFullYear()).toBe(year);
@@ -34,7 +36,7 @@ describe("eventWindow", () => {
   });
   it("never overlaps two slams — at most one window can contain an instant", () => {
     for (let year = 2009; year <= 2040; year++) {
-      const ws = SLAM_KEYS.map((s) => eventWindow(s, year)!).sort((a, b) => a.from - b.from);
+      const ws = SLAM_KEYS.map((s) => win(s, year)).sort((a, b) => a.from - b.from);
       for (let i = 1; i < ws.length; i++) expect(ws[i - 1]!.to).toBeLessThanOrEqual(ws[i]!.from);
     }
   });
@@ -56,13 +58,14 @@ describe("SLAMS carries no season (issue #208)", () => {
   it("pins no season to a slam, in either shape the regression took", () => {
     // The regression itself: `year: 2026` on every row and ISO dates parsed with Date.parse, so no
     // window opened from 2027-01-01 on while the refresh reported success every cycle. The MonthDay
-    // type makes both a compile error today; this is the fence for the day someone reaches for a
-    // string again. Matched narrowly (an ISO date, or a `year:` field) so prose about 2026 — of
-    // which this file has plenty — can't fail the build.
-    const src = readFileSync(new URL("./config.ts", import.meta.url), "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""); // code only — the prose here cites dates
-    expect(src).not.toMatch(/\b\d{4}-\d{2}-\d{2}\b/);
-    expect(src).not.toMatch(/\byear\s*:\s*\d/);
+    // type makes both a compile error today; this asserts the same of the exported value, so it
+    // still fires the day MonthDay is loosened back to a date-shaped string.
+    for (const [key, t] of Object.entries(SLAMS)) {
+      expect(t, key).not.toHaveProperty("year");
+      for (const md of [t.from, t.to]) {
+        expect(md, key).toEqual({ month: expect.any(Number), day: expect.any(Number) });
+      }
+    }
   });
 });
 
@@ -86,7 +89,7 @@ describe("activeSlam", () => {
   });
 
   it("is half-open: the opening instant is in, the closing instant is out", () => {
-    const w = eventWindow("wimbledon", 2029)!;
+    const w = win("wimbledon", 2029);
     expect(activeSlam(new Date(w.from - 1), OFF)).toBeNull();
     expect(activeSlam(new Date(w.from), OFF)).toEqual({ slam: "wimbledon", year: 2029 });
     expect(activeSlam(new Date(w.to - 1), OFF)).toEqual({ slam: "wimbledon", year: 2029 });
@@ -96,7 +99,7 @@ describe("activeSlam", () => {
   it("dates every match to the window it matched, not just to `now`", () => {
     for (const year of [2027, 2031]) {
       for (const slam of SLAM_KEYS) {
-        const w = eventWindow(slam, year)!;
+        const w = win(slam, year);
         for (const t of [w.from, Math.floor((w.from + w.to) / 2), w.to - 1]) {
           expect(activeSlam(new Date(t), OFF)).toEqual({ slam, year });
         }
@@ -144,7 +147,7 @@ describe("the windows cover the real editions", () => {
   it("opens before the first ball and closes after the final, with at least two days of slack", () => {
     for (const [slam, editions] of Object.entries(REAL)) {
       for (const [year, start, final] of editions) {
-        const w = eventWindow(slam, year)!;
+        const w = win(slam, year);
         const day = (md: string) => at(year, md).getTime() - 12 * 3600_000; // UTC midnight of that day
         expect.soft(day(start) - w.from, `${slam} ${year} opens too late`).toBeGreaterThanOrEqual(2 * DAY);
         // The final's own day must be fully covered, hence the extra day before the slack.
@@ -156,11 +159,11 @@ describe("the windows cover the real editions", () => {
   it("cannot hold the COVID editions or the pre-2015 Wimbledon calendar — out of reach by design", () => {
     // The editions deliberately left out of REAL above, asserted rather than silently omitted, so
     // the table can't quietly grow to exclude whatever a future edit breaks.
-    expect(Date.UTC(2021, 1, 8)).toBeGreaterThan(eventWindow("australian-open", 2021)!.to); // AO played in February
-    expect(Date.UTC(2020, 8, 27)).toBeGreaterThan(eventWindow("roland-garros", 2020)!.to);  // RG played in September
+    expect(Date.UTC(2021, 1, 8)).toBeGreaterThan(win("australian-open", 2021).to); // AO played in February
+    expect(Date.UTC(2020, 8, 27)).toBeGreaterThan(win("roland-garros", 2020).to);  // RG played in September
     // Wimbledon ran a week earlier until 2015 (2011 started 06-20); covering that dead rule would
     // cost a week of pre-draw cycles every year for a calendar that no longer exists.
-    expect(Date.UTC(2011, 5, 20)).toBeLessThan(eventWindow("wimbledon", 2011)!.from);
+    expect(Date.UTC(2011, 5, 20)).toBeLessThan(win("wimbledon", 2011).from);
   });
 });
 

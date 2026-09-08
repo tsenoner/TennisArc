@@ -19,7 +19,7 @@ function snap(matches: Partial<Match>[], tournament: Partial<Snapshot["tournamen
   };
 }
 
-// RG 2026 window is [2026-05-20, 2026-06-16) — see SLAMS in ingest/config.ts.
+// RG 2026 window is [2026-05-18, 2026-06-16) — see SLAMS in ingest/config.ts.
 const D = (s: string): Date => new Date(s);
 
 describe("slamStatus", () => {

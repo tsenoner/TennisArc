@@ -43,13 +43,19 @@ export interface SlamEdition { slam: string; year: number }
 //   W       starts 06-27…07-03, finals 07-10…07-16  (the 2015+ calendar; before that it ran a week
 //                                                    earlier, a rule that has been dead for a decade)
 //   USO     starts 08-24…08-31, finals 09-07…09-14
-// Each window clears those extremes by ~4 days on both sides, because nobody re-tunes them now and
-// the bands themselves move: the 15-day Sunday-start format pulled the AO earlier in 2024 and the
-// USO in 2025. Being generous is close to free — a cycle that finds no published draw stops there
+// Each window opens 3-4 days before the earliest of those starts and closes with two clear days
+// after the latest of those finals (`to` is exclusive, so a final one day later than any on record
+// is still fully covered), because nobody re-tunes them now and the bands themselves move: the
+// 15-day Sunday-start format pulled the AO earlier in 2024 and the USO in 2025. The tail is the
+// thinner side of the two: widen `to` before `from` if an edition ever runs long.
+// Being generous is close to free — a cycle that finds no published draw stops there
 // without publishing (ingest/draw-ready.ts) — while being a day short truncates a live tournament
-// at the semis for a whole year. The COVID editions (AO 2021 in February, RG 2020 in September) and
-// the pre-2015 Wimbledon calendar sit outside any sane static window and are out of reach by
-// design; they only ever mattered live, and they are long since history.
+// at the semis for a whole year. The one hard bound on that generosity: neighbouring windows MUST
+// stay disjoint, since `activeSlam` takes the first match and an overlap would silently starve the
+// other slam for its whole edition (config.test.ts asserts non-overlap, out to 2040).
+// The COVID editions (AO 2021 in February, RG 2020 in September) and the pre-2015 Wimbledon
+// calendar sit outside any sane static window and are out of reach by design; they only ever
+// mattered live, and they are long since history.
 export const SLAMS: Record<string, SlamTemplate> = {
   "australian-open": { slam: "australian-open", name: "Australian Open", surface: "Hard",  from: { month: 1, day: 8 },  to: { month: 2, day: 5 },  unitournament: { ATP: 2363, WTA: 2571 } },
   "roland-garros":   { slam: "roland-garros",   name: "Roland Garros",   surface: "Clay",  from: { month: 5, day: 18 }, to: { month: 6, day: 16 }, unitournament: { ATP: 2480, WTA: 2577 } },
@@ -58,6 +64,11 @@ export const SLAMS: Record<string, SlamTemplate> = {
 };
 
 export const DRAW_SIZE = 128;
+
+/** Is `key` one of the Slams above? hasOwnProperty, not `in` and not a truthy index: `"toString" in
+ *  SLAMS` is true and `SLAMS["toString"]` is an inherited function, either of which would wave a
+ *  non-slam through as a slam. Every membership test goes through here so all three agree. */
+const isSlam = (key: string): boolean => Object.prototype.hasOwnProperty.call(SLAMS, key);
 
 const utc = (year: number, md: MonthDay): number => Date.UTC(year, md.month - 1, md.day);
 
@@ -79,8 +90,8 @@ const utc = (year: number, md: MonthDay): number => Date.UTC(year, md.month - 1,
  * be written under the wrong year); config.test.ts fails the build rather than let that ship.
  */
 export function eventWindow(slam: string, year: number): { from: number; to: number } | null {
-  const cfg = SLAMS[slam];
-  if (!cfg) return null;
+  if (!isSlam(slam)) return null;
+  const cfg = SLAMS[slam]!;
   return { from: utc(year, cfg.from), to: utc(year, cfg.to) };
 }
 
@@ -88,12 +99,10 @@ export function eventWindow(slam: string, year: number): { from: number; to: num
  * The runtime config for one edition: a slam's season-free template bound to `year`. Which season
  * is being ingested is a per-run derivation, never config — keeping it out of `SLAMS` is what stops
  * the table going stale. Throws on an unknown slam: spreading a missing key would otherwise yield
- * an object whose every field is `undefined`, failing much later and much less legibly. The key
- * test is hasOwnProperty for the same reason as in `activeSlam` — `SLAMS["toString"]` is a
- * truthy inherited function, so a plain falsy check would wave it through.
+ * an object whose every field is `undefined`, failing much later and much less legibly.
  */
 export function slamConfig(slam: string, year: number): SlamConfig {
-  if (!Object.prototype.hasOwnProperty.call(SLAMS, slam)) {
+  if (!isSlam(slam)) {
     throw new Error(`unknown slam "${slam}" (known: ${Object.keys(SLAMS).join(", ")})`);
   }
   return { ...SLAMS[slam]!, year };
@@ -118,8 +127,7 @@ export function slamConfig(slam: string, year: number): SlamConfig {
  */
 export function activeSlam(now: Date = new Date(), override = process.env.SLAM): SlamEdition | null {
   const year = now.getUTCFullYear();
-  // hasOwnProperty, not `in`: `"toString" in SLAMS` is true and would name a slam that isn't one.
-  if (override && Object.prototype.hasOwnProperty.call(SLAMS, override)) return { slam: override, year };
+  if (override && isSlam(override)) return { slam: override, year };
   const ts = now.getTime();
   for (const slam of Object.keys(SLAMS)) {
     const w = eventWindow(slam, year)!; // the key came from SLAMS, so never null

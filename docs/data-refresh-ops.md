@@ -88,11 +88,16 @@ No URL configured → the runner behaves exactly as before. Remember the runner 
 What does and does not fail the ping (`ingest/index.ts`): a cycle between tournaments is a no-op
 and pings success, and so does a cycle inside an open window where SofaScore has not published the
 draw yet — the windows in `ingest/config.ts` open days ahead of the draw release on purpose, so
-those cycles are the system working (`DrawNotReadyError`, `ingest/draw-ready.ts`). Everything else
-that leaves an open window with nothing publishable — no season for this year under these ids, a
-Cloudflare block, a dead network — exits non-zero and pings `/fail`. What is still NOT covered:
-a window that never opens at all, or one that opens onto a draw that never appears, stays silent
-for its whole duration; a positive "a slam should have published by now" assertion is issue #207.
+those cycles are the system working (`drawGap`'s benign case, `ingest/draw-ready.ts`). That grace
+ends the moment the bracket's own schedule says round 1 is due on court: after that an unpopulated
+draw is a regression and pings `/fail`, so a degraded mid-slam payload — which comes back with the
+results stripped and would otherwise look exactly like a pre-draw cycle — cannot hide behind it.
+Everything else that leaves an open window with nothing publishable — no season for this year under
+these ids, a Cloudflare block, a dead network — exits non-zero and pings `/fail`. Note that such a
+failure also aborts `publish-data.sh` under `set -e`, so the duration pass, the reindex and the
+carry-forward are all skipped for that cycle. What is still NOT covered: a window that never opens
+at all, or one that opens onto a draw that never appears, stays silent for its whole duration; a
+positive "a slam should have published by now" assertion is issue #207.
 
 ## Runbook — is it healthy, and how to unstick it
 

@@ -1,19 +1,6 @@
 import type { Snapshot } from "../src/model";
 import { isUpcoming } from "../src/model";
 
-/**
- * Thrown when SofaScore's bracket exists but isn't populated enough to publish. Distinct from every
- * other ingest failure on purpose: the active window opens days ahead of the draw release, so
- * "not ready yet" is the EXPECTED state for the first cycles of a Slam and must not fail the
- * dead-man ping — while a rotted uniqueTournament id, a missing season or a dead network must.
- */
-export class DrawNotReadyError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DrawNotReadyError";
-  }
-}
-
 /** The real draw entrants: every player id sitting in a round-0 slot, plus the subset whose
  *  first-round match hasn't been played yet. SofaScore fills later rounds with synthetic
  *  future-slot teams, so round 0 is the only round that names actual entrants. */
@@ -48,17 +35,42 @@ export function entrantIds(snap: Snapshot): { all: Set<string>; unplayed: Set<st
  * historical hole). Anything under 64 is an unpublished skeleton, not a draw with gaps.
  *
  * `benign` says which of the two stories this is, and it decides whether the refresh cycle fails
- * the dead-man ping. Before a ball is struck an unpublished bracket is simply the window opening
- * ahead of the draw, which is by design. Once ANY match has been played, the same shape means a
+ * the dead-man ping. Before the edition is under way an unpublished bracket is simply the window
+ * opening ahead of the draw, which is by design. Once it IS under way, the same shape means a
  * bracket that regressed — SofaScore serving a degraded payload, or the wrong tournament — and
- * that has to be loud, or a mid-slam upstream break would sit behind a green check.
+ * that has to be loud, or a mid-slam upstream break would sit behind a green check. See
+ * `underWay` for why that question is NOT just "has a match been played".
  */
-export function drawGap(snap: Snapshot, drawSize: number): { reason: string; benign: boolean } | null {
-  const played = Object.values(snap.matches).some((m) => !isUpcoming(m.status));
-  const gap = (reason: string) => ({ reason, benign: !played });
+export function drawGap(
+  snap: Snapshot, drawSize: number, nowSec: number,
+): { reason: string; benign: boolean } | null {
+  const gap = (reason: string) => ({ reason, benign: !underWay(snap, nowSec) });
   const matchCount = Object.keys(snap.matches).length;
   if (matchCount < drawSize - 1) return gap(`draw not fully available yet (${matchCount}/${drawSize - 1} matches)`);
   const { all } = entrantIds(snap);
   if (all.size < drawSize / 2) return gap(`bracket published without a draw yet (${all.size}/${drawSize} entrants named)`);
   return null;
+}
+
+/**
+ * Is this edition under way — i.e. should a draw exist by now? Deliberately NOT just "some match
+ * has a played status", because the payload that makes `drawGap` fire is exactly the one that
+ * destroys that evidence: a degraded bracket comes back as 127 participant-less blocks, every one
+ * of them `notstarted`, so a mid-slam upstream break would look identical to a pre-draw cycle and
+ * slip out as benign — hiding behind a green ping, which is what this whole guard exists to stop.
+ *
+ * So the schedule is consulted too. cuptrees stamps `seriesStartDateTimestamp` on every block
+ * whether or not the slot names a player, and normalize carries it onto unplayed matches as
+ * `scheduledStart` — so even a playerless skeleton still says when round 1 is due on court. Once
+ * that moment has passed, an empty bracket is a regression, not a lead-in. Missing stamps fall
+ * back to the played test alone, which is no worse than not looking.
+ */
+function underWay(snap: Snapshot, nowSec: number): boolean {
+  if (Object.values(snap.matches).some((m) => !isUpcoming(m.status))) return true;
+  let earliest = Infinity;
+  for (const id of snap.rounds[0]?.matchIds ?? []) {
+    const t = snap.matches[id]?.scheduledStart;
+    if (typeof t === "number" && t < earliest) earliest = t;
+  }
+  return earliest <= nowSec;
 }

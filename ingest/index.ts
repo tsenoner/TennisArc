@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, snapshotPath } from "../src/model";
-import { DRAW_SIZE, activeSlam, slamConfig, type SlamConfig } from "./config";
-import { DrawNotReadyError, drawGap, entrantIds } from "./draw-ready";
+import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, isUpcoming, snapshotPath } from "../src/model";
+import { DRAW_SIZE, SLAMS, activeSlam, slamConfig, type SlamConfig } from "./config";
+import { drawGap, entrantIds } from "./draw-ready";
 import { openContext, fetchTournament, resolveSeasonId, fetchTeamCountry } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
 import { enrichMatch, carryForwardCountries, carryForwardSuspended, fillMissingCountries } from "./enrich";
@@ -12,7 +12,16 @@ import { availableSlamOf, mergeIndex, backfillTargets } from "./manifest";
 
 const OUT_DIR = resolve(process.cwd(), "public/data");
 
-async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: number): Promise<Snapshot> {
+/** A tour that produced nothing to publish because the draw simply isn't up yet — the expected
+ *  outcome of the window opening ahead of the draw release, and NOT a failure. Returned rather than
+ *  thrown so the caller reads a discriminant instead of sniffing an error class: `drawGap` already
+ *  decides benign-vs-real, and re-encoding that as an Error subclass only risks losing it (the
+ *  `{ cause: err }` wrap below would erase it, turning every pre-draw cycle into a red ping). */
+interface DrawNotReady { notReady: string }
+
+async function ingestTour(
+  cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: number,
+): Promise<Snapshot | DrawNotReady> {
   const utId = cfg.unitournament[tour];
   const { browser, page } = await openContext();
   try {
@@ -37,12 +46,13 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
     // Is there a draw at all? Checked here, before the enrichment fetches (Elo, birthdates, every
     // not-yet-played entrant's country) and before anything is written. The window deliberately
     // opens ahead of the draw release, so an unpublished bracket is the normal state for the first
-    // cycles of a Slam and publishSlam counts it as "nothing to do"; the same shape once play has
-    // started is a real regression and is thrown as an ordinary failure.
-    const gap = drawGap(snap, DRAW_SIZE);
+    // cycles of a Slam and publishSlam counts it as "nothing to do"; the same shape once the
+    // edition is under way is a real regression and is thrown as an ordinary failure.
+    const gap = drawGap(snap, DRAW_SIZE, nowSec);
     if (gap) {
       const msg = `${cfg.slam} ${tour}: ${gap.reason} — keeping last-good`;
-      throw gap.benign ? new DrawNotReadyError(msg) : new Error(msg);
+      if (!gap.benign) throw new Error(msg);
+      return { notReady: msg };
     }
     for (const match of Object.values(snap.matches)) {
       if (match.sofaEventId == null) continue;
@@ -140,15 +150,16 @@ async function publishSlam(
   for (const tour of ["ATP", "WTA"] as Tour[]) {
     try {
       const snap = await ingestTour(cfg, tour, isoNow, nowSec);
+      if ("notReady" in snap) { console.log(`ingest ${cfg.slam} ${tour} skipped: ${snap.notReady}`); continue; }
       const file = resolve(OUT_DIR, snapshotPath(tour, cfg.year, cfg.slam));
       await mkdir(dirname(file), { recursive: true });
       await writeFile(file, JSON.stringify(snap));
-      const played = Object.values(snap.matches).filter((m) => m.status !== "scheduled" && m.status !== "notstarted").length;
+      const played = Object.values(snap.matches).filter((m) => !isUpcoming(m.status)).length;
       console.log(`wrote ${snapshotPath(tour, cfg.year, cfg.slam)}: ${Object.keys(snap.matches).length} matches (${played} played)`);
       entries.push(availableSlamOf(snap, new Date(isoNow)));
     } catch (err) {
-      if (err instanceof DrawNotReadyError) console.log(`ingest ${cfg.slam} ${tour} skipped: ${err.message}`);
-      else { broken++; console.error(`ingest ${cfg.slam} ${tour} failed (keeping last-good):`, err); }
+      broken++;
+      console.error(`ingest ${cfg.slam} ${tour} failed (keeping last-good):`, err);
     }
   }
   return { entries, broken };
@@ -156,6 +167,18 @@ async function publishSlam(
 
 async function main(): Promise<void> {
   const backfill = backfillTargets(process.env.BACKFILL_YEARS, process.env.BACKFILL_SLAMS);
+  if (process.env.BACKFILL_YEARS && backfill.length === 0) {
+    // A backfill was asked for and expanded to nothing — a mistyped year or slam key, both of which
+    // `backfillTargets` drops silently. Falling through would run the LIVE path instead: a request
+    // to re-fetch 2019 would quietly scrape and republish whatever slam is on right now.
+    console.error(
+      `BACKFILL_YEARS="${process.env.BACKFILL_YEARS}"` +
+      (process.env.BACKFILL_SLAMS ? ` BACKFILL_SLAMS="${process.env.BACKFILL_SLAMS}"` : "") +
+      ` matched no edition (known slams: ${Object.keys(SLAMS).join(", ")}) — refusing to fall through to the live refresh`,
+    );
+    process.exitCode = 1;
+    return;
+  }
   if (backfill.length) {
     const isoNow = new Date().toISOString();
     const nowSec = Math.floor(Date.now() / 1000);
@@ -191,17 +214,18 @@ async function main(): Promise<void> {
       // purpose, so this is a normal pre-tournament cycle: exit 0, leaving the dead-man ping green
       // and letting publish-data.sh carry forward and reindex as usual.
       console.log(`${cfg.slam} ${cfg.year}: no published draw yet — nothing to refresh this cycle`);
-      return;
+    } else {
+      // Inside an open window with nothing publishable and a real error: fail loudly so the runner
+      // pings /fail. The likeliest cause after a season rollover is that SofaScore has no season for
+      // this year under these ids, which is invisible from the alert alone — so name them.
+      console.error(
+        `no tour published for ${cfg.slam} ${cfg.year} inside its active window (${broken} failed). ` +
+        `If this persists, check that SofaScore publishes a ${cfg.year} season for uniqueTournament ` +
+        `${cfg.unitournament.ATP} (ATP) / ${cfg.unitournament.WTA} (WTA).`,
+      );
+      process.exitCode = 1;
     }
-    // Inside an open window with nothing publishable and a real error: fail loudly so the runner
-    // pings /fail. The likeliest cause after a season rollover is that SofaScore has no season for
-    // this year under these ids, which is invisible from the alert alone — so name them.
-    console.error(
-      `no tour published for ${cfg.slam} ${cfg.year} inside its active window (${broken} failed). ` +
-      `If this persists, check that SofaScore publishes a ${cfg.year} season for uniqueTournament ` +
-      `${cfg.unitournament.ATP} (ATP) / ${cfg.unitournament.WTA} (WTA).`,
-    );
-    process.exitCode = 1; return;
+    return;
   }
 
   const idx = await loadIndex();
