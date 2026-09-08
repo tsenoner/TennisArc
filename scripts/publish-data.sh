@@ -7,8 +7,8 @@
 #   slams/{year}/{tour}-{slam}.json     — one snapshot per slam (e.g. slams/2026/atp-roland-garros.json)
 #
 # Auto-persist: completed slams stay live with NO manual freeze. Each run carries forward the
-# already-published `data` branch (step 2) and rebuilds the manifest from every snapshot on disk
-# (step 3), so a major that finished in a past window survives later windows publishing other
+# already-published `data` branch (step 1) and rebuilds the manifest from every snapshot on disk
+# (step 4), so a major that finished in a past window survives later windows publishing other
 # slams. The committed seed (public/data) and the published branch are both inputs; the branch is
 # the superset. (You can still freeze a slam into the seed by committing its JSON to main, but you
 # no longer have to.) Backfill past majors with: BACKFILL_YEARS=2024,2025 pnpm ingest
@@ -29,19 +29,14 @@ STAGING="$(mktemp -d /tmp/tapub-staging-XXXXXX)"
 cleanup() {
   git worktree remove --force "$WORKTREE_DIR" 2>/dev/null || rm -rf "$WORKTREE_DIR"
   rm -rf "$PUB_DIR" "$STAGING"
-  # The carry-forward overlay (step 2) drops untracked snapshots into public/data; remove them and
+  # The carry-forward overlay (step 1) drops untracked snapshots into public/data; remove them and
   # restore the committed seed so the main working tree is left exactly as we found it.
   git checkout -- public/data 2>/dev/null || true
   git clean -fdq -- public/data 2>/dev/null || true
 }
 trap cleanup EXIT
 
-# 1. Refresh the active slam (a fast no-op between tournaments — no browser launched).
-#    SKIP_INGEST=1 runs the rest of the pipeline without touching SofaScore — for datacenter
-#    runners (CI), where SofaScore 403s but the Sackmann duration pass (step 2.5) still works.
-[ -n "${SKIP_INGEST:-}" ] || pnpm ingest
-
-# 2. Carry forward previously-published slams so completed majors persist with no manual freeze.
+# 1. Carry forward previously-published slams so completed majors persist with no manual freeze.
 #    FIRST learn whether a published `data` branch exists, independently of the fetch: this is the
 #    difference between "first publish ever" (safe to create the branch from the seed) and "the
 #    branch is live but we failed to read it" (must NOT force-push a seed-only tree over it and lose
@@ -54,8 +49,9 @@ else echo "cannot reach the remote to check the data branch — aborting (no pub
 fi
 
 #    Then pull the branch and copy any per-slam snapshot it holds that we don't already have locally.
-#    The existence check means the freshly-ingested active slam and the committed seed always win;
-#    only genuinely-absent past slams are restored. FETCH_HEAD is reused in step 8.
+#    The existence check means the committed seed wins over the branch; the ingest (step 2) runs
+#    afterwards and overwrites the slam it refreshes, so the precedence is ingest > seed > branch.
+#    FETCH_HEAD is reused in step 9.
 #    (Avoid `cp -n`: BSD/macOS cp exits non-zero when it skips, which would trip `set -e`.)
 HAVE_PUBLISHED=0
 if [ "$REMOTE_HAS_DATA" = 1 ] && git fetch "$REMOTE" data 2>/dev/null; then
@@ -94,29 +90,47 @@ if [ "$REMOTE_HAS_DATA" = 1 ] && [ "$HAVE_PUBLISHED" = 0 ]; then
   exit 1
 fi
 
-# 2.5 Duration pass for the current year: prefer Jeff Sackmann's official on-court minutes over
-#     SofaScore's periodN (which counts rain/curfew suspensions as play time) once his CSVs catch
-#     up, days after a slam. Historical years are already corrected in the seed. Non-fatal: if
-#     GitHub raw is unreachable, publish fresh scores anyway — durations self-heal next cycle.
+# 2. Refresh the active slam (a fast no-op between tournaments — no browser launched). Runs AFTER
+#    the carry-forward on purpose: ingest/index.ts reads the previous snapshot of the slam it is
+#    refreshing (loadPriorSnapshot) to reuse already-resolved player countries and to keep the
+#    sticky `suspended` flag alive across refreshes, and for the IN-PROGRESS slam that file only
+#    ever exists because step 1 just restored it — the committed seed holds a slam only once it is
+#    over. With the old ordering both passes were silently inert exactly when they mattered.
+#    SKIP_INGEST=1 runs the rest of the pipeline without touching SofaScore — for datacenter
+#    runners (CI), where SofaScore 403s but the Sackmann duration pass (step 3) still works.
+#
+#    A failed ingest does NOT abort the run. The rest of the pipeline — durations, reindex,
+#    carry-forward publish — is independent of it and keeps the published branch alive and
+#    self-healing, and the shrink guard in step 8 still refuses to publish a smaller tree. The
+#    status is remembered and returned as this script's exit code, so the dead-man ping still
+#    reports the failure; it just no longer takes the whole cycle down with it.
+INGEST_STATUS=0
+[ -n "${SKIP_INGEST:-}" ] || pnpm ingest || INGEST_STATUS=$?
+[ "$INGEST_STATUS" = 0 ] || echo "ingest failed (status $INGEST_STATUS) — publishing carry-forward anyway" >&2
+
+# 3. Duration pass for the current year: prefer Jeff Sackmann's official on-court minutes over
+#    SofaScore's periodN (which counts rain/curfew suspensions as play time) once his CSVs catch
+#    up, days after a slam. Historical years are already corrected in the seed. Non-fatal: if
+#    GitHub raw is unreachable, publish fresh scores anyway — durations self-heal next cycle.
 pnpm backfill-durations "$(date -u +%Y)" || echo "duration pass failed; publishing without it" >&2
 
-# 3. Rebuild the manifest from every per-slam snapshot now on disk (seed + active + carried).
+# 4. Rebuild the manifest from every per-slam snapshot now on disk (seed + active + carried).
 pnpm reindex
 
-# 3.5 Prove the rebuild actually happened: a snapshot on disk that index.json doesn't list is a
+# 4.5 Prove the rebuild actually happened: a snapshot on disk that index.json doesn't list is a
 #     pipeline bug, not a publishable state (why, and the outage that motivated it: the header of
 #     scripts/check-manifest.sh).
 scripts/check-manifest.sh public/data
 
-# 4. Snapshot the full data set before touching branches.
+# 5. Snapshot the full data set before touching branches.
 cp "$REPO_ROOT"/public/data/index.json "$STAGING/"
 [ -d "$REPO_ROOT"/public/data/slams ] && cp -R "$REPO_ROOT"/public/data/slams "$STAGING/slams"
 
-# 5. Set up a git identity if none is configured (needed for the commit under launchd/cron).
+# 6. Set up a git identity if none is configured (needed for the commit under launchd/cron).
 git config --get user.name  >/dev/null 2>&1 || git config user.name  "tennisarc-bot"
 git config --get user.email >/dev/null 2>&1 || git config user.email "bot@users.noreply.github.com"
 
-# 6. Build the data branch as a SINGLE orphan commit (the branch is just a file server for Vercel —
+# 7. Build the data branch as a SINGLE orphan commit (the branch is just a file server for Vercel —
 #    no history to preserve), then force-push only if its tree actually changed.
 git branch -D data-pub >/dev/null 2>&1 || true
 git worktree add --orphan -b data-pub "$WORKTREE_DIR" >/dev/null
@@ -143,7 +157,7 @@ count_snaps() {
   echo "${#files[@]}"
 }
 
-# 7. Safety guard: never publish FEWER snapshots than are already live. With carry-forward the new
+# 8. Safety guard: never publish FEWER snapshots than are already live. With carry-forward the new
 #    tree is always a superset; if it somehow shrank, a bug is afoot — abort rather than wipe data.
 NEW_N="$(count_snaps "$WORKTREE_DIR")"
 if [ "$HAVE_PUBLISHED" = 1 ]; then
@@ -154,16 +168,17 @@ if [ "$HAVE_PUBLISHED" = 1 ]; then
   fi
 fi
 
-# 8. Skip the push when the new tree is byte-identical to what's already published (a tree SHA
+# 9. Skip the push when the new tree is byte-identical to what's already published (a tree SHA
 #    ignores commit date/message), else force-push the single commit.
 if [ "$HAVE_PUBLISHED" = 1 ] && \
    [ "$(git -C "$WORKTREE_DIR" rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'FETCH_HEAD^{tree}')" ]; then
   echo "data unchanged vs published branch; nothing to publish"
-  exit 0
+  exit "$INGEST_STATUS"
 fi
-# 8.5 Re-assert on the artifact itself: steps 4 and 6 rebuild the tree that ships, so the step-3.5
+# 9.5 Re-assert on the artifact itself: steps 5 and 7 rebuild the tree that ships, so the step-4.5
 #     check on public/data does not cover what is about to be force-pushed.
 scripts/check-manifest.sh "$WORKTREE_DIR"
 
 git -C "$WORKTREE_DIR" push -f "$REMOTE" data-pub:data
 echo "published data branch ($NEW_N snapshots)"
+exit "$INGEST_STATUS"

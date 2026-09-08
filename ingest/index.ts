@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, isUpcoming, snapshotPath } from "../src/model";
-import { DRAW_SIZE, SLAMS, activeSlam, type SlamConfig } from "./config";
+import { DRAW_SIZE, SLAMS, activeSlam, drawDueAt, slamConfig, type SlamConfig } from "./config";
+import { drawGap, entrantIds, isOverdue } from "./draw-ready";
 import { openContext, fetchTournament, resolveSeasonId, fetchTeamCountry } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
 import { enrichMatch, carryForwardCountries, carryForwardSuspended, fillMissingCountries } from "./enrich";
@@ -11,16 +12,61 @@ import { availableSlamOf, mergeIndex, backfillTargets } from "./manifest";
 
 const OUT_DIR = resolve(process.cwd(), "public/data");
 
-async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: number): Promise<Snapshot> {
+/** A tour that produced nothing to publish because the draw simply isn't up yet — the expected
+ *  outcome of the window opening ahead of the draw release, and NOT a failure. Returned rather than
+ *  thrown so the caller reads a discriminant instead of sniffing an error class: `drawGap` already
+ *  decides benign-vs-real, and re-encoding that as an Error subclass only risks losing it (the
+ *  `{ cause: err }` wrap below would erase it, turning every pre-draw cycle into a red ping). */
+interface DrawNotReady { notReady: string }
+
+async function ingestTour(
+  cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: number,
+): Promise<Snapshot | DrawNotReady> {
   const utId = cfg.unitournament[tour];
+  const clock = { nowSec, drawDueSec: Math.floor(drawDueAt(cfg) / 1000) };
   const { browser, page } = await openContext();
   try {
-    const seasonId = await resolveSeasonId(page, utId, cfg.year);
+    let seasonId: number | null;
+    try {
+      seasonId = await resolveSeasonId(page, utId, cfg.year);
+    } catch (err) {
+      // Name the edition being asked for before the stack: after a season rollover the likeliest
+      // cause is that the id has rotted under this tour, and that is invisible in `pickSeasonId`'s
+      // message alone. The original error rides along as the cause — it may equally be a Cloudflare
+      // block. A season that merely isn't published YET does not come through here; it returns null.
+      throw new Error(
+        `${cfg.slam} ${tour}: could not resolve the SofaScore ${cfg.year} season for uniqueTournament ${utId}`,
+        { cause: err },
+      );
+    }
+    // No season for this year, on a list that loaded fine: the edition isn't up yet. The window
+    // opens well before SofaScore creates it, so for the lead-in this is the expected state and the
+    // cycle is a benign no-op. Past `drawBy` the edition is overdue and this becomes a real failure
+    // — without that split, a wide `from` would mean either days of false alarms every season, or a
+    // blind spot exactly as wide as the lead-in.
+    if (seasonId === null) {
+      const msg = `${cfg.slam} ${tour}: SofaScore has no ${cfg.year} season for uniqueTournament ${utId}`;
+      if (isOverdue(clock)) {
+        throw new Error(`${msg} — overdue (the draw was due ${new Date(drawDueAt(cfg)).toISOString().slice(0, 10)})`);
+      }
+      return { notReady: `${msg} yet — still in the lead-in, keeping last-good` };
+    }
     const raw = await fetchTournament(page, utId, seasonId);
     const snap = normalizeCuptrees(raw.cuptrees as any, {
       tour, slam: cfg.slam, name: cfg.name, year: cfg.year, surface: cfg.surface,
       sofaUniqueTournamentId: utId, sofaSeasonId: seasonId, drawSize: DRAW_SIZE,
     });
+    // Is there a draw at all? Checked here, before the enrichment fetches (Elo, birthdates, every
+    // not-yet-played entrant's country) and before anything is written. The window deliberately
+    // opens ahead of the draw release, so an unpublished bracket is the normal state for the first
+    // cycles of a Slam and publishSlam counts it as "nothing to do"; the same shape once the
+    // edition is under way is a real regression and is thrown as an ordinary failure.
+    const gap = drawGap(snap, DRAW_SIZE, clock);
+    if (gap) {
+      const msg = `${cfg.slam} ${tour}: ${gap.reason} — keeping last-good`;
+      if (!gap.benign) throw new Error(msg);
+      return { notReady: msg };
+    }
     for (const match of Object.values(snap.matches)) {
       if (match.sofaEventId == null) continue;
       const e = raw.events.get(match.sofaEventId);
@@ -28,7 +74,9 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
       snap.matches[match.id] = enrichMatch(match, e.detail as any, (e.stats as any) ?? null, snap.players, nowSec);
     }
     // Tennis Abstract publishes *current* ratings only — stamping them onto a past year's
-    // snapshot would be anachronistic, so historical backfills keep elo=null.
+    // snapshot would be anachronistic, so historical backfills keep elo=null. On the live path
+    // `cfg.year` IS the current UTC year by construction (activeSlam dates the edition off `now`),
+    // so this only ever discriminates the backfill.
     if (cfg.year === new Date().getUTCFullYear()) {
       try {
         const elo = await fetchElo(tour);
@@ -47,33 +95,19 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
     } catch (err) {
       console.warn(`${cfg.slam} ${tour}: birthdate enrichment skipped:`, err);
     }
-    const matchCount = Object.keys(snap.matches).length;
-    if (matchCount < DRAW_SIZE - 1) {
-      throw new Error(`${cfg.slam} ${tour}: draw not fully available yet (${matchCount}/${DRAW_SIZE - 1} matches) — keeping last-good`);
-    }
     // Not-yet-played entrants get no country from the (finished/live-only) event detail above, so
     // their flag would be missing — reuse last snapshot's country where we already know it, then look
     // up the rest off the team. Scope to the real draw entrants (round-0 participants); SofaScore also
     // seeds placeholder future-slot "teams" with no country that never render. Carry-forward is limited
     // to the still-not-yet-played entrants (whose nationality is immutable); once an entrant plays it
     // drops out of carry-forward, so its country is re-resolved from event detail / a fresh team lookup
-    // rather than pinned to a possibly-stale cached value. Gated behind the draw-availability guard
-    // above so an incomplete-draw refresh that gets discarded doesn't pay for these lookups. Team
+    // rather than pinned to a possibly-stale cached value. Gated behind the draw-readiness guard
+    // above so an unpublished-draw refresh that gets discarded doesn't pay for these lookups. Team
     // lookups are paced 60ms apart like fetchTournament to avoid provoking 429s; a sustained Cloudflare
     // block still relies on the refresh watchdog as the hard backstop. No-op once every match is finished.
-    const entrantIds = new Set<string>();
-    const unplayedEntrantIds = new Set<string>();
-    for (const id of snap.rounds[0]?.matchIds ?? []) {
-      const m = snap.matches[id];
-      const notYetPlayed = isUpcoming(m.status);
-      for (const pid of [m.p1, m.p2]) {
-        if (!pid) continue;
-        entrantIds.add(pid);
-        if (notYetPlayed) unplayedEntrantIds.add(pid);
-      }
-    }
+    const { all: entrants, unplayed } = entrantIds(snap);
     const prior = await loadPriorSnapshot(tour, cfg.year, cfg.slam);
-    const carried = carryForwardCountries(snap.players, prior?.players ?? null, unplayedEntrantIds);
+    const carried = carryForwardCountries(snap.players, prior?.players ?? null, unplayed);
     // Persist the sticky suspension flag: matches are re-derived from cuptrees each refresh, so a
     // once-suspended match would lose its flag once SofaScore reverts it to a plain "finished".
     const carriedSusp = carryForwardSuspended(snap.matches, prior?.matches ?? null);
@@ -81,7 +115,7 @@ async function ingestTour(cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: n
     const { filled, missing } = await fillMissingCountries(
       snap.players,
       async (teamId) => { const c = await fetchTeamCountry(page, teamId); await page.waitForTimeout(60); return c; },
-      entrantIds,
+      entrants,
     );
     if (carried || missing) console.log(`${cfg.slam} ${tour}: countries ${carried} reused, ${filled}/${missing} fetched`);
     snap.generatedAt = isoNow;
@@ -112,36 +146,62 @@ async function loadPriorSnapshot(tour: Tour, year: number, slam: string): Promis
   }
 }
 
-/** Ingest both tours for one slam config; write per-slam files; return manifest entries. */
-async function publishSlam(cfg: SlamConfig, isoNow: string, nowSec: number): Promise<AvailableSlam[]> {
+/**
+ * Ingest both tours for one slam config; write per-slam files; return the manifest entries plus how
+ * many tours failed for a reason OTHER than "the draw isn't published yet". The two must stay
+ * distinguishable because they mean opposite things about the system: a window that opened ahead of
+ * the draw release is it working as designed, while a missing season, a rotted id or a dead network
+ * is the failure the dead-man ping exists to surface. The caller reads `broken` only when NOTHING
+ * published — a tour that fails while the other succeeds still exits 0, as it always has
+ * (partial-failure exit codes are issue #207).
+ */
+async function publishSlam(
+  cfg: SlamConfig, isoNow: string, nowSec: number,
+): Promise<{ entries: AvailableSlam[]; broken: number }> {
   const entries: AvailableSlam[] = [];
+  let broken = 0;
   for (const tour of ["ATP", "WTA"] as Tour[]) {
     try {
       const snap = await ingestTour(cfg, tour, isoNow, nowSec);
+      if ("notReady" in snap) { console.log(`ingest ${cfg.slam} ${tour} skipped: ${snap.notReady}`); continue; }
       const file = resolve(OUT_DIR, snapshotPath(tour, cfg.year, cfg.slam));
       await mkdir(dirname(file), { recursive: true });
       await writeFile(file, JSON.stringify(snap));
-      const played = Object.values(snap.matches).filter((m) => m.status !== "scheduled" && m.status !== "notstarted").length;
+      const played = Object.values(snap.matches).filter((m) => !isUpcoming(m.status)).length;
       console.log(`wrote ${snapshotPath(tour, cfg.year, cfg.slam)}: ${Object.keys(snap.matches).length} matches (${played} played)`);
       entries.push(availableSlamOf(snap, new Date(isoNow)));
     } catch (err) {
+      broken++;
       console.error(`ingest ${cfg.slam} ${tour} failed (keeping last-good):`, err);
     }
   }
-  return entries;
+  return { entries, broken };
 }
 
 async function main(): Promise<void> {
   const backfill = backfillTargets(process.env.BACKFILL_YEARS, process.env.BACKFILL_SLAMS);
+  if (process.env.BACKFILL_YEARS && backfill.length === 0) {
+    // A backfill was asked for and expanded to nothing — a mistyped year or slam key, both of which
+    // `backfillTargets` drops silently. Falling through would run the LIVE path instead: a request
+    // to re-fetch 2019 would quietly scrape and republish whatever slam is on right now.
+    console.error(
+      `BACKFILL_YEARS="${process.env.BACKFILL_YEARS}"` +
+      (process.env.BACKFILL_SLAMS ? ` BACKFILL_SLAMS="${process.env.BACKFILL_SLAMS}"` : "") +
+      ` matched no edition (known slams: ${Object.keys(SLAMS).join(", ")}) — refusing to fall through to the live refresh`,
+    );
+    process.exitCode = 1;
+    return;
+  }
   if (backfill.length) {
     const isoNow = new Date().toISOString();
     const nowSec = Math.floor(Date.now() / 1000);
     await mkdir(OUT_DIR, { recursive: true });
     let entries: AvailableSlam[] = [];
     for (const { year, slam } of backfill) {
-      const cfg = { ...SLAMS[slam], year };
       console.log(`backfill: ${slam} (${year})`);
-      entries = entries.concat(await publishSlam(cfg, isoNow, nowSec));
+      // Deliberately ignores the failure count: a backfill sweep tolerates editions SofaScore has
+      // no usable draw for (e.g. the missing 2011 ATP US Open) and keeps going.
+      entries = entries.concat((await publishSlam(slamConfig(slam, year), isoNow, nowSec)).entries);
     }
     const idx = await loadIndex();
     const merged: SlamIndex = { schemaVersion: 2, generatedAt: isoNow, slams: mergeIndex(idx.slams, entries) };
@@ -149,19 +209,37 @@ async function main(): Promise<void> {
     console.log(`backfill done — index.json: ${merged.slams.length} slams`);
     return;
   }
-  const slamKey = activeSlam();
-  if (!slamKey) {
+  const active = activeSlam();
+  if (!active) {
     console.log("no Slam in progress — skipping refresh (between tournaments, data unchanged)");
     return;
   }
   const isoNow = new Date().toISOString();
   const nowSec = Math.floor(Date.now() / 1000);
-  const cfg = SLAMS[slamKey];
+  const cfg = slamConfig(active.slam, active.year);
   console.log(`tracking slam: ${cfg.slam} (${cfg.year})`);
   await mkdir(OUT_DIR, { recursive: true });
 
-  const entries = await publishSlam(cfg, isoNow, nowSec);
-  if (entries.length === 0) { console.error("ingest failed for all tours"); process.exitCode = 1; return; }
+  const { entries, broken } = await publishSlam(cfg, isoNow, nowSec);
+  if (entries.length === 0) {
+    if (broken === 0) {
+      // Both tours reported an unpublished draw. The window opens ahead of the draw release on
+      // purpose, so this is a normal pre-tournament cycle: exit 0, leaving the dead-man ping green
+      // and letting publish-data.sh carry forward and reindex as usual.
+      console.log(`${cfg.slam} ${cfg.year}: no published draw yet — nothing to refresh this cycle`);
+    } else {
+      // Inside an open window with nothing publishable and a real error: fail loudly so the runner
+      // pings /fail. The likeliest cause after a season rollover is that SofaScore has no season for
+      // this year under these ids, which is invisible from the alert alone — so name them.
+      console.error(
+        `no tour published for ${cfg.slam} ${cfg.year} inside its active window (${broken} failed). ` +
+        `If this persists, check that SofaScore publishes a ${cfg.year} season for uniqueTournament ` +
+        `${cfg.unitournament.ATP} (ATP) / ${cfg.unitournament.WTA} (WTA).`,
+      );
+      process.exitCode = 1;
+    }
+    return;
+  }
 
   const idx = await loadIndex();
   const merged: SlamIndex = { schemaVersion: 2, generatedAt: isoNow, slams: mergeIndex(idx.slams, entries) };

@@ -4,7 +4,7 @@
 
 ## P0 — correctness bugs, small, do now
 
-- [ ] **#208** `ingest/config.ts` hard-codes 2026 windows → from 2027 every refresh is a silent no-op. Hard deadline: before the AO 2027 draw (~14 Jan). *S*
+- [x] **#208** `ingest/config.ts` hard-codes 2026 windows → from 2027 every refresh is a silent no-op. Hard deadline: before the AO 2027 draw (~14 Jan). *S*
 - [ ] **#185** Flashscore name join fails for two-initial / compound names → those live matches show a 30-min-old score under a pulsing "live" dot. Happening now (US Open). *S*
 - [ ] **#189** `WSF1`/`WQF` placeholder teams leak into players; the final's card reads "🏳 WSF1 — WSF2". One regex + read-time guard. *S*
 - [ ] **#204** 2019 ATP US Open has 30 mirrored R1 results (Nadal "lost" to Millman, then reaches the final; +1 in 2015 AO, 2022 RG). Fix `enrich` home/away orientation, add an integrity check to the publish path, re-backfill. *M*
@@ -202,7 +202,7 @@ chmod +x ~/TennisArc/scripts/cron-refresh.sh
 
 **Maintenance**
 - `git -C ~/TennisArc pull` after app changes that touch `ingest/`, then `pnpm install --frozen-lockfile` if deps changed.
-- Annual: bump the per-slam `from` dates + `unitournament` ids in `ingest/config.ts` (they're 2026 values).
+- Nothing annual: since #208 the `ingest/config.ts` windows are month-day templates applied to the current season and the SofaScore ids are season-stable, so the config never expires. Re-tune `from`/`drawBy`/`to` only if a slam moves its calendar (the tests pin them to the real 2009-2026 dates).
 
 ---
 
