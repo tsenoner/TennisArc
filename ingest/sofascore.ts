@@ -78,7 +78,10 @@ export async function apiGet(page: Page, path: string): Promise<unknown> {
   throw lastErr;
 }
 
-export async function resolveSeasonId(page: Page, utId: number, year?: number): Promise<number> {
+/** The seasonId for `year`, or `null` when the seasons list came back fine but has no entry for it
+ *  (the edition isn't published upstream yet). Transport failures — Cloudflare, a dead network, a
+ *  rotted id serving no seasons — still throw, so "not yet" and "broken" can never be confused. */
+export async function resolveSeasonId(page: Page, utId: number, year?: number): Promise<number | null> {
   const j = (await apiGet(page, `/unique-tournament/${utId}/seasons`)) as { seasons?: SofaSeason[] };
   return pickSeasonId(j.seasons ?? [], year);
 }

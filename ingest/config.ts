@@ -11,6 +11,7 @@ export interface SlamTemplate {
   slam: string; name: string; surface: string;
   from: MonthDay; // the active window opens (a few days before the main draw is released)
   to: MonthDay;   // the active window closes, exclusive (a couple of days after the latest final)
+  drawBy: MonthDay; // the draw is DUE: past this date an absent edition is a fault, not a lead-in
   unitournament: Record<Tour, number>; // SofaScore uniqueTournament ids — stable across seasons
 }
 
@@ -22,8 +23,9 @@ export interface SlamEdition { slam: string; year: number }
 
 // SofaScore uniqueTournament ids per tour, plus each Slam's *active window* `[from, to)` as a
 // month-day template:
-//   from ≈ a few days before the main draw is released;
-//   to   ≈ a couple of days after the latest final, so late stat corrections are still captured.
+//   from   ≈ a few days before the main draw is released;
+//   drawBy ≈ the date by which every observed edition has been under way (see below);
+//   to     ≈ a couple of days after the latest final, so late stat corrections are still captured.
 // The ingest only does work while `now` is inside a window — between Slams the bracket is frozen,
 // so refreshing would just relaunch a browser and push nothing. The data branch keeps holding the
 // most recent Slam's final state until the next Slam's window opens.
@@ -50,17 +52,25 @@ export interface SlamEdition { slam: string; year: number }
 // thinner side of the two: widen `to` before `from` if an edition ever runs long.
 // Being generous is close to free — a cycle that finds no published draw stops there
 // without publishing (ingest/draw-ready.ts) — while being a day short truncates a live tournament
-// at the semis for a whole year. The one hard bound on that generosity: neighbouring windows MUST
+// at the semis for a whole year.
+//
+// `drawBy` is what makes that generosity safe, and it sits ~3 days after the LATEST start above.
+// An early `from` means SofaScore legitimately has no season and no draw for the edition over the
+// window's first days, and the wider the window the longer that stretch. `drawBy` is when the
+// excuse expires: before it, a missing season or an empty bracket is the lead-in working as
+// designed and the cycle exits 0; from it on, the same state is an upstream fault that fails the
+// dead-man ping. Without it, widening `from` would only have bought days of false alarms — or, if
+// those were suppressed, a silent hole exactly as wide, which is issue #208 again in miniature. The one hard bound on that generosity: neighbouring windows MUST
 // stay disjoint, since `activeSlam` takes the first match and an overlap would silently starve the
 // other slam for its whole edition (config.test.ts asserts non-overlap, out to 2040).
 // The COVID editions (AO 2021 in February, RG 2020 in September) and the pre-2015 Wimbledon
 // calendar sit outside any sane static window and are out of reach by design; they only ever
 // mattered live, and they are long since history.
 export const SLAMS: Record<string, SlamTemplate> = {
-  "australian-open": { slam: "australian-open", name: "Australian Open", surface: "Hard",  from: { month: 1, day: 8 },  to: { month: 2, day: 5 },  unitournament: { ATP: 2363, WTA: 2571 } },
-  "roland-garros":   { slam: "roland-garros",   name: "Roland Garros",   surface: "Clay",  from: { month: 5, day: 18 }, to: { month: 6, day: 16 }, unitournament: { ATP: 2480, WTA: 2577 } },
-  wimbledon:         { slam: "wimbledon",       name: "Wimbledon",       surface: "Grass", from: { month: 6, day: 24 }, to: { month: 7, day: 19 }, unitournament: { ATP: 2361, WTA: 2600 } },
-  "us-open":         { slam: "us-open",         name: "US Open",         surface: "Hard",  from: { month: 8, day: 20 }, to: { month: 9, day: 17 }, unitournament: { ATP: 2449, WTA: 2601 } },
+  "australian-open": { slam: "australian-open", name: "Australian Open", surface: "Hard",  from: { month: 1, day: 8 },  drawBy: { month: 1, day: 23 }, to: { month: 2, day: 5 },  unitournament: { ATP: 2363, WTA: 2571 } },
+  "roland-garros":   { slam: "roland-garros",   name: "Roland Garros",   surface: "Clay",  from: { month: 5, day: 18 }, drawBy: { month: 6, day: 2 },  to: { month: 6, day: 16 }, unitournament: { ATP: 2480, WTA: 2577 } },
+  wimbledon:         { slam: "wimbledon",       name: "Wimbledon",       surface: "Grass", from: { month: 6, day: 24 }, drawBy: { month: 7, day: 6 },  to: { month: 7, day: 19 }, unitournament: { ATP: 2361, WTA: 2600 } },
+  "us-open":         { slam: "us-open",         name: "US Open",         surface: "Hard",  from: { month: 8, day: 20 }, drawBy: { month: 9, day: 3 },  to: { month: 9, day: 17 }, unitournament: { ATP: 2449, WTA: 2601 } },
 };
 
 export const DRAW_SIZE = 128;
@@ -93,6 +103,16 @@ export function eventWindow(slam: string, year: number): { from: number; to: num
   if (!isSlam(slam)) return null;
   const cfg = SLAMS[slam]!;
   return { from: utc(year, cfg.from), to: utc(year, cfg.to) };
+}
+
+/**
+ * When this edition's draw is DUE, as a UTC ms timestamp — the boundary between "the window opened
+ * ahead of the draw, as designed" and "the edition should exist upstream and doesn't". Every caller
+ * that has to decide whether an absent or empty bracket is benign asks this, so the lead-in is one
+ * date in the table rather than a rule of thumb spread across the ingest.
+ */
+export function drawDueAt(cfg: SlamConfig): number {
+  return utc(cfg.year, cfg.drawBy);
 }
 
 /**

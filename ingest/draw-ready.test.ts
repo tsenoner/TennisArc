@@ -1,12 +1,16 @@
 import { describe, it, expect } from "vitest";
 import type { Match, Snapshot } from "../src/model";
-import { drawGap, entrantIds } from "./draw-ready";
+import { drawGap, entrantIds, isOverdue } from "./draw-ready";
 
 const DRAW = 128;
 /** The wall clock handed to `drawGap`, as Unix seconds. Fixtures without a `startsAt` carry no
- *  scheduled time at all, so this only bites in the tests that set one. */
+ *  scheduled time at all, so that signal only bites in the tests that set one. */
 const NOW = Date.UTC(2026, 7, 30, 12) / 1000;
 const HOUR = 3600;
+/** The US Open's real `drawBy` (09-03) against the fixture's 08-30 `NOW`: mid-lead-in, which is the
+ *  state every case below assumes unless it says otherwise. */
+const DUE = Date.UTC(2026, 8, 3) / 1000;
+const CLOCK = { nowSec: NOW, drawDueSec: DUE };
 
 /**
  * A bracket of `matchCount` blocks whose first round names `entrants` players (two per match until
@@ -47,38 +51,38 @@ function snap(
 
 describe("drawGap", () => {
   it("passes a published draw", () => {
-    expect(drawGap(snap(), DRAW, NOW)).toBeNull();
-    expect(drawGap(snap({ played: 64 }), DRAW, NOW)).toBeNull(); // and one already under way
+    expect(drawGap(snap(), DRAW, CLOCK)).toBeNull();
+    expect(drawGap(snap({ played: 64 }), DRAW, CLOCK)).toBeNull(); // and one already under way
   });
 
   it("reports a half-built tree", () => {
-    expect(drawGap(snap({ matchCount: 63 }), DRAW, NOW)?.reason).toMatch(/draw not fully available yet \(63\/127 matches\)/);
+    expect(drawGap(snap({ matchCount: 63 }), DRAW, CLOCK)?.reason).toMatch(/draw not fully available yet \(63\/127 matches\)/);
   });
 
   it("reports a complete tree of empty slots — the state that published a playerless bracket", () => {
     // The US Open 2026 window opened onto 127 blocks with no participants; the old match-count
     // check passed it, and 48 force-pushes of an empty draw pinged healthy before the draw landed.
-    expect(drawGap(snap({ entrants: 0 }), DRAW, NOW)?.reason).toMatch(/without a draw yet \(0\/128 entrants named\)/);
-    expect(drawGap(snap({ entrants: 32 }), DRAW, NOW)?.reason).toMatch(/entrants named/);
+    expect(drawGap(snap({ entrants: 0 }), DRAW, CLOCK)?.reason).toMatch(/without a draw yet \(0\/128 entrants named\)/);
+    expect(drawGap(snap({ entrants: 32 }), DRAW, CLOCK)?.reason).toMatch(/entrants named/);
   });
 
   it("does NOT fire on a real draw with holes in it", () => {
     // The thinnest brackets among the 117 snapshots published so far: WTA AO 2023 names 118
     // entrants, ATP RG 2014 names 96. Both must stay publishable — the floor is half the draw so a
     // legitimate gap can never be mistaken for an unpublished skeleton.
-    expect(drawGap(snap({ entrants: 118 }), DRAW, NOW)).toBeNull();
-    expect(drawGap(snap({ entrants: 96 }), DRAW, NOW)).toBeNull();
-    expect(drawGap(snap({ entrants: 64 }), DRAW, NOW)).toBeNull();
+    expect(drawGap(snap({ entrants: 118 }), DRAW, CLOCK)).toBeNull();
+    expect(drawGap(snap({ entrants: 96 }), DRAW, CLOCK)).toBeNull();
+    expect(drawGap(snap({ entrants: 64 }), DRAW, CLOCK)).toBeNull();
   });
 
   it("is benign only until a ball is struck", () => {
     // Before play, an unpublished bracket is the window opening ahead of the draw: skip the cycle,
     // keep the dead-man ping green. The same shape once a match has been played means the bracket
     // regressed mid-slam, and that must fail the ping instead of hiding behind it.
-    expect(drawGap(snap({ entrants: 0 }), DRAW, NOW)?.benign).toBe(true);
-    expect(drawGap(snap({ matchCount: 63 }), DRAW, NOW)?.benign).toBe(true);
-    expect(drawGap(snap({ entrants: 0, played: 1 }), DRAW, NOW)?.benign).toBe(false);
-    expect(drawGap(snap({ matchCount: 63, played: 1 }), DRAW, NOW)?.benign).toBe(false);
+    expect(drawGap(snap({ entrants: 0 }), DRAW, CLOCK)?.benign).toBe(true);
+    expect(drawGap(snap({ matchCount: 63 }), DRAW, CLOCK)?.benign).toBe(true);
+    expect(drawGap(snap({ entrants: 0, played: 1 }), DRAW, CLOCK)?.benign).toBe(false);
+    expect(drawGap(snap({ matchCount: 63, played: 1 }), DRAW, CLOCK)?.benign).toBe(false);
   });
 
   it("is NOT benign once round 1 is due on court, even with nothing marked played", () => {
@@ -87,16 +91,28 @@ describe("drawGap", () => {
     // BECAUSE the payload is broken. Read as "no ball struck yet" it would skip the cycle and ping
     // green for the rest of the tournament. The block's own scheduled start still says play is due,
     // so the same shape after that moment has to be loud.
-    expect(drawGap(snap({ entrants: 0, startsAt: NOW - HOUR }), DRAW, NOW)?.benign).toBe(false);
-    expect(drawGap(snap({ matchCount: 63, startsAt: NOW - HOUR }), DRAW, NOW)?.benign).toBe(false);
+    expect(drawGap(snap({ entrants: 0, startsAt: NOW - HOUR }), DRAW, CLOCK)?.benign).toBe(false);
+    expect(drawGap(snap({ matchCount: 63, startsAt: NOW - HOUR }), DRAW, CLOCK)?.benign).toBe(false);
   });
 
   it("stays benign while the schedule still puts round 1 in the future", () => {
     // The lead-in the widened windows exist for: the skeleton is up, the draw ceremony hasn't
     // happened, and play is days away. Skip the cycle and keep the ping green.
-    expect(drawGap(snap({ entrants: 0, startsAt: NOW + 48 * HOUR }), DRAW, NOW)?.benign).toBe(true);
+    expect(drawGap(snap({ entrants: 0, startsAt: NOW + 48 * HOUR }), DRAW, CLOCK)?.benign).toBe(true);
     // Exactly at the scheduled start counts as under way, not as lead-in.
-    expect(drawGap(snap({ entrants: 0, startsAt: NOW }), DRAW, NOW)?.benign).toBe(false);
+    expect(drawGap(snap({ entrants: 0, startsAt: NOW }), DRAW, CLOCK)?.benign).toBe(false);
+  });
+
+  it("is NOT benign past drawBy, even with no results and no schedule stamps at all", () => {
+    // The gap both payload-derived signals leave: a bracket carrying neither played statuses nor
+    // seriesStartDateTimestamp says nothing about itself, so reading it alone always concludes
+    // "lead-in" and the cycle stays green however long the edition is broken. `drawBy` is a fact
+    // about the calendar rather than about the payload, so it still fires.
+    const overdue = { nowSec: DUE, drawDueSec: DUE };
+    expect(drawGap(snap({ entrants: 0 }), DRAW, overdue)?.benign).toBe(false);
+    expect(drawGap(snap({ matchCount: 63 }), DRAW, overdue)?.benign).toBe(false);
+    // ...and one second earlier it is still the lead-in.
+    expect(drawGap(snap({ entrants: 0 }), DRAW, { nowSec: DUE - 1, drawDueSec: DUE })?.benign).toBe(true);
   });
 });
 
@@ -120,5 +136,18 @@ describe("entrantIds", () => {
   it("survives a snapshot with no rounds at all", () => {
     const empty = { ...snap(), rounds: [] };
     expect(entrantIds(empty).all.size).toBe(0);
+  });
+});
+
+describe("isOverdue", () => {
+  it("is the lead-in boundary, half-open at the due date", () => {
+    // The same split index.ts applies when SofaScore has no season for the edition at all — the one
+    // state that never reaches drawGap, because there is no bracket to look at. Kept here so both
+    // callers read one definition: a season that is merely late and one that is overdue differ by
+    // this comparison alone, and getting it backwards is the difference between a permanently red
+    // ping every lead-in and a permanently green one over a dead season.
+    expect(isOverdue({ nowSec: DUE - 1, drawDueSec: DUE })).toBe(false);
+    expect(isOverdue({ nowSec: DUE, drawDueSec: DUE })).toBe(true);
+    expect(isOverdue({ nowSec: DUE + 1, drawDueSec: DUE })).toBe(true);
   });
 });

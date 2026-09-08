@@ -202,7 +202,7 @@ chmod +x ~/TennisArc/scripts/cron-refresh.sh
 
 **Maintenance**
 - `git -C ~/TennisArc pull` after app changes that touch `ingest/`, then `pnpm install --frozen-lockfile` if deps changed.
-- Nothing annual: since #208 the `ingest/config.ts` windows are month-day templates applied to the current season and the SofaScore ids are season-stable, so the config never expires.
+- Nothing annual: since #208 the `ingest/config.ts` windows are month-day templates applied to the current season and the SofaScore ids are season-stable, so the config never expires. Re-tune `from`/`drawBy`/`to` only if a slam moves its calendar (the tests pin them to the real 2009-2026 dates).
 
 ---
 

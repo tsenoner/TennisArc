@@ -86,18 +86,30 @@ No URL configured → the runner behaves exactly as before. Remember the runner 
 **snapshot** — re-copy after changing `scripts/refresh-runner.sh` (see below).
 
 What does and does not fail the ping (`ingest/index.ts`): a cycle between tournaments is a no-op
-and pings success, and so does a cycle inside an open window where SofaScore has not published the
-draw yet — the windows in `ingest/config.ts` open days ahead of the draw release on purpose, so
-those cycles are the system working (`drawGap`'s benign case, `ingest/draw-ready.ts`). That grace
-ends the moment the bracket's own schedule says round 1 is due on court: after that an unpopulated
-draw is a regression and pings `/fail`, so a degraded mid-slam payload — which comes back with the
-results stripped and would otherwise look exactly like a pre-draw cycle — cannot hide behind it.
-Everything else that leaves an open window with nothing publishable — no season for this year under
-these ids, a Cloudflare block, a dead network — exits non-zero and pings `/fail`. Note that such a
-failure also aborts `publish-data.sh` under `set -e`, so the duration pass, the reindex and the
-carry-forward are all skipped for that cycle. What is still NOT covered: a window that never opens
-at all, or one that opens onto a draw that never appears, stays silent for its whole duration; a
-positive "a slam should have published by now" assertion is issue #207.
+and pings success, and so does a cycle inside an open window where the edition isn't up yet — either
+SofaScore has no season for it at all, or the bracket skeleton is there unpopulated. The windows in
+`ingest/config.ts` open days ahead of the draw release on purpose, so those cycles are the system
+working (`drawGap`'s benign case, `ingest/draw-ready.ts`).
+
+That grace has two ends, and either one closes it:
+
+- **the bracket's own schedule** — the moment a round-1 slot's scheduled start has passed (or any
+  match carries a result), an unpopulated draw is a regression and pings `/fail`. This is what stops
+  a degraded mid-slam payload, which comes back with the results stripped and would otherwise look
+  exactly like a pre-draw cycle, from hiding behind the benign path;
+- **the calendar** — each slam's `drawBy` in `ingest/config.ts`, ~3 days after the latest start that
+  slam has ever had. Past it the edition is overdue and a missing season or an empty bracket fails
+  the ping even when the payload says nothing about itself at all. This is the half that makes an
+  early `from` safe: without it, widening the lead-in would buy either false alarms every season or
+  a blind spot exactly as wide.
+
+A Cloudflare block, a dead network, or a uniqueTournament id that returns no seasons at all fails
+the ping at any time — those are never benign. A failed ingest no longer aborts the rest of the run:
+the duration pass, the reindex and the carry-forward publish do not depend on it and still happen
+(the step-8 shrink guard still refuses to publish a smaller tree), and `publish-data.sh` returns the
+ingest's status at the end so the ping still reports the failure. What is still NOT covered: a
+window that never opens at all stays silent for its whole duration; a positive "a slam should have
+published by now" assertion is issue #207.
 
 ## Runbook — is it healthy, and how to unstick it
 
@@ -156,8 +168,8 @@ guard.
 
 `index.json` (the manifest) is what the app's slam tabs read; the per-slam snapshots are only
 reachable through it. `publish-data.sh` rebuilds it from every snapshot on disk (`pnpm reindex`,
-step 3) and then **asserts** the two agree (`scripts/check-manifest.sh`, step 3.5 on `public/data`
-and again at step 8.5 on the tree about to be pushed): a snapshot on disk that the manifest doesn't
+step 4) and then **asserts** the two agree (`scripts/check-manifest.sh`, step 4.5 on `public/data`
+and again at step 9.5 on the tree about to be pushed): a snapshot on disk that the manifest doesn't
 list aborts the publish with
 `manifest mismatch: on disk but not in the manifest: ATP/2026/wimbledon — did reindex run?`.
 The comparison is by identity (`TOUR/year/slam`), not by count, so a stale manifest that happens to

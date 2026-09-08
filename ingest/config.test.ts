@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SLAMS, activeSlam, eventWindow, slamConfig } from "./config";
+import { SLAMS, activeSlam, drawDueAt, eventWindow, slamConfig } from "./config";
 
 const SLAM_KEYS = Object.keys(SLAMS);
 const DAY = 86_400_000;
@@ -152,6 +152,23 @@ describe("the windows cover the real editions", () => {
         expect.soft(day(start) - w.from, `${slam} ${year} opens too late`).toBeGreaterThanOrEqual(2 * DAY);
         // The final's own day must be fully covered, hence the extra day before the slack.
         expect.soft(w.to - day(final), `${slam} ${year} closes too early`).toBeGreaterThanOrEqual(3 * DAY);
+      }
+    }
+  });
+
+  it("puts drawBy after every observed start, so no real edition is ever called overdue early", () => {
+    // drawBy is what lets a wide `from` be safe: before it an absent season or an empty bracket is
+    // the lead-in and the cycle exits 0, after it the same state fails the ping. Set it too early
+    // and a late-starting edition cries wolf every season; too late and the blind spot grows back.
+    for (const [slam, editions] of Object.entries(REAL)) {
+      for (const [year, start] of editions) {
+        const due = drawDueAt(slamConfig(slam, year));
+        const day = (md: string) => at(year, md).getTime() - 12 * 3600_000; // UTC midnight of that day
+        // Two clear days after the first ball, so a draw that lands late still beats the deadline.
+        expect.soft(due - day(start), `${slam} ${year} drawBy is too early`).toBeGreaterThanOrEqual(2 * DAY);
+        // And inside the window it belongs to — a deadline past `to` could never fire.
+        expect.soft(due, `${slam} ${year} drawBy outside its window`).toBeGreaterThan(win(slam, year).from);
+        expect.soft(due, `${slam} ${year} drawBy outside its window`).toBeLessThan(win(slam, year).to);
       }
     }
   });

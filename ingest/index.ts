@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { type AvailableSlam, type SlamIndex, type Snapshot, type Tour, isUpcoming, snapshotPath } from "../src/model";
-import { DRAW_SIZE, SLAMS, activeSlam, slamConfig, type SlamConfig } from "./config";
-import { drawGap, entrantIds } from "./draw-ready";
+import { DRAW_SIZE, SLAMS, activeSlam, drawDueAt, slamConfig, type SlamConfig } from "./config";
+import { drawGap, entrantIds, isOverdue } from "./draw-ready";
 import { openContext, fetchTournament, resolveSeasonId, fetchTeamCountry } from "./sofascore";
 import { normalizeCuptrees } from "./normalize";
 import { enrichMatch, carryForwardCountries, carryForwardSuspended, fillMissingCountries } from "./enrich";
@@ -23,20 +23,33 @@ async function ingestTour(
   cfg: SlamConfig, tour: Tour, isoNow: string, nowSec: number,
 ): Promise<Snapshot | DrawNotReady> {
   const utId = cfg.unitournament[tour];
+  const clock = { nowSec, drawDueSec: Math.floor(drawDueAt(cfg) / 1000) };
   const { browser, page } = await openContext();
   try {
-    let seasonId: number;
+    let seasonId: number | null;
     try {
       seasonId = await resolveSeasonId(page, utId, cfg.year);
     } catch (err) {
       // Name the edition being asked for before the stack: after a season rollover the likeliest
-      // cause is that SofaScore has no season for this year under this id (rotted id, or the
-      // edition not published yet), and that is invisible in `pickSeasonId`'s message alone. The
-      // original error rides along as the cause — it may equally be a Cloudflare block.
+      // cause is that the id has rotted under this tour, and that is invisible in `pickSeasonId`'s
+      // message alone. The original error rides along as the cause — it may equally be a Cloudflare
+      // block. A season that merely isn't published YET does not come through here; it returns null.
       throw new Error(
         `${cfg.slam} ${tour}: could not resolve the SofaScore ${cfg.year} season for uniqueTournament ${utId}`,
         { cause: err },
       );
+    }
+    // No season for this year, on a list that loaded fine: the edition isn't up yet. The window
+    // opens well before SofaScore creates it, so for the lead-in this is the expected state and the
+    // cycle is a benign no-op. Past `drawBy` the edition is overdue and this becomes a real failure
+    // — without that split, a wide `from` would mean either days of false alarms every season, or a
+    // blind spot exactly as wide as the lead-in.
+    if (seasonId === null) {
+      const msg = `${cfg.slam} ${tour}: SofaScore has no ${cfg.year} season for uniqueTournament ${utId}`;
+      if (isOverdue(clock)) {
+        throw new Error(`${msg} — overdue (the draw was due ${new Date(drawDueAt(cfg)).toISOString().slice(0, 10)})`);
+      }
+      return { notReady: `${msg} yet — still in the lead-in, keeping last-good` };
     }
     const raw = await fetchTournament(page, utId, seasonId);
     const snap = normalizeCuptrees(raw.cuptrees as any, {
@@ -48,7 +61,7 @@ async function ingestTour(
     // opens ahead of the draw release, so an unpublished bracket is the normal state for the first
     // cycles of a Slam and publishSlam counts it as "nothing to do"; the same shape once the
     // edition is under way is a real regression and is thrown as an ordinary failure.
-    const gap = drawGap(snap, DRAW_SIZE, nowSec);
+    const gap = drawGap(snap, DRAW_SIZE, clock);
     if (gap) {
       const msg = `${cfg.slam} ${tour}: ${gap.reason} — keeping last-good`;
       if (!gap.benign) throw new Error(msg);

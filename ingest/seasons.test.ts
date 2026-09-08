@@ -14,8 +14,8 @@ describe("pickSeasonId", () => {
   it("returns the season matching a requested year", () => {
     expect(pickSeasonId(seasons, 2024)).toBe(70000);
   });
-  it("throws when the requested year has no season", () => {
-    expect(() => pickSeasonId(seasons, 2019)).toThrow(/no season for year 2019/);
+  it("returns null when the requested year has no season — not published yet, not a failure", () => {
+    expect(pickSeasonId(seasons, 2019)).toBeNull(); // not published yet — the caller dates it, see drawBy
   });
   it("throws when there are no seasons", () => {
     expect(() => pickSeasonId([])).toThrow(/no seasons/);
